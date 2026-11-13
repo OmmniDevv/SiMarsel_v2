@@ -114,15 +114,16 @@ class TasklistFoundationTest extends TestCase
         $this->assertSame(TaskStatus::ReadyReview, $readyTask->fresh()->status);
         $this->assertSame(TaskStatus::OnReview, $onTask->fresh()->status);
         $renamed = json_decode(DB::table('task_activities')->where('id', $activityId)->value('changes'), true);
-        $this->assertSame(['old' => 'ready_review', 'new' => 'on_review'], $renamed['status']);
+        $this->assertEquals(['old' => 'ready_review', 'new' => 'on_review'], $renamed['status']);
         $this->assertSame('on_qa', $renamed['title']['old'], 'Only status values are renamed.');
-        $this->assertStringStartsWith('Status: Ready Review → On Review', TaskActivity::find($activityId)->description());
+        $this->assertStringContainsString('Status: Ready Review → On Review', TaskActivity::find($activityId)->description());
 
         $migration->down();
 
         $this->assertSame('ready_for_qa', DB::table('tasks')->where('id', $readyTask->id)->value('status'));
         $this->assertSame('on_qa', DB::table('tasks')->where('id', $onTask->id)->value('status'));
-        $this->assertSame($changes, json_decode(DB::table('task_activities')->where('id', $activityId)->value('changes'), true));
+        // assertEquals: MySQL's JSON column may reorder object keys.
+        $this->assertEquals($changes, json_decode(DB::table('task_activities')->where('id', $activityId)->value('changes'), true));
     }
 
     public function test_a_deleted_task_leaves_the_active_list_but_keeps_its_related_data(): void

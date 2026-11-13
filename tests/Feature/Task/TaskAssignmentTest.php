@@ -132,13 +132,13 @@ class TaskAssignmentTest extends TestCase
             ])
             ->assertJsonPath('data.version', 2)
             ->assertJsonPath('data.history.0.action', TaskActivity::ASSIGNED)
-            ->assertJsonPath('data.history.0.changes.pics', [
+            ->assertJsonPath('data.history.0.changes.pics', $this->unordered([
                 'old' => [['id' => $this->staff->id, 'name' => 'mkt.staff']],
                 'new' => [
                     ['id' => $this->otherStaff->id, 'name' => 'mkt.other'],
                     ['id' => $this->staff->id, 'name' => 'mkt.staff'],
                 ],
-            ])
+            ]))
             ->assertJsonPath('data.history.0.description', 'PIC: mkt.staff → mkt.other, mkt.staff');
 
         $this->assertEquals($original->getAttributes(), $original->fresh()->getAttributes());
@@ -174,10 +174,10 @@ class TaskAssignmentTest extends TestCase
             ->patchJson($this->url(), $this->payload([$this->otherStaff->id]))
             ->assertOk()
             ->assertJsonPath('data.history.0.action', TaskActivity::REASSIGNED)
-            ->assertJsonPath('data.history.0.changes.pics', [
+            ->assertJsonPath('data.history.0.changes.pics', $this->unordered([
                 'old' => [['id' => $this->staff->id, 'name' => 'mkt.staff']],
                 'new' => [['id' => $this->otherStaff->id, 'name' => 'mkt.other']],
-            ]);
+            ]));
 
         $this->assertSame(2, $this->task->assignments()->count());
         $this->assertActivePics($this->task, [$this->otherStaff]);
@@ -292,10 +292,10 @@ class TaskAssignmentTest extends TestCase
             ->assertJsonPath('data.pics.0.id', $this->financeStaff->id)
             ->assertJsonPath('data.status', 'todo')
             ->assertJsonPath('data.history.0.action', TaskActivity::REASSIGNED)
-            ->assertJsonPath('data.history.0.changes.division', [
+            ->assertJsonPath('data.history.0.changes.division', $this->unordered([
                 'old' => ['id' => $this->marketing->id, 'name' => 'Marketing'],
                 'new' => ['id' => $this->finance->id, 'name' => 'Finance'],
-            ]);
+            ]));
     }
 
     public function test_forwarding_drops_the_new_owner_from_the_collaborating_divisions(): void
@@ -439,6 +439,17 @@ class TaskAssignmentTest extends TestCase
     private function payload(?array $picIds = null, array $extra = []): array
     {
         return ['version' => 1, 'pic_ids' => $picIds ?? [$this->staff->id, $this->otherStaff->id], ...$extra];
+    }
+
+    /**
+     * Compares a history change regardless of object key order: MySQL's JSON column stores {"old","new"} as
+     * {"new","old"}, while list order (PICs by name) still matters.
+     *
+     * @param  array<string, mixed>  $expected
+     */
+    private function unordered(array $expected): \Closure
+    {
+        return fn (mixed $actual) => $actual == $expected;
     }
 
     /**

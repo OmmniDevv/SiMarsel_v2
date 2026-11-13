@@ -127,21 +127,49 @@ class TaskActivityTest extends TestCase
             ->assertJsonPath('data.*.id', [$latest->id, $second->id, $first->id]);
     }
 
-    public function test_actor_name_is_still_shown_after_the_actor_account_is_deleted(): void
+    public function test_an_account_with_task_history_cannot_be_deleted_and_its_history_stays(): void
     {
         $task = $this->task(['pic_id' => $this->otherStaff->id]);
         $this->send('patchJson', "/api/tasks/{$task->id}/assignment", $this->manager, $task, ['pic_ids' => [$this->staff->id]]);
 
-        $this->actingAs($this->financeManager)->deleteJson("/api/accounts/{$this->manager->id}")->assertSuccessful();
-        $this->assertModelMissing($this->manager);
+        foreach ([$this->manager, $this->staff, $this->otherStaff] as $account) {
+            $this->actingAs($this->financeManager)
+                ->deleteJson("/api/accounts/{$account->id}")
+                ->assertUnprocessable()
+                ->assertJsonPath('message', 'Akun ini memiliki riwayat tugas dan tidak dapat dihapus. Nonaktifkan akun ini sebagai gantinya.');
+            $this->assertModelExists($account);
+        }
 
         $this->actingAs($this->admin)
             ->getJson($this->url($task))
             ->assertOk()
-            ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.action', TaskActivity::REASSIGNED)
-            ->assertJsonPath('data.0.actor', ['id' => null, 'fullname' => 'mkt.manager'])
-            ->assertJsonPath('data.0.description', 'PIC: mkt.other → mkt.staff');
+            ->assertJsonPath('data.0.actor', ['id' => $this->manager->id, 'fullname' => 'mkt.manager']);
+    }
+
+    public function test_an_account_without_task_history_can_still_be_deleted(): void
+    {
+        $newcomer = $this->account(Role::EMPLOYEE, 'newcomer', $this->marketing);
+
+        $this->actingAs($this->financeManager)->deleteJson("/api/accounts/{$newcomer->id}")->assertSuccessful();
+
+        $this->assertModelMissing($newcomer);
+    }
+
+    public function test_actor_name_is_still_shown_for_an_account_deleted_before_the_history_rule(): void
+    {
+        $task = $this->task();
+        $leaver = $this->account(Role::EMPLOYEE, 'leaver', $this->marketing);
+        $task->activities()->create(['account_id' => $leaver->id, 'action' => TaskActivity::UPDATED, 'changes' => ['title' => ['old' => 'A', 'new' => 'B']]]);
+
+        // Accounts removed before deletion was blocked: only SET NULL references, so the row could go.
+        $leaver->delete();
+
+        $this->actingAs($this->admin)
+            ->getJson($this->url($task))
+            ->assertOk()
+            ->assertJsonPath('data.0.actor', ['id' => null, 'fullname' => 'leaver'])
+            ->assertJsonPath('data.0.description', 'Judul: A → B');
     }
 
     public function test_actor_name_is_copied_when_the_entry_is_written(): void
