@@ -59,6 +59,7 @@ perubahan nilai data adalah penamaan status QA (lihat bagian 3).
 | 10 | `2026_11_13_083926_create_task_comments_table` | tasks, accounts | Tabel baru |
 | 11 | `2026_11_13_083928_widen_action_on_task_activities_table` | task_activities | Ubah panjang kolom |
 | 12 | `2026_11_13_083929_create_calendar_events_table` | divisions, accounts | Tabel baru |
+| 13 | `2026_11_13_105301_protect_task_history_from_physical_deletes` | #7, #10, #12, task_activities, task_evidences, task_reviews | Ubah foreign key ke RESTRICT + index `calendar_events` |
 
 Prasyarat: semua migration sebelumnya sudah jalan, termasuk `2026_11_05_*`, `2026_11_06_*`, dan `2026_11_09_*`.
 
@@ -92,14 +93,33 @@ Prasyarat: semua migration sebelumnya sudah jalan, termasuk `2026_11_05_*`, `202
   (`CASE WHEN unassigned_at IS NULL THEN 1 END`) dengan unique index `(task_id, account_id, active_flag)`. Karena unique
   index mengizinkan banyak NULL, riwayat assignment yang sudah dilepas tetap tersimpan, tetapi akun yang sama tidak
   bisa menjadi PIC aktif dua kali (MySQL error 1062).
-- **Foreign key saat akun dihapus**: akun di aplikasi dihapus permanen (`AccountRepository`). Karena itu
-  `task_assignments.account_id` dan `task_comments.author_id` memakai `cascadeOnDelete` agar penghapusan akun tidak
-  gagal. Kolom pelaku (`assigned_by`, `unassigned_by`, `deleted_by`, `added_by`) memakai `nullOnDelete`. Jejak pelaku
-  tetap tersimpan di `task_activities.actor_name_snapshot`. `calendar_events.creator_id` tidak memakai cascade
-  (NOT NULL sesuai ERD), jadi akun yang masih punya agenda tidak bisa dihapus — perlu diputuskan saat fitur Calendar
-  dipindah.
-- **Soft delete**: `tasks`, `task_evidences`, `task_comments`, dan `calendar_events`. Foreign key ke `tasks` tetap
-  `cascadeOnDelete`, tetapi karena task hanya di-soft delete, data terkait tidak ikut terhapus.
+- **Riwayat tidak ikut terhapus permanen (STEAM-271)**: migration
+  `2026_11_13_105301_protect_task_history_from_physical_deletes` mengubah foreign key berikut dari CASCADE menjadi
+  **RESTRICT**, sehingga penghapusan fisik yang akan ikut menghapus riwayat ditolak database:
+
+  | Tabel | Kolom | ON DELETE |
+  |---|---|---|
+  | `task_activities`, `task_evidences`, `task_reviews` | `task_id` | RESTRICT |
+  | `task_assignments` | `task_id`, `account_id` | RESTRICT |
+  | `task_comments` | `task_id`, `author_id`, `parent_comment_id` | RESTRICT |
+  | `calendar_events` | `creator_id` | RESTRICT (sejak dibuat) |
+  | Kolom pelaku: `task_activities.account_id`, `assigned_by`, `unassigned_by`, `deleted_by`, `added_by`, `submitter_id`, `reviewer_id`, `tasks.creator_id` | | SET NULL (tidak berubah) |
+
+  ON UPDATE memakai default (primary key tidak pernah diubah). `task_divisions` tetap CASCADE ke `tasks` karena berisi
+  relasi kolaborasi, bukan riwayat.
+- **Akun yang punya riwayat tugas tidak bisa dihapus**: `AccountService::delete()` menolaknya dengan
+  `AccountHasTaskHistoryException` (422) dan menyarankan menonaktifkan akun (`accounts.is_active = false`). Pengecekan
+  ada di `AccountRepository::hasTaskHistory()` dan mencakup baris yang sudah di-soft delete. Karena itu kolom SET NULL
+  di atas pada praktiknya tidak pernah terpicu; `task_activities.actor_name_snapshot` tetap dipakai untuk akun yang
+  terhapus sebelum aturan ini ada.
+- **Soft delete**: `tasks`, `task_evidences`, `task_comments`, dan `calendar_events`. `task_comments.deleted_at` sudah
+  disiapkan tetapi belum dipakai sampai fitur hapus komentar disetujui.
+- **Balasan komentar**: `TaskComment` menolak balasan yang `parent_comment_id`-nya berasal dari task lain
+  (`CommentReplyOutsideTaskException`, 422). Komentar tidak mengubah status task dan bukan keputusan review.
+- **Review**: setiap keputusan (Approve/Request Revision) adalah baris baru dengan `cycle`, `reviewer_id`, `created_at`,
+  dan `note`. Tidak ada constraint yang melarang reviewer sekaligus PIC (self-approval Manajer/Supervisor diizinkan).
+- **Index Calendar**: `calendar_events` memakai index `(start_at, end_at)` untuk query rentang tanggal Calendar dan
+  Timeline.
 
 ## 5. Multi-PIC dan relasi lintas divisi (STEAM-270)
 
@@ -143,7 +163,7 @@ dua kali dan migration gagal.
 
 ```bash
 mysqldump -u <user> -p --single-transaction --routines <database> > backup-before-tasklist-foundation.sql
-php artisan migrate:status      # pastikan hanya 12 migration 2026_11_13_* (dan prasyaratnya) yang Pending
+php artisan migrate:status      # pastikan hanya 13 migration 2026_11_13_* (dan prasyaratnya) yang Pending
 ```
 
 Catat jumlah baris sebagai pembanding:
@@ -182,7 +202,7 @@ SELECT r.code_role, COUNT(rp.permission_id) FROM roles r LEFT JOIN role_permissi
 ### Rollback
 
 ```bash
-php artisan migrate:rollback --step=12 --force
+php artisan migrate:rollback --step=13 --force
 ```
 
 Semua migration punya `down()`. Rollback mengembalikan nilai status lama (di `tasks` dan `task_activities`) dan

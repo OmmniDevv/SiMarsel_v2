@@ -108,6 +108,12 @@ Menghapus akun berdasarkan ID. Session milik akun tersebut ikut terhapus, sehing
 { "message": "Anda tidak dapat menghapus akun Anda sendiri." }
 ```
 
+**422**, jika akun tercatat di riwayat tugas (pembuat, PIC, pelaku aktivitas, pengirim evidence, reviewer, penulis komentar, atau pembuat agenda). Riwayat tugas harus tetap menunjuk ke akun yang ada, jadi akun seperti ini dinonaktifkan, bukan dihapus:
+
+```json
+{ "message": "Akun ini memiliki riwayat tugas dan tidak dapat dihapus. Nonaktifkan akun ini sebagai gantinya." }
+```
+
 ## Catatan untuk frontend
 
 - Belum ada endpoint untuk daftar role dan divisi. Saat ini ID role dari seeder adalah `1` = Manager (`MGR`) dan `2` = Employee (`EMP`).

@@ -67,7 +67,7 @@ Backend **wajib** menerapkan cakupan ini di setiap endpoint. Staff yang mengubah
 }
 ```
 
-- `action`: `created` | `updated` | `assigned` | `reassigned` | `unassigned` | `status_changed` | `evidence_submitted` | `approved` | `revision_requested` | `resubmitted`. Perubahan PIC: `assigned` = hanya menambah PIC, `unassigned` = hanya melepas, `reassigned` = menambah dan melepas sekaligus. Penerusan divisi tanpa perubahan PIC dicatat `updated`.
+- `action`: `created` | `updated` | `assigned` | `reassigned` | `unassigned` | `status_changed` | `evidence_submitted` | `approved` | `revision_requested` | `resubmitted`. Perubahan PIC: `assigned` = hanya menambah PIC, `unassigned` = hanya melepas, `reassigned` = menambah dan melepas sekaligus. Penerusan divisi tanpa perubahan PIC dicatat `updated`. Tipe `deleted` (Tugas dihapus), `evidence_deleted` (Evidence dihapus), dan `comment_added` (Komentar ditambahkan) sudah disiapkan untuk fitur hapus tugas, hapus evidence (TASK-18), dan komentar (TASK-16); belum dicatat sampai fitur tersebut dibuat.
 - `changes`: nilai sebelum dan sesudah untuk tiap field yang berubah (`{}` untuk `created`). Perubahan PIC memakai `changes.pics` berisi daftar PIC aktif sebelum dan sesudah. Histori lama dari sebelum multi-PIC tetap memakai `changes.pic` (satu PIC).
 - `actor.id` bernilai `null` bila akun pelaku sudah dihapus; `actor.fullname` tetap berisi nama pelaku saat aktivitas terjadi.
 
