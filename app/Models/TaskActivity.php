@@ -21,6 +21,8 @@ class TaskActivity extends Model
 
     public const UPDATED = 'updated';
 
+    public const DELETED = 'deleted';
+
     public const ASSIGNED = 'assigned';
 
     public const REASSIGNED = 'reassigned';
@@ -29,7 +31,14 @@ class TaskActivity extends Model
 
     public const STATUS_CHANGED = 'status_changed';
 
+    /**
+     * Evidence added to the task.
+     */
     public const EVIDENCE_SUBMITTED = 'evidence_submitted';
+
+    public const EVIDENCE_DELETED = 'evidence_deleted';
+
+    public const COMMENT_ADDED = 'comment_added';
 
     public const APPROVED = 'approved';
 
@@ -43,11 +52,14 @@ class TaskActivity extends Model
     public const ACTION_LABELS = [
         self::CREATED => 'Tugas dibuat',
         self::UPDATED => 'Informasi tugas diubah',
+        self::DELETED => 'Tugas dihapus',
         self::ASSIGNED => 'PIC ditetapkan',
         self::REASSIGNED => 'PIC diganti',
         self::UNASSIGNED => 'PIC dilepas',
         self::STATUS_CHANGED => 'Status diubah',
         self::EVIDENCE_SUBMITTED => 'Evidence dikirim',
+        self::EVIDENCE_DELETED => 'Evidence dihapus',
+        self::COMMENT_ADDED => 'Komentar ditambahkan',
         self::APPROVED => 'Tugas disetujui',
         self::REVISION_REQUESTED => 'Revisi diminta',
         self::RESUBMITTED => 'Hasil revisi dikirim ulang',
