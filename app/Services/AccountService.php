@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\AccountHasTaskHistoryException;
 use App\Exceptions\CannotChangeOwnRoleException;
 use App\Exceptions\CannotDeleteOwnAccountException;
 use App\Models\Account;
@@ -44,11 +45,16 @@ class AccountService
 
     /**
      * @throws CannotDeleteOwnAccountException
+     * @throws AccountHasTaskHistoryException When the account appears in task history; it should be deactivated instead.
      */
     public function delete(Account $account, Account $actor): void
     {
         if ($account->is($actor)) {
             throw new CannotDeleteOwnAccountException;
+        }
+
+        if ($this->accountRepository->hasTaskHistory($account)) {
+            throw new AccountHasTaskHistoryException;
         }
 
         $this->accountRepository->delete($account);
