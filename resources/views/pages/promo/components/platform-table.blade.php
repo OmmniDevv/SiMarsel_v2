@@ -2,17 +2,18 @@
 <section x-data="promoPlatformTable" class="{{ $card }} min-w-0 p-5" aria-labelledby="platform-list-title">
     <div class="flex flex-wrap items-center gap-2">
         <h2 id="platform-list-title" class="text-base font-semibold text-ink">Daftar Platform</h2>
+        <p x-show="!loading && !loadError" x-cloak class="text-xs tabular-nums text-muted" aria-live="polite"><span class="font-semibold text-ink" x-text="platforms.length"></span> platform</p>
         <span class="inline-flex items-center gap-1 rounded-md bg-soft px-2 py-0.5 text-xs font-semibold text-muted">
             <x-icon name="lock" class="size-3" />
             Baca Saja
         </span>
     </div>
-    <p class="mt-1 text-sm text-muted">Diambil dari master platform global. Platform tidak dapat ditambah, diubah, atau dihapus dari modul promo.</p>
-    <p class="mt-1 text-xs text-muted">Slug adalah pengenal platform untuk integrasi data. Hubungi pengelola master platform jika daftar perlu diperbarui.</p>
+    <p class="mt-1 text-sm text-muted">Data dikelola secara terpusat dari sistem utama.</p>
 
     <div class="mt-4 overflow-hidden rounded-lg border border-line">
         <div class="overflow-x-auto">
-            <table class="w-full min-w-[360px] text-left text-sm">
+            <table class="w-full table-fixed text-left text-sm" :aria-busy="loading.toString()">
+                <caption class="sr-only">Daftar platform dan slug dari master global, baca-saja</caption>
                 <thead class="bg-soft text-xs font-semibold text-label">
                     <tr>
                         <th scope="col" class="px-4 py-3">Nama Platform</th>
@@ -22,10 +23,10 @@
 
                 <tbody class="divide-y divide-line">
                     <template x-for="platform in platforms" :key="platform.id">
-                        <tr class="hover:bg-soft/60">
-                            <td class="px-4 py-3 font-semibold text-ink" x-text="platform.name"></td>
+                        <tr x-show="!loading && !loadError" class="hover:bg-soft/60">
+                            <td class="px-4 py-3 font-semibold break-words text-ink" x-text="platform.name"></td>
                             <td class="px-4 py-3">
-                                <span class="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-xs font-semibold text-primary-hover" x-text="platform.slug"></span>
+                                <span class="font-mono text-xs break-all text-muted" x-text="platform.slug"></span>
                             </td>
                         </tr>
                     </template>
@@ -48,4 +49,5 @@
             </table>
         </div>
     </div>
+    <p class="mt-4 text-xs text-muted">Slug adalah pengenal platform untuk integrasi data. Hubungi pengelola sistem jika daftar perlu diperbarui.</p>
 </section>

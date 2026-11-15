@@ -448,7 +448,6 @@ class PromoPageTest extends TestCase
                 'id="panel-promo-master-source"', "promoMasterTable('source', 'Source')",
                 'id="panel-promo-master-platform"', 'x-data="promoPlatformTable"',
             ], false)
-            ->assertSee('adalah kelompok hasil analisis sistem, sehingga tidak perlu dibuat sebagai master.')
             ->assertSee('Mengganti nama funnel atau source tidak mengubah riwayat penggunaan kode promo yang sudah tercatat.')
             ->assertSee("promoMasterTable('funnel', 'Funnel')", false)
             ->assertSee("promoMasterTable('source', 'Source')", false)
@@ -458,13 +457,40 @@ class PromoPageTest extends TestCase
             ->assertSeeInOrder(['Hapus Funnel?', 'Hapus Source?']);
     }
 
+    public function test_master_lists_put_navigation_first_and_identify_result_scope(): void
+    {
+        $response = $this->actingAs($this->employee)->get(route('promo.index'));
+        $response->assertSeeInOrder([
+            'id="panel-promo-master-data"', 'aria-label="Data Master"',
+            'id="tab-promo-master-funnel"', 'id="tab-promo-master-source"', 'id="tab-promo-master-platform"',
+            'id="panel-promo-master-funnel"',
+        ], false);
+        $response->assertDontSee('Tentang kelompok analisis');
+        foreach (['funnel', 'source'] as $type) {
+            $list = str($response->getContent())->between('id="'.$type.'-list-title"', 'id="'.$type.'-form-title"');
+            $this->assertStringContainsString('x-show="!loading && !loadError"', $list);
+            $this->assertStringContainsString('x-text="filteredItems.length"', $list);
+            $this->assertStringContainsString('x-text="items.length"', $list);
+            $this->assertStringContainsString('Kode promo terkait', $list);
+            $this->assertStringContainsString('x-text="item.promo_codes_count', $list);
+            $this->assertStringNotContainsString('Belum Dipakai', $list);
+            $this->assertStringContainsString('@click="openEdit(item)"', $list);
+            $this->assertStringContainsString('@click="close(true); openDelete(item)"', $list);
+        }
+        $platform = str($response->getContent())->after('x-data="promoPlatformTable"');
+        $this->assertStringContainsString('x-text="platforms.length"', $platform);
+        $this->assertStringNotContainsString('@click="openCreate()"', $platform);
+        $this->assertStringNotContainsString('@click="openEdit', $platform);
+        $this->assertStringNotContainsString('@click="openDelete', $platform);
+    }
+
     public function test_platform_list_is_read_only(): void
     {
         $this->actingAs($this->employee)
             ->get(route('promo.index'))
             ->assertSee('x-data="promoPlatformTable"', false)
             ->assertSeeInOrder(['Daftar Platform', 'Baca Saja'])
-            ->assertSee('Diambil dari master platform global.')
+            ->assertSee('Data dikelola secara terpusat dari sistem utama.')
             ->assertDontSee('Create Platform')
             ->assertDontSee('Edit Platform')
             ->assertDontSee('Delete Platform');

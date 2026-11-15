@@ -18,7 +18,7 @@
     >
         <h2 id="{{ $type }}-form-title" class="text-base font-semibold text-ink" x-text="editing ? @js('Ubah '.$label) : @js('Tambah '.$label)">Tambah {{ $label }}</h2>
         <p x-show="!editing" class="mt-1 text-sm text-muted">Tambahkan {{ $noun }} baru untuk klasifikasi kode promo.</p>
-        <p x-show="editing" class="mt-1 text-sm text-muted">Mengganti nama tidak mengubah riwayat penggunaan kode promo yang sudah tercatat.</p>
+        <p x-show="editing" class="mt-1 text-sm text-muted">Mengganti nama funnel atau source tidak mengubah riwayat penggunaan kode promo yang sudah tercatat.</p>
 
         <form class="mt-5 flex flex-col gap-4" novalidate @submit.prevent="submit()">
             <div>
@@ -28,6 +28,8 @@
                 <input
                     id="{{ $type }}-name"
                     x-ref="nameInput"
+                    data-dialog-initial
+                    aria-required="true"
                     type="text"
                     x-model="name"
                     @input="errors.name = null"
