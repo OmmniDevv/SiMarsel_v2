@@ -1,4 +1,5 @@
 import Alpine from 'alpinejs';
+import { formatValue } from '../../format';
 import { errorMessage, validationErrors } from '../../http';
 import { fetchAnalysisTrend } from './api';
 import { renderChart, trendChartConfig, trendSeries } from './chart';
@@ -56,6 +57,16 @@ export default function promoAnalysisTrend() {
         get isEmpty() {
             return this.result?.is_empty === true;
         },
+
+        get tableSeries() {
+            return trendSeries(this.result?.datasets ?? []);
+        },
+
+        get tableRows() {
+            return this.result?.rows ?? [];
+        },
+
+        format: formatValue,
 
         get placeholder() {
             if (this.loadError) return this.loadError;

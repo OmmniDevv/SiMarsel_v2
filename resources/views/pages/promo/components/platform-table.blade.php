@@ -8,6 +8,7 @@
         </span>
     </div>
     <p class="mt-1 text-sm text-muted">Diambil dari master platform global. Platform tidak dapat ditambah, diubah, atau dihapus dari modul promo.</p>
+    <p class="mt-1 text-xs text-muted">Slug adalah pengenal platform untuk integrasi data. Hubungi pengelola master platform jika daftar perlu diperbarui.</p>
 
     <div class="mt-4 overflow-hidden rounded-lg border border-line">
         <div class="overflow-x-auto">

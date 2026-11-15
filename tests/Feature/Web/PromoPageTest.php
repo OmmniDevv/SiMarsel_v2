@@ -87,7 +87,9 @@ class PromoPageTest extends TestCase
             ->assertSee('x-data="promoAnalysis"', false)
             ->assertSee('@promo-analysis-errors="showServerErrors($event.detail)"', false)
             ->assertSee('@submit.prevent="apply()"', false)
-            ->assertSeeInOrder(['Periode', 'Platform / Source App', 'Filter lanjutan', 'Metode Pembayaran', 'Kode Promo', 'Terapkan filter', 'Atur ulang'])
+            ->assertSeeInOrder(['Periode', 'Platform', 'Filter lanjutan', 'Metode Pembayaran', 'Kode Promo', 'Terapkan filter', 'Atur ulang'])
+            ->assertSee('aria-controls="promo-analysis-controls"', false)
+            ->assertSee('x-show="filtersOpen"', false)
             ->assertSee('aria-controls="promo-analysis-advanced"', false)
             ->assertSee('id="promo-analysis-month"', false)
             ->assertSee('id="promo-analysis-year"', false)
@@ -106,10 +108,10 @@ class PromoPageTest extends TestCase
             ->assertSee('x-data="promoAnalysisSummary(', false)
             ->assertSee('@promo-analysis-filter.window="load($event.detail)"', false)
             ->assertSeeInOrder([
-                'Total Transaksi dengan Promo',
-                'Total Transaksi tanpa Promo',
-                'Revenue dengan Promo',
+                'Revenue Promo',
+                'Transaksi Promo',
                 'Revenue tanpa Promo',
+                'Transaksi tanpa Promo',
                 'Persentase Transaksi Promo',
                 'Kode Promo Terpakai',
             ])
@@ -130,7 +132,10 @@ class PromoPageTest extends TestCase
                 'Daftar Kode Promo',
             ], false)
             ->assertSeeInOrder(['Tren Penggunaan Promo', 'aria-label="Periode Grafik"', 'Harian', 'Mingguan', 'Bulanan', 'x-ref="canvas"'], false)
-            ->assertSee('@click="setPeriod(\'weekly\')"', false)
+            ->assertSee('@change="setPeriod(\'weekly\')"', false)
+            ->assertSee('Lihat data tren')
+            ->assertSee('Periode berjalan:')
+            ->assertSee('Pembanding:')
             ->assertSeeInOrder(['5 Kode Promo Teratas', 'Peringkat', 'Kode Promo', 'Jumlah Penggunaan', 'Revenue'])
             ->assertSee('Jumlah penggunaan dapat melebihi jumlah transaksi unik karena satu transaksi dapat memakai dua kode promo.')
             ->assertSee('Memuat 5 kode promo teratas');
@@ -311,6 +316,20 @@ class PromoPageTest extends TestCase
             ->assertSee('@promo-codes-changed.window="reload()"', false);
     }
 
+    public function test_promo_dialogs_and_bulk_fields_expose_shared_keyboard_and_error_support(): void
+    {
+        $this->actingAs($this->employee)->get(route('promo.index'))
+            ->assertSee('x-dialog="isOpen"', false)
+            ->assertSee('x-dialog="confirming"', false)
+            ->assertSee('x-dialog="modal === \'form\'"', false)
+            ->assertSee('data-dialog-initial', false)
+            ->assertSee('aria-required="true"', false)
+            ->assertSee(":aria-describedby=\"row.errors.code ? 'promo-bulk-'", false)
+            ->assertSee('Isi kode dan pilih platform pada setiap baris.')
+            ->assertSee('Baris kosong tidak dikirim.')
+            ->assertSee('@keydown.ctrl.enter.prevent="submit()"', false);
+    }
+
     public function test_code_management_orders_actions_alert_filter_list_and_pagination(): void
     {
         $this->actingAs($this->employee)
@@ -337,7 +356,7 @@ class PromoPageTest extends TestCase
                 'aria-haspopup="menu"',
                 'role="menu"',
                 'role="menuitem"',
-                '@click="close(); openDelete(item)"',
+                '@click="close(true); openDelete(item)"',
             ], false);
     }
 

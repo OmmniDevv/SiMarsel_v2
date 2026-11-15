@@ -140,6 +140,25 @@ test('summary formats currency and percentage consistently', async () => {
     assert.equal(summary.loading, false);
     assert.match(summary.value('promo_revenue', 'currency'), /^Rp\s?700\.000$/);
     assert.equal(summary.value('promo_transaction_percentage', 'percent'), '60,0%');
+    assert.match(summary.previousPeriod, /1 Agu 2026.*31 Agu 2026/);
+    assert.match(summary.currentPeriod, /1 Sep 2026.*30 Sep 2026/);
+    assert.match(summary.previousValue('promo_revenue', 'currency'), /^Rp\s?150\.000$/);
+});
+
+test('summary distinguishes a zero baseline from a missing comparator without inventing change', async () => {
+    const { default: summaryFactory } = await summaryModule(async () => summaryResponse({
+        promo_revenue: { value: 500000, previous_value: 0, change_percentage: null },
+        promo_transactions: { value: 5, previous_value: null, change_percentage: null },
+    }));
+    const summary = summaryFactory();
+    await summary.load('');
+    assert.match(summary.comparisonDescription('promo_revenue'), /bernilai nol/);
+    assert.equal(summary.comparisonDescription('promo_transactions'), 'Tidak ada data pembanding');
+    summary.summary.previous_period = { ranges: [
+        { date_from: '2025-01-01', date_to: '2025-01-31' },
+        { date_from: '2024-01-01', date_to: '2024-01-31' },
+    ] };
+    assert.match(summary.previousPeriod, /2025.*2024/);
 });
 
 test('summary reports empty data, server errors, and hands 422 errors back to the filter', async () => {

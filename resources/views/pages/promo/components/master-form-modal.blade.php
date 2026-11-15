@@ -1,5 +1,6 @@
 {{-- Create and edit share one form. Variables come from master-table. --}}
 <div
+    x-dialog="modal === 'form'"
     x-show="modal === 'form'"
     x-cloak
     class="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -7,7 +8,6 @@
     aria-modal="true"
     aria-labelledby="{{ $type }}-form-title"
     @keydown.escape.window="modal === 'form' && closeModal()"
-    x-init="$watch('modal', (value) => value === 'form' && $nextTick(() => $refs.nameInput.focus()))"
 >
     <div x-show="modal === 'form'" x-transition.opacity class="absolute inset-0 bg-slate-900/50" @click="closeModal()"></div>
 
@@ -31,7 +31,7 @@
                     type="text"
                     x-model="name"
                     @input="errors.name = null"
-                    class="h-9 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink placeholder:text-label focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+                    class="h-11 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink placeholder:text-label focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
                     :class="errors.name && 'border-red-500!'"
                     :aria-invalid="Boolean(errors.name)"
                     aria-describedby="{{ $type }}-name-error {{ $type }}-name-hint"
@@ -46,8 +46,8 @@
             <p x-show="formError" x-text="formError" class="text-xs text-red-600" role="alert"></p>
 
             <div class="flex flex-col-reverse gap-2 border-t border-line pt-4 sm:flex-row sm:justify-end">
-                <button type="button" class="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-line bg-white px-3 text-sm font-semibold text-ink hover:bg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50" :disabled="saving" @click="closeModal()">Batal</button>
-                <button type="submit" :disabled="saving" class="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="button" class="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-line bg-white px-3 text-sm font-semibold text-ink hover:bg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50" :disabled="saving" @click="closeModal()">Batal</button>
+                <button type="submit" :disabled="saving" class="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">
                     <span x-text="saving ? 'Menyimpan…' : (editing ? 'Simpan Perubahan' : @js('Simpan '.$label))">Simpan {{ $label }}</span>
                 </button>
             </div>

@@ -41,6 +41,10 @@ export default function promoAnalysisActions() {
             if (!this.busy) this.status = null;
         },
 
+        followTab({ id, key }) {
+            if (id === 'promo-breakdown' && !this.busy && COPY_TARGETS.some(({ value }) => value === key)) this.copyTarget = key;
+        },
+
         exportQuery() {
             const detail = { params: new URLSearchParams(this.query ?? '') };
             this.$dispatch('promo-analysis-export-params', detail);

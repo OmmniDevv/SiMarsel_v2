@@ -2,8 +2,8 @@ import Chart from 'chart.js/auto';
 import { formatAxis, formatValue } from '../../format';
 
 const COLORS = {
-    primary: '#059669',
-    primarySoft: '#a7f3d0',
+    primary: '#047857',
+    primarySoft: '#4b8b78',
     navy: '#0f2340',
     ink: '#1e293b',
     label: '#6b7685',
@@ -79,8 +79,14 @@ export function trendChartConfig({ labels, datasets }) {
                     position: 'bottom',
                     labels: {
                         usePointStyle: true,
-                        pointStyle: 'circle',
-                        boxWidth: 8,
+                        boxWidth: 20,
+                        generateLabels(chart) {
+                            return Chart.defaults.plugins.legend.labels.generateLabels(chart).map((item) => ({
+                                ...item,
+                                text: `${item.text} (${series[item.datasetIndex].format === 'currency' ? 'Rp' : 'transaksi'})`,
+                                pointStyle: series[item.datasetIndex].type === 'bar' ? 'rect' : 'line',
+                            }));
+                        },
                         padding: 16,
                         color: COLORS.ink,
                         // Bars are drawn behind the lines (dataset order); keep the legend in series order.
@@ -109,6 +115,7 @@ export function trendChartConfig({ labels, datasets }) {
                 },
                 revenue: {
                     position: 'left',
+                    title: { display: true, text: 'Revenue (Rp)', color: COLORS.ink },
                     beginAtZero: true,
                     grid: { color: COLORS.line },
                     border: { display: false },
@@ -116,6 +123,7 @@ export function trendChartConfig({ labels, datasets }) {
                 },
                 count: {
                     position: 'right',
+                    title: { display: true, text: 'Transaksi', color: COLORS.ink },
                     beginAtZero: true,
                     grid: { display: false },
                     border: { display: false },

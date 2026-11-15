@@ -4,11 +4,11 @@
     $spinner = 'size-3.5 animate-spin rounded-full border-2 border-t-transparent motion-reduce:animate-none';
 @endphp
 
-<div x-data="promoAnalysisActions" @promo-analysis-filter.window="clearStatus()" class="mt-4">
+<div x-data="promoAnalysisActions" @promo-analysis-filter.window="clearStatus()" @promo-tab-changed.window="followTab($event.detail)" class="min-w-0">
     <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between" role="group" aria-label="Ekspor dan Salin">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
             <div class="w-full sm:w-72">
-                <label for="promo-analysis-copy-target" class="mb-1.5 block text-xs font-semibold text-label">Komponen yang Disalin</label>
+                <label for="promo-analysis-copy-target" class="sr-only">Komponen yang Disalin</label>
                 <div class="relative">
                     <select
                         id="promo-analysis-copy-target"

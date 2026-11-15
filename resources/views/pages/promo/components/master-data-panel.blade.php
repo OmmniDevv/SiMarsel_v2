@@ -16,7 +16,7 @@
         @include('pages.promo.components.promo-subtabs', ['id' => 'promo-master', 'label' => 'Data Master', 'tabs' => $masterTabs])
     </div>
 
-    <div id="panel-promo-master-funnel" role="tabpanel" aria-labelledby="tab-promo-master-funnel" tabindex="0" x-show="tab === 'funnel'" class="min-w-0 focus-visible:outline-none">
+    <div id="panel-promo-master-funnel" role="tabpanel" aria-labelledby="tab-promo-master-funnel" tabindex="0" x-show="tab === 'funnel'" class="min-w-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">
         @include('pages.promo.components.master-table', [
             'type' => 'funnel',
             'label' => 'Funnel',
@@ -25,7 +25,7 @@
         ])
     </div>
 
-    <div id="panel-promo-master-source" role="tabpanel" aria-labelledby="tab-promo-master-source" tabindex="0" x-show="tab === 'source'" x-cloak class="min-w-0 focus-visible:outline-none">
+    <div id="panel-promo-master-source" role="tabpanel" aria-labelledby="tab-promo-master-source" tabindex="0" x-show="tab === 'source'" x-cloak class="min-w-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">
         @include('pages.promo.components.master-table', [
             'type' => 'source',
             'label' => 'Source',
@@ -34,7 +34,7 @@
         ])
     </div>
 
-    <div id="panel-promo-master-platform" role="tabpanel" aria-labelledby="tab-promo-master-platform" tabindex="0" x-show="tab === 'platform'" x-cloak class="min-w-0 focus-visible:outline-none">
+    <div id="panel-promo-master-platform" role="tabpanel" aria-labelledby="tab-promo-master-platform" tabindex="0" x-show="tab === 'platform'" x-cloak class="min-w-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">
         @include('pages.promo.components.platform-table')
     </div>
 </div>

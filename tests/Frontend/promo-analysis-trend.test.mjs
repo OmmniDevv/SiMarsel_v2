@@ -15,9 +15,13 @@ function syntheticModule(exports, context) {
     }, { context });
 }
 
-async function chartModule(context, charts = []) {
+async function chartModule(context, charts = [], format) {
     class Chart {
-        static defaults = { font: {} };
+        static defaults = { font: {}, plugins: { legend: { labels: {
+            generateLabels: (chart) => chart.data.datasets.map((set, datasetIndex) => ({
+                text: set.label, datasetIndex, lineDash: set.borderDash ?? [],
+            })),
+        } } } };
 
         constructor(canvas, config) {
             this.canvas = canvas;
@@ -31,7 +35,6 @@ async function chartModule(context, charts = []) {
         }
     }
 
-    const format = new vm.SourceTextModule(await source('format.js'), { context });
     const module = new vm.SourceTextModule(await source('pages/promo/chart.js'), { context });
     await module.link((specifier) => {
         if (specifier === '../../format') return format;
@@ -44,7 +47,8 @@ async function chartModule(context, charts = []) {
 
 async function trendModule(fetchAnalysisTrend, charts = []) {
     const context = vm.createContext({ Intl, Date, Number, Math, Boolean, Object, String, URLSearchParams });
-    const chart = await chartModule(context, charts);
+    const format = new vm.SourceTextModule(await source('format.js'), { context });
+    const chart = await chartModule(context, charts, format);
     const mocks = {
         alpinejs: { default: { raw: (value) => value } },
         '../../http': {
@@ -57,6 +61,7 @@ async function trendModule(fetchAnalysisTrend, charts = []) {
     const copy = await analysisCopyModule(context);
     await module.link((specifier) => {
         if (specifier === './chart') return chart;
+        if (specifier === '../../format') return format;
         if (specifier === './analysis-copy') return copy;
         return syntheticModule(mocks[specifier], context);
     });
@@ -105,6 +110,13 @@ test('chart shows promo transactions, promo revenue, and the total sales overlay
     assert.deepEqual(plain(config.data.datasets.map((set) => set.label)), ['Transaksi dengan Promo', 'Revenue dengan Promo', 'Total Penjualan']);
     assert.deepEqual(plain(config.data.datasets.map((set) => set.type)), ['bar', 'line', 'line']);
     assert.deepEqual(plain(config.data.datasets.map((set) => set.yAxisID)), ['count', 'revenue', 'revenue']);
+    assert.equal(config.options.scales.count.title.text, 'Transaksi');
+    assert.equal(config.options.scales.revenue.title.text, 'Revenue (Rp)');
+    const legend = config.options.plugins.legend.labels.generateLabels({ data: config.data });
+    assert.deepEqual(plain(legend.map(({ pointStyle }) => pointStyle)), ['rect', 'line', 'line']);
+    assert.match(legend[0].text, /transaksi/);
+    assert.match(legend[2].text, /Rp/);
+    assert.deepEqual(plain(legend[2].lineDash), [6, 4]);
     assert.ok(config.data.datasets.every((set) => !/penggunaan/i.test(set.label)));
     assert.deepEqual(plain(config.data.datasets[0].data), [1, 2, null]);
     assert.equal(config.options.plugins.legend.position, 'bottom');
@@ -117,6 +129,16 @@ test('chart shows promo transactions, promo revenue, and the total sales overlay
     assert.equal(label({ datasetIndex: 0, raw: 2, dataset: config.data.datasets[0] }), ' Transaksi dengan Promo: 2');
     assert.match(label({ datasetIndex: 2, raw: 900000, dataset: config.data.datasets[2] }), /^ Total Penjualan: Rp\s?900\.000$/);
     assert.equal(label({ datasetIndex: 1, raw: null, dataset: config.data.datasets[1] }), ' Revenue dengan Promo: —');
+});
+
+test('the local trend table exposes backend buckets and preserves missing values', async () => {
+    const rows = [{ label: '1 Sep', promo_transactions: 2, promo_revenue: 500000, total_sales: null }];
+    const { trend } = await trendModule(async () => trendResponse({ rows }));
+    const component = trendComponent(trend.default);
+    await component.load('month=9&year=2026');
+    assert.deepEqual(plain(component.tableRows), rows);
+    assert.deepEqual(plain(component.tableSeries.map(({ key }) => key)), ['promo_transactions', 'promo_revenue', 'total_sales']);
+    assert.equal(component.format(component.tableRows[0].total_sales, 'currency'), '—');
 });
 
 test('trend sends the shared filter with the chosen bucket and redraws on every change', async () => {

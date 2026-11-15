@@ -61,19 +61,8 @@
                                 <span x-show="!item.promo_codes_count" class="inline-flex items-center rounded-md bg-soft px-2 py-0.5 text-xs font-semibold text-muted">Belum Dipakai</span>
                             </td>
                             <td class="px-4 py-3 text-right whitespace-nowrap">
-                                <button
-                                    type="button"
-                                    class="rounded-md px-2 py-1 font-semibold text-primary hover:text-primary-hover focus-visible:outline-2 focus-visible:outline-primary"
-                                    :aria-label="'Ubah ' + item.name"
-                                    @click="openEdit(item)"
-                                >Ubah</button>
-                                <button
-                                    type="button"
-                                    class="ml-2 rounded-md px-2 py-1 font-semibold text-red-600 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-red-600"
-                                    :aria-label="'Hapus ' + item.name"
-                                    @click="openDelete(item)"
-                                >Hapus</button>
-                            </td>
+                            @include('pages.promo.components.row-actions', ['identifier' => 'item.name'])
+                        </td>
                         </tr>
                     </template>
 

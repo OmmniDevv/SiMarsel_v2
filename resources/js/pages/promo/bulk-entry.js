@@ -96,10 +96,12 @@ export default function promoCodeBulkEntry() {
             }
         },
 
-        addRows(count = 1) {
+        addRows(count = 1, focus = false) {
             if (this.saving) return;
             const room = MAX_ROWS - this.rows.length;
+            const first = this.rows.length;
             this.rows.push(...Array.from({ length: Math.min(count, room) }, emptyRow));
+            if (focus && room > 0) this.$nextTick(() => this.$el.querySelectorAll('tbody input')[first]?.focus());
         },
 
         removeRow(index) {

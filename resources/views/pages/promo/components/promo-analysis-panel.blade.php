@@ -19,10 +19,11 @@
 <div x-data="promoAnalysis" @promo-analysis-errors="showServerErrors($event.detail)" class="mt-6 grid min-w-0 gap-4">
     @include('pages.promo.components.promo-analysis-filter')
     @include('pages.promo.components.promo-analysis-summary')
+    @include('pages.promo.components.promo-analysis-actions')
     @include('pages.promo.components.promo-analysis-trend')
 
     <section
-        x-data="promoTabs('promo-breakdown', @js(array_keys($breakdownTabs)))"
+        x-data="promoTabs('promo-breakdown', @js(array_keys($breakdownTabs)), 'breakdown')"
         class="{{ $card }} min-w-0 p-5"
         aria-labelledby="promo-breakdown-title"
     >
@@ -40,7 +41,7 @@
                 tabindex="0"
                 x-show="tab === @js($key)"
                 @if (! $loop->first) x-cloak @endif
-                class="mt-5 min-w-0 focus-visible:outline-none"
+                class="mt-5 min-w-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
             >
                 @include('pages.promo.components.'.$view)
             </div>
