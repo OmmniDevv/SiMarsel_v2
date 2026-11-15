@@ -17,22 +17,6 @@ class DatabaseSeeder extends Seeder
         $this->call([
             RoleSeeder::class,
             AccountSeeder::class,
-            FunnelSeeder::class,
-            PromoSourceSeeder::class,
-            TaskCategorySeeder::class,
         ]);
-
-        // Demo performance data for local development only, so tests keep a clean database.
-        if (app()->isLocal()) {
-            fake()->seed(2026);
-
-            $this->call([
-                PlatformSeeder::class,
-                DownloaderSeeder::class,
-                PromoCodeSeeder::class,
-                TransactionSeeder::class,
-                ScheduleEventSeeder::class,
-            ]);
-        }
     }
 }

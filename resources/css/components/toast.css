@@ -47,12 +47,12 @@
 }
 
 .toast-info {
-    border-left-color: #059669;
+    border-left-color: #5d60a2;
 }
 
 .toast-info .toast-icon {
-    background: #ecfdf5;
-    color: #059669;
+    background: #e4e5f3;
+    color: #5d60a2;
 }
 
 .toast-title {

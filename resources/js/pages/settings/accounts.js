@@ -6,11 +6,14 @@ const ENDPOINT = '/api/accounts';
 
 const emptyForm = () => ({ fullname: '', username: '', password: '', role_id: '', division_id: '' });
 
-Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, initiallyActive = false) => ({
+Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false) => ({
     roles,
     divisions,
     canManage,
     users: [],
+
+    // Employee only has the list, so it opens there directly.
+    tab: canManage ? 'create' : 'list',
 
     draft: emptyForm(),
     draftErrors: {},
@@ -18,8 +21,7 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
     creating: false,
     showDraftPassword: false,
 
-    loaded: false,
-    loading: false,
+    loading: true,
     loadError: '',
     saving: false,
 
@@ -36,11 +38,7 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
 
     init() {
         this.resetDraft();
-        if (initiallyActive) this.activate('accounts');
-    },
-
-    activate(tab) {
-        if (tab === 'accounts' && !this.loaded && !this.loading) this.fetchUsers();
+        this.fetchUsers();
     },
 
     get currentUserId() {
@@ -58,17 +56,6 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
         });
     },
 
-    get accountSummary() {
-        const roleCounts = Object.fromEntries(this.roles.map((role) => [role.code_role, 0]));
-
-        this.users.forEach((user) => {
-            const role = user.role?.code_role;
-            if (role) roleCounts[role] = (roleCounts[role] ?? 0) + 1;
-        });
-
-        return { total: this.users.length, roleCounts };
-    },
-
     async fetchUsers() {
         this.loading = true;
         this.loadError = '';
@@ -76,12 +63,19 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
         try {
             const { data } = await http(ENDPOINT);
             this.users = data;
-            this.loaded = true;
         } catch (error) {
             this.loadError = errorMessage(error, 'Gagal memuat daftar akun.');
         } finally {
             this.loading = false;
         }
+    },
+
+    countByRole(code) {
+        return this.users.filter((user) => user.role.code_role === code).length;
+    },
+
+    countWithoutDivision() {
+        return this.users.filter((user) => !user.division).length;
     },
 
     roleIdByCode(code) {
@@ -114,13 +108,6 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
         this.showDraftPassword = false;
     },
 
-    openCreate() {
-        if (!this.canManage) return;
-
-        this.resetDraft();
-        this.modal = 'create';
-    },
-
     openEdit(user) {
         this.form = {
             fullname: user.fullname,
@@ -143,7 +130,7 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
     },
 
     closeModal() {
-        if (this.saving || this.creating) return;
+        if (this.saving) return;
 
         this.modal = null;
         this.editingId = null;
@@ -193,8 +180,7 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
 
             this.users.push(data);
             this.resetDraft();
-            this.modal = null;
-            showToast({ title: 'Akun Ditambahkan', text: `${data.fullname} sudah ditambahkan.` });
+            showToast({ title: 'Akun berhasil dibuat', text: `${data.fullname} sudah ditambahkan.` });
         } catch (error) {
             if (error.status === 422 && error.data?.errors) {
                 this.draftErrors = validationErrors(error);
@@ -213,7 +199,7 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
 
         this.users = this.users.map((user) => (user.id === id ? result.data : user));
         this.closeModal();
-        showToast({ title: 'Perubahan Tersimpan', text: `Data ${result.data.fullname} sudah diperbarui.` });
+        showToast({ title: 'Perubahan disimpan', text: `Data ${result.data.fullname} sudah diperbarui.` });
 
         if (id === this.currentUserId) {
             setTimeout(() => window.location.reload(), 800);
@@ -229,6 +215,7 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
 
         this.users = this.users.filter((item) => item.id !== user.id);
         this.closeModal();
-        showToast({ title: 'Akun Dihapus', text: `${user.fullname} sudah dihapus.` });
+        showToast({ title: 'Akun dihapus', text: `${user.fullname} sudah dihapus.` });
     },
 }));
+

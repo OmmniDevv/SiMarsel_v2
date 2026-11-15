@@ -2,16 +2,12 @@
 
 namespace App\Models;
 
-use App\Observers\TransactionObserver;
-use Carbon\CarbonImmutable;
 use Database\Factories\TransactionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'platform_id',
@@ -27,7 +23,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'customer_email',
     'status_message',
 ])]
-#[ObservedBy(TransactionObserver::class)]
 class Transaction extends Model
 {
     /** @use HasFactory<TransactionFactory> */
@@ -50,29 +45,12 @@ class Transaction extends Model
             'paid_date' => 'date',
             'nominal' => 'decimal:2',
             'promo_code' => 'array',
-            'promo_code_anomaly' => 'boolean',
         ];
     }
 
     public function platform(): BelongsTo
     {
         return $this->belongsTo(Platform::class);
-    }
-
-    /**
-     * The promo codes used by this transaction, one row per code position.
-     */
-    public function promoCodeUsages(): HasMany
-    {
-        return $this->hasMany(TransactionPromoCode::class)->orderBy('code_position');
-    }
-
-    /**
-     * The moment the transaction was paid; a missing paid_time counts as the start of the day.
-     */
-    public function paidAt(): CarbonImmutable
-    {
-        return CarbonImmutable::parse($this->paid_date->toDateString().' '.($this->paid_time ?? '00:00:00'));
     }
 
     /**
@@ -83,12 +61,6 @@ class Transaction extends Model
     public function scopeSuccessful(Builder $query): void
     {
         $query->where('status_message', self::STATUS_SUCCESS);
-    }
-
-    /** Successful transactions eligible for promo attribution, including genuine no-code transactions. */
-    public function scopePromoAnalyzable(Builder $query): void
-    {
-        $query->successful()->where('promo_code_anomaly', false);
     }
 
     /**

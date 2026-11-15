@@ -13,7 +13,7 @@
             <header class="auth-header">
                 <div class="auth-logo" aria-hidden="true">SM</div>
                 <h1 id="auth-title" class="auth-title">SiMarsel<span class="auth-title-dot">.</span></h1>
-                <p class="auth-subtitle">Masuk untuk mengakses dasbor SiMarsel.</p>
+                <p class="auth-subtitle">Masuk untuk mengakses dashboard.</p>
             </header>
 
             <div id="login-alert" class="auth-alert" role="alert" hidden></div>
