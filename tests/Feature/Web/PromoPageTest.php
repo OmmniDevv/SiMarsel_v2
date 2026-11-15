@@ -366,17 +366,15 @@ class PromoPageTest extends TestCase
             ], false);
     }
 
-    public function test_promo_code_delete_sits_in_the_more_actions_menu_next_to_edit(): void
+    public function test_promo_code_rows_show_edit_then_direct_delete_actions(): void
     {
         $this->actingAs($this->employee)
             ->get(route('promo.index'))
             ->assertSeeInOrder([
                 '@click="openEdit(item)"',
-                'x-data="promoRowMenu"',
-                'aria-haspopup="menu"',
-                'role="menu"',
-                'role="menuitem"',
-                '@click="close(true); openDelete(item)"',
+                '>Ubah</button>',
+                '@click="openDelete(item)"',
+                '>Hapus</button>',
             ], false);
     }
 
@@ -475,7 +473,8 @@ class PromoPageTest extends TestCase
             $this->assertStringContainsString('x-text="item.promo_codes_count', $list);
             $this->assertStringNotContainsString('Belum Dipakai', $list);
             $this->assertStringContainsString('@click="openEdit(item)"', $list);
-            $this->assertStringContainsString('@click="close(true); openDelete(item)"', $list);
+            $this->assertStringContainsString('@click="openDelete(item)"', $list);
+            $this->assertStringNotContainsString('promoRowMenu', $list);
         }
         $platform = str($response->getContent())->after('x-data="promoPlatformTable"');
         $this->assertStringContainsString('x-text="platforms.length"', $platform);
