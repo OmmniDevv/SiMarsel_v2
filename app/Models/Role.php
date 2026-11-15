@@ -9,8 +9,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['code_role', 'name'])]
 class Role extends Model
 {
-    public const ADMIN = 'ADM';
-
     public const MANAGER = 'MGR';
 
     public const EMPLOYEE = 'EMP';

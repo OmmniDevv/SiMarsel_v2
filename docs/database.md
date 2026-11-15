@@ -23,11 +23,6 @@ php artisan migrate --seed
 | `downloaders` | Jumlah downloader per platform per tanggal |
 | `sync_logs` | Riwayat sinkronisasi data per platform |
 | `markaz_api_tokens` | Token API Markaz (hanya 1 token aktif) |
-| `funnels` | Master funnel kode promo (`name` unik) |
-| `promo_sources` | Master sumber kode promo (`name` unik) |
-| `promo_codes` | Master kode promo per platform (`platform_id` + `code` unik) |
-| `promo_code_versions` | Riwayat funnel/source kode promo beserta rentang waktu berlakunya |
-| `transaction_promo_codes` | Kode promo yang dipakai setiap transaksi, beserta snapshot funnel/source-nya |
 | `jobs`, `failed_jobs` | Antrian (queue) Laravel untuk sinkronisasi dan backfill |
 | `cache`, `cache_locks` | Dipakai untuk pembatasan percobaan login |
 | `migrations` | Catatan migration milik Laravel |
@@ -42,13 +37,6 @@ php artisan migrate --seed
 | `transactions.platform_id` → `platforms.id` | Ya | **Ditolak** selama platform masih punya transaksi |
 | `downloaders.platform_id` → `platforms.id` | Ya | **Ditolak** selama platform masih punya data downloader |
 | `sync_logs.platform_id` → `platforms.id` | Ya | **Ditolak** selama platform masih punya log sinkronisasi |
-| `promo_codes.platform_id`, `promo_code_versions.platform_id`, `transaction_promo_codes.platform_id_snapshot` → `platforms.id` | Ya | **Ditolak** selama platform masih dipakai |
-| `promo_codes.funnel_id` → `funnels.id`, `promo_codes.source_id` → `promo_sources.id` | Tidak | **Ditolak** selama funnel/source masih dipakai kode promo |
-| `promo_code_versions.promo_code_id` → `promo_codes.id` | Ya | Riwayat versi **ikut terhapus** |
-| `promo_code_versions.funnel_id`, `.source_id` | Tidak | Menjadi **NULL**, nama snapshot tetap tersimpan |
-| `transaction_promo_codes.transaction_id` → `transactions.id` | Ya | Penggunaan kode **ikut terhapus** |
-| `transaction_promo_codes.promo_code_id` → `promo_codes.id` | Tidak | **Ditolak** selama kode promo sudah dipakai transaksi |
-| `transaction_promo_codes.funnel_id_snapshot`, `.source_id_snapshot` | Tidak | Menjadi **NULL**, nama snapshot tetap tersimpan |
 
 ## Aturan bisnis
 
@@ -60,14 +48,11 @@ php artisan migrate --seed
 - Username: 4-25 karakter, hanya huruf, angka, titik, dan underscore.
 - Transaksi dihitung **berhasil** jika `status_message` = `Success`. Transaksi lain diabaikan di semua KPI.
 - Hanya transaksi Markaz dengan `status_message` = `Success` yang diambil dan disimpan ke `transactions`.
-- Penggunaan promo, alert, dan backfill pendaftaran hanya memproses transaksi sukses. `transactions.promo_code_anomaly` menandai payload promo invalid: detail ada di file log, histori penggunaan tetap disimpan, dan seluruh query analisis promo/alert mengecualikannya. Ringkasan Performa umum tetap menghitung fakta transaksi sukses tersebut.
-- Snapshot promo memakai master saat pertama diproses, tanpa melihat tanggal bayar; snapshot yang sudah terhubung tetap, termasuk hasil kosong. Rename menggunakan label master terbaru tanpa mengubah snapshot tersimpan.
 - `transactions.trx_id` unik, sehingga satu transaksi Markaz hanya tersimpan sekali.
 - `downloaders` unik per kombinasi `platform_id` + `date`: satu platform pada satu tanggal hanya punya satu baris, dan sinkronisasi memakai upsert.
 - `markaz_api_tokens.token` disimpan terenkripsi dan tidak pernah dikembalikan oleh API. Hanya boleh ada 1 token aktif; token lama diganti saat token baru disimpan.
 - Satu user diidentifikasi dari `customer_email` (huruf kecil, tanpa spasi di awal atau akhir). Transaksi tanpa email tetap dihitung di revenue dan jumlah transaksi, tapi tidak dihitung sebagai user.
-- Rumus KPI Ringkasan Performa ada di [api/performance.md](api/performance.md), dan Ringkasan Produk di [api/products.md](api/products.md).
-- Kode promo transaksi dinormalisasi ke `transaction_promo_codes` tanpa mengubah `transactions.promo_code`. Aturan lengkapnya ada di [promo-codes.md](promo-codes.md).
+- Rumus KPI Ringkasan Performa ada di [api/performance.md](api/performance.md).
 - Data `transactions` dan `downloaders` diisi dari sinkronisasi API Markaz, tidak dari seeder. Daftar platform yang disinkronkan diambil dari tabel `platforms` (master platform).
 
 ## Data awal (seeder)
@@ -77,8 +62,6 @@ php artisan migrate --seed
 | Role | `MGR` Manager (id 1), `EMP` Employee (id 2) |
 | Akun manager default | username `manager`, password `Manager123!` |
 | Divisi | Kosong |
-| Funnel | Aplikasi, Marketing, Sales, Ads, Live, Lainnya |
-| Source promo | Aplikasi, Instagram, TikTok, Telegram, Sales, Ads, Live, Reseller, Lainnya |
 
 Akun manager default hanya untuk penanda awal bahwa aplikasi berjalan. Ganti password-nya lewat `PATCH /api/accounts/1` sebelum dipakai di luar lingkungan lokal.
 
@@ -87,4 +70,3 @@ Akun manager default hanya untuk penanda awal bahwa aplikasi berjalan. Ganti pas
 - Tabel `users`, `password_reset_tokens`, dan `job_batches` tidak dipakai.
 - `QUEUE_CONNECTION=database`: job sinkronisasi dan backfill disimpan di tabel `jobs`, job yang gagal di `failed_jobs`.
 - Login memakai model `App\Models\Account` (`config/auth.php`).
-- Timezone aplikasi `Asia/Jakarta` (`APP_TIMEZONE`), sehingga tanggal "hari ini" dan `created_at`/`updated_at` memakai WIB.

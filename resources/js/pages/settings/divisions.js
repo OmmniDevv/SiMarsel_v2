@@ -6,7 +6,7 @@ const ENDPOINT = '/api/divisions';
 
 const emptyForm = () => ({ code_division: '', name: '' });
 
-Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) => ({
+Alpine.data('divisionManagement', (canManage = false) => ({
     canManage,
     divisions: [],
 
@@ -15,8 +15,7 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
     draftError: '',
     creating: false,
 
-    loaded: false,
-    loading: false,
+    loading: true,
     loadError: '',
     saving: false,
 
@@ -30,11 +29,7 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
     deletingDivision: null,
 
     init() {
-        if (initiallyActive) this.activate('divisions');
-    },
-
-    activate(tab) {
-        if (tab === 'divisions' && !this.loaded && !this.loading) this.fetchDivisions();
+        this.fetchDivisions();
     },
 
     get filteredDivisions() {
@@ -61,7 +56,6 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
         try {
             const { data } = await http(ENDPOINT);
             this.divisions = data;
-            this.loaded = true;
         } catch (error) {
             this.loadError = errorMessage(error, 'Gagal memuat daftar divisi.');
         } finally {
@@ -138,7 +132,7 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
             this.divisions.push(data);
             this.resetDraft();
             this.modal = null;
-            showToast({ title: 'Divisi Ditambahkan', text: `${data.name} sudah ditambahkan.` });
+            showToast({ title: 'Divisi berhasil dibuat', text: `${data.name} sudah ditambahkan.` });
         } catch (error) {
             if (error.status === 422 && error.data?.errors) {
                 this.draftErrors = validationErrors(error);
@@ -157,7 +151,7 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
 
         this.divisions = this.divisions.map((division) => (division.id === id ? result.data : division));
         this.closeModal();
-        showToast({ title: 'Perubahan Tersimpan', text: `Divisi ${result.data.name} sudah diperbarui.` });
+        showToast({ title: 'Perubahan disimpan', text: `Divisi ${result.data.name} sudah diperbarui.` });
     },
 
     async confirmDelete() {
@@ -169,6 +163,6 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
 
         this.divisions = this.divisions.filter((item) => item.id !== division.id);
         this.closeModal();
-        showToast({ title: 'Divisi Dihapus', text: `${division.name} sudah dihapus.` });
+        showToast({ title: 'Divisi dihapus', text: `${division.name} sudah dihapus.` });
     },
 }));

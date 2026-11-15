@@ -33,31 +33,6 @@ class PageAccessTest extends TestCase
         ]);
     }
 
-    public function test_sidebar_preserves_menu_structure_and_has_a_mobile_dialog_lifecycle(): void
-    {
-        $this->actingAs($this->manager)->get('/dashboard')
-            ->assertOk()
-            ->assertSeeInOrder(['Analitik', 'Analisis Performa', 'Ringkasan', 'Produk', 'Pekerjaan', 'Tasklist', 'Penjualan &amp; Pemasaran', 'Manajemen Promo', 'Sistem', 'Keluar', 'Akun Aktif'], false)
-            ->assertSee('x-dialog="open && !desktop"', false)
-            ->assertSeeInOrder(['id="sidebar-dialog"', 'x-dialog="open && !desktop"', 'x-show="open"', 'id="sidebar"', '</aside>', '<main'], false)
-            ->assertSee(':inert="!desktop && !open"', false)
-            ->assertSee(':aria-hidden="!desktop && !open ? \'true\' : null"', false)
-            ->assertSee('@keydown.escape.stop="open = false"', false)
-            ->assertSee('aria-controls="sidebar-submenu-0-0"', false)
-            ->assertSee('id="sidebar-submenu-0-0"', false)
-            ->assertSee('aria-label="Analitik"', false);
-    }
-
-    public function test_direct_and_nested_active_sidebar_links_use_the_same_contrasted_treatment(): void
-    {
-        foreach (['/dashboard', '/promo'] as $url) {
-            $response = $this->actingAs($this->manager)->get($url)->assertOk();
-            $sidebar = str($response->getContent())->between('id="sidebar"', '</aside>');
-            $this->assertMatchesRegularExpression('/class="[^"<>]*bg-primary-hover text-white[^"<>]*"[^>]*aria-current="page"/s', (string) $sidebar);
-            $this->assertStringNotContainsString('before:w-[3px]', $sidebar);
-        }
-    }
-
     public function test_guest_is_redirected_to_login(): void
     {
         $this->get('/')->assertRedirect('/dashboard');
@@ -71,9 +46,8 @@ class PageAccessTest extends TestCase
         $this->get('/login')
             ->assertOk()
             ->assertSee(route('api.login'), false)
-            ->assertDontSee('Forgot Password?')
-            ->assertSee('data-redirect="'.route('dashboard').'"', false)
-            ->assertDontSee('Mode demo');
+            ->assertDontSee('Mode demo')
+            ->assertDontSee('Lupa password?');
     }
 
     public function test_authenticated_account_is_redirected_away_from_login(): void
@@ -83,7 +57,7 @@ class PageAccessTest extends TestCase
             ->assertRedirect(route('dashboard'));
     }
 
-    public function test_landing_page_shows_logged_in_account(): void
+    public function test_dashboard_shows_logged_in_account(): void
     {
         $this->actingAs($this->employee)
             ->get('/dashboard')
@@ -93,26 +67,16 @@ class PageAccessTest extends TestCase
             ->assertSee(route('settings.index'));
     }
 
-    public function test_manager_can_open_organization_management_with_accounts_as_default(): void
+    public function test_manager_can_open_settings_page_with_roles_and_divisions(): void
     {
         Division::create(['code_division' => 'OPS', 'name' => 'Operasional']);
 
         $this->actingAs($this->manager)
             ->get('/settings')
             ->assertOk()
-            ->assertViewHas('initialTab', 'accounts')
-            ->assertSee('Manajemen Organisasi')
-            ->assertSee('Kelola akun pengguna dan divisi organisasi.')
-            ->assertSeeInOrder(['Akun', 'Divisi'])
-            ->assertSeeInOrder(['Total Akun', 'Admin', 'Manager', 'Employee'])
-            ->assertDontSee('akun tanpa divisi')
-            ->assertSeeInOrder(['Daftar Akun', 'Tambah Akun'])
-            ->assertSee('@click="openCreate()"', false)
-            ->assertSee('id="create-user-title"', false)
-            ->assertSee('role="tablist"', false)
-            ->assertSee('id="panel-accounts"', false)
-            ->assertSee('id="panel-divisions"', false)
-            ->assertDontSee('id="panel-create"', false)
+            ->assertSee('Pengaturan')
+            ->assertSeeInOrder(['Total Akun', 'Manager', 'Employee', 'Divisi'])
+            ->assertSeeInOrder(['Buat Akun', 'Daftar Akun'])
             ->assertSee('Operasional')
             ->assertSee('>Aksi</th>', false)
             ->assertSee('openEdit(user)', false)
@@ -120,15 +84,14 @@ class PageAccessTest extends TestCase
             ->assertDontSee('>Status</th>', false);
     }
 
-    public function test_sidebar_has_one_organization_management_link_for_manager(): void
+    public function test_sidebar_links_settings_directly_for_manager(): void
     {
         $this->actingAs($this->manager)
             ->get('/dashboard')
             ->assertOk()
-            ->assertSeeInOrder(['Manajemen Organisasi', 'Keluar'])
+            ->assertSeeInOrder(['Manajemen akun', 'Keluar'])
             ->assertSee('href="'.route('settings.index').'"', false)
-            ->assertDontSee('Account Management')
-            ->assertDontSee('Division Management')
+            ->assertDontSee('Manajemen Akun')
             ->assertDontSee("soon('Tasklist')", false);
     }
 
@@ -146,7 +109,7 @@ class PageAccessTest extends TestCase
             ->get('/dashboard')
             ->assertOk()
             ->assertSee('href="'.route('settings.index').'"', false)
-            ->assertDontSee("locked('Manajemen Organisasi')", false);
+            ->assertDontSee("locked('Manajemen akun')", false);
     }
 
     public function test_employee_can_open_settings_page_as_read_only(): void
@@ -155,14 +118,12 @@ class PageAccessTest extends TestCase
             ->get('/settings')
             ->assertOk()
             ->assertSee('Daftar Akun')
-            ->assertSee('Manajemen Organisasi')
+            ->assertSee('Lihat daftar akun anggota tim beserta role dan divisinya.')
             ->assertSee('Cari akun anggota tim dan saring berdasarkan divisi.')
             ->assertSee('accountSettings(', false)
-            ->assertDontSee('Tambah Akun')
-            ->assertDontSee('openCreate()', false)
-            ->assertDontSee('id="create-user-title"', false)
+            ->assertDontSee('Buat Akun')
             ->assertDontSee('id="panel-create"', false)
-            ->assertSee('role="tablist"', false)
+            ->assertDontSee('role="tablist"', false)
             ->assertDontSee('>Aksi</th>', false)
             ->assertDontSee('openEdit(user)', false)
             ->assertDontSee('openDelete(user)', false)
@@ -171,75 +132,36 @@ class PageAccessTest extends TestCase
             ->assertDontSee('>Status</th>', false);
     }
 
-    public function test_divisions_query_opens_divisions_tab_with_management_controls(): void
+    public function test_manager_can_open_division_page_with_management_controls(): void
     {
         $this->actingAs($this->manager)
-            ->get('/settings?tab=divisions')
+            ->get('/divisions')
             ->assertOk()
-            ->assertViewHas('initialTab', 'divisions')
-            ->assertSeeInOrder(['Total Divisi', 'Anggota Divisi', 'Divisi Tanpa Anggota'])
-            ->assertSeeInOrder(['Daftar Divisi', 'Tambah Divisi'])
+            ->assertSee('Manajemen Divisi')
+            ->assertSeeInOrder(['Total Divisi', 'Anggota Divisi', 'Divisi Kosong'])
+            ->assertSeeInOrder(['Daftar Divisi', 'Buat Divisi'])
             ->assertSee('id="create-division-title"', false)
             ->assertSee('Hapus Divisi?');
     }
 
-    public function test_employee_can_open_divisions_tab_read_only(): void
+    public function test_employee_can_open_division_page_read_only(): void
     {
         $this->actingAs($this->employee)
-            ->get('/settings?tab=divisions')
+            ->get('/divisions')
             ->assertOk()
-            ->assertViewHas('initialTab', 'divisions')
             ->assertSee('Daftar Divisi')
-            ->assertDontSee('Tambah Divisi')
+            ->assertDontSee('Buat Divisi')
             ->assertDontSee('Hapus Divisi?');
     }
 
-    public function test_invalid_tab_falls_back_to_accounts(): void
-    {
-        $this->actingAs($this->manager)
-            ->get('/settings?tab=unknown')
-            ->assertOk()
-            ->assertViewHas('initialTab', 'accounts');
-    }
-
-    public function test_legacy_divisions_route_redirects_to_divisions_tab(): void
-    {
-        $this->actingAs($this->manager)
-            ->get('/divisions')
-            ->assertRedirect('/settings?tab=divisions');
-    }
-
-    public function test_guest_cannot_open_product_overview_page(): void
-    {
-        $this->get('/performance/products')->assertRedirect(route('login'));
-    }
-
-    public function test_every_role_can_open_product_overview_page_with_filters_and_cards(): void
+    public function test_sidebar_links_division_page_for_every_role(): void
     {
         foreach ([$this->manager, $this->employee] as $account) {
             $this->actingAs($account)
-                ->get('/performance/products')
+                ->get('/dashboard')
                 ->assertOk()
-                ->assertSee('Ikhtisar Produk')
-                ->assertSeeInOrder(['Aplikasi Sumber / Platform', 'Tahun', 'Bulan'])
-                ->assertSeeInOrder([
-                    'Paket Teratas berdasarkan Revenue',
-                    'Paket Teratas berdasarkan Volume Transaksi',
-                    'Detail Performa Paket',
-                ])
-                ->assertSee('Cari nama paket')
-                ->assertSeeInOrder(['Excel', 'CSV'])
-                ->assertSee('Data belum tersedia');
+                ->assertSee('Manajemen divisi')
+                ->assertSee('href="'.route('divisions.index').'"', false);
         }
-    }
-
-    public function test_sidebar_links_product_overview_inside_performance_folder(): void
-    {
-        $this->actingAs($this->employee)
-            ->get('/performance/products')
-            ->assertOk()
-            ->assertSeeInOrder(['Analisis Performa', 'Produk'])
-            ->assertSee('href="'.route('performance.products').'"', false)
-            ->assertSee('aria-current="page"', false);
     }
 }
