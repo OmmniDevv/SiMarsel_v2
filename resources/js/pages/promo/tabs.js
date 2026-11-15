@@ -13,7 +13,6 @@ export default function promoTabs(id, keys, urlParam = null) {
             if (!keys.includes(key)) return;
 
             this.tab = key;
-            this.$dispatch?.('promo-tab-changed', { id, key });
 
             if (!urlParam) return;
 

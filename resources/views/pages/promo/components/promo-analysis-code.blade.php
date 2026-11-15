@@ -15,7 +15,6 @@
 <section
     x-data="promoAnalysisCode"
     @promo-analysis-filter.window="load($event.detail)"
-    @promo-analysis-copy.window="provideCopy($event.detail)"
     @promo-analysis-export-params.window="provideExportParams($event.detail)"
     class="min-w-0"
     aria-labelledby="promo-code-summary-title"

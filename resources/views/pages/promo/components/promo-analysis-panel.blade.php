@@ -1,4 +1,4 @@
-{{-- Analisis tab: filter → summary → trend → breakdown. Every component stays mounted, so all of them follow the applied filter and answer Salin. --}}
+{{-- Analisis tab: active filter and actions → summary → trend → breakdown. Panels retain the applied filter. --}}
 @php
     $breakdownTabs = [
         'top-codes' => 'Top 5 Kode Promo',
@@ -19,7 +19,6 @@
 <div x-data="promoAnalysis" @promo-analysis-errors="showServerErrors($event.detail)" class="mt-6 grid min-w-0 gap-4">
     @include('pages.promo.components.promo-analysis-filter')
     @include('pages.promo.components.promo-analysis-summary')
-    @include('pages.promo.components.promo-analysis-actions')
     @include('pages.promo.components.promo-analysis-trend')
 
     <section

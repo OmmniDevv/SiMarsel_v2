@@ -13,8 +13,8 @@
 @endphp
 
 <section class="{{ $card }} min-w-0 p-4" aria-labelledby="promo-analysis-title">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div class="min-w-0">
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div class="min-w-0 flex-1">
             <h2 id="promo-analysis-title" class="sr-only">Filter Analisis</h2>
             <p class="sr-only">Data yang ditampilkan</p>
             <dl class="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm" aria-live="polite">
@@ -26,10 +26,13 @@
                 </template>
             </dl>
         </div>
-        <button type="button" x-ref="filterToggle" class="{{ $button }} shrink-0 border border-line bg-white text-ink hover:bg-soft" aria-controls="promo-analysis-controls" :aria-expanded="filtersOpen.toString()" @click="filtersOpen = !filtersOpen">
-            <x-icon name="chevron-down" class="size-4" ::class="filtersOpen && 'rotate-180'" />
-            Ubah filter
-        </button>
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-start lg:shrink-0">
+            <button type="button" x-ref="filterToggle" class="{{ $button }} shrink-0 border border-line bg-white text-ink hover:bg-soft" aria-controls="promo-analysis-controls" :aria-expanded="filtersOpen.toString()" @click="filtersOpen = !filtersOpen">
+                <x-icon name="chevron-down" class="size-4" ::class="filtersOpen && 'rotate-180'" />
+                Ubah filter
+            </button>
+            @include('pages.promo.components.promo-analysis-actions')
+        </div>
     </div>
 
     <p x-show="optionsError" x-cloak class="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700" role="alert">

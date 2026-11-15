@@ -4,7 +4,7 @@ import vm from 'node:vm';
 const source = (path) => readFile(new URL(`../../../resources/js/${path}`, import.meta.url), 'utf8');
 
 /**
- * The real analysis-copy.js (with export.js and http.js) in a test's vm context, for components that answer Copy.
+ * The real analysis-copy.js (with export.js and http.js) in a test's vm context, for the code-usage detail clipboard action.
  */
 export async function analysisCopyModule(context) {
     // http.js reads the CSRF meta tag when it loads.

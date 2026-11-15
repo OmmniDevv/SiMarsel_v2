@@ -12,9 +12,8 @@
 @endphp
 
 <section
-    x-data="promoAnalysisSummary(@js($metrics))"
+    x-data="promoAnalysisSummary"
     @promo-analysis-filter.window="load($event.detail)"
-    @promo-analysis-copy.window="provideCopy($event.detail)"
     class="{{ $card }} min-w-0 p-5"
     aria-labelledby="promo-summary-title"
 >

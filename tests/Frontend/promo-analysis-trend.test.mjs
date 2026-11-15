@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import vm from 'node:vm';
-import { analysisCopyModule } from './support/analysis-copy-module.mjs';
 
 // Arrays built inside the vm context have another Array prototype; compare them as plain data.
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -58,11 +57,9 @@ async function trendModule(fetchAnalysisTrend, charts = []) {
         './api': { fetchAnalysisTrend },
     };
     const module = new vm.SourceTextModule(await source('pages/promo/analysis-trend.js'), { context });
-    const copy = await analysisCopyModule(context);
     await module.link((specifier) => {
         if (specifier === './chart') return chart;
         if (specifier === '../../format') return format;
-        if (specifier === './analysis-copy') return copy;
         return syntheticModule(mocks[specifier], context);
     });
     await module.evaluate();
@@ -186,6 +183,10 @@ test('a date range over 366 days only allows the monthly bucket', async () => {
     assert.equal(component.isPeriodDisabled('weekly'), true);
     assert.equal(component.isPeriodDisabled('monthly'), false);
     assert.equal(component.activePeriod, 'monthly');
+    const exportParams = new URLSearchParams('date_from=2025-01-01&date_to=2026-01-02');
+    component.provideExportParams({ params: exportParams });
+    assert.equal(exportParams.get('period'), 'monthly');
+    assert.equal(exportParams.get('date_from'), '2025-01-01');
 
     await component.setPeriod('daily');
     await component.load('date_from=2025-01-01&date_to=2025-12-31');

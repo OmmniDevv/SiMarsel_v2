@@ -105,7 +105,7 @@ class PromoPageTest extends TestCase
     {
         $this->actingAs($this->employee)
             ->get(route('promo.index'))
-            ->assertSee('x-data="promoAnalysisSummary(', false)
+            ->assertSee('x-data="promoAnalysisSummary', false)
             ->assertSee('@promo-analysis-filter.window="load($event.detail)"', false)
             ->assertSeeInOrder([
                 'Revenue Promo',
@@ -125,7 +125,7 @@ class PromoPageTest extends TestCase
             ->get(route('promo.index'))
             ->assertSeeInOrder([
                 'x-data="promoAnalysis"',
-                'x-data="promoAnalysisSummary(',
+                'x-data="promoAnalysisSummary',
                 'x-data="promoAnalysisTrend"',
                 'x-data="promoAnalysisTopCodes"',
                 'x-data="promoAnalysisFunnel"',
@@ -150,7 +150,7 @@ class PromoPageTest extends TestCase
             ->get(route('promo.index'))
             ->assertSeeInOrder([
                 'x-data="promoAnalysis"',
-                'x-data="promoAnalysisSummary(',
+                'x-data="promoAnalysisSummary',
                 'x-data="promoAnalysisFunnel"',
                 'Daftar Kode Promo',
             ], false)
@@ -191,30 +191,47 @@ class PromoPageTest extends TestCase
             ->assertSee('Memuat rekap tipe produk');
     }
 
-    public function test_promo_analysis_offers_export_excel_and_copy_for_every_component(): void
+    public function test_active_filter_row_offers_export_beside_filter_toggle_and_preserves_detail_copy(): void
     {
         $this->actingAs($this->employee)
             ->get(route('promo.index'))
             ->assertSeeInOrder([
                 'x-data="promoAnalysis"',
-                'id="promo-analysis-search"',
+                'id="promo-analysis-title"',
+                'item in activeFilters',
+                'Ubah filter',
                 'x-data="promoAnalysisActions"',
-                'Komponen yang Disalin',
-                'Salin',
                 'Ekspor Excel',
-                'Ekspor berisi seluruh analisis sesuai filter aktif.',
+                'id="promo-analysis-search"',
+                'id="promo-summary-title"',
             ], false)
+            ->assertDontSee('promo-analysis-copy-target', false)
+            ->assertDontSee('Komponen yang Disalin')
+            ->assertDontSee('<h2 class="text-lg font-semibold text-ink">Analisis Promo</h2>', false)
             ->assertSee('@promo-analysis-filter.window="clearStatus()"', false)
             ->assertSeeInOrder(['x-data="promoAnalysisCodeUsage"', 'x-ref="codeUsageClose"', '@click="copy()"', 'x-text="copyError"'], false);
     }
 
-    public function test_every_analysis_component_answers_copy_and_the_export_gets_trend_period_and_code_sort(): void
+    public function test_export_keeps_chart_and_table_settings_without_obsolete_copy_listeners(): void
     {
         $response = $this->actingAs($this->employee)->get(route('promo.index'));
 
-        $this->assertSame(7, substr_count($response->getContent(), '@promo-analysis-copy.window="provideCopy($event.detail)"'));
+        $response->assertDontSee('@promo-analysis-copy', false);
         $this->assertSame(2, substr_count($response->getContent(), '@promo-analysis-export-params.window="provideExportParams($event.detail)"'));
-        $response->assertSee('x-data="promoAnalysisSummary(', false);
+        $response->assertSee('x-data="promoAnalysisSummary', false);
+    }
+
+    public function test_summary_is_followed_directly_by_the_trend_and_top_codes_remains_a_detail_tab(): void
+    {
+        $response = $this->actingAs($this->employee)->get(route('promo.index'));
+        $between = str($response->getContent())->between('id="promo-summary-title"', 'x-data="promoAnalysisTrend"');
+
+        $this->assertStringNotContainsString('promoAnalysisActions', $between);
+        $this->assertStringNotContainsString('copyTarget', $between);
+        $response->assertSee('id="tab-promo-breakdown-top-codes"', false)
+            ->assertSee('aria-controls="panel-promo-breakdown-top-codes"', false)
+            ->assertSee('Top 5 Kode Promo')
+            ->assertSee('x-data="promoAnalysisTopCodes"', false);
     }
 
     public function test_promo_code_summary_follows_the_shared_filter_and_opens_a_read_only_usage_detail(): void

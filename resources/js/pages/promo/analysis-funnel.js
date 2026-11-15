@@ -1,5 +1,4 @@
 import { errorMessage, validationErrors } from '../../http';
-import { FUNNEL_COLUMNS, copySnapshot } from './analysis-copy';
 import { formatValue } from '../../format';
 import { fetchAnalysisFunnels } from './api';
 
@@ -72,10 +71,6 @@ export default function promoAnalysisFunnel() {
 
         retry() {
             return this.load(this.query);
-        },
-
-        provideCopy(detail) {
-            if (detail.target === 'funnel') detail.snapshot = copySnapshot(this, FUNNEL_COLUMNS, this.rows);
         },
     };
 }

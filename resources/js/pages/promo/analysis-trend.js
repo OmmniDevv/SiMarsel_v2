@@ -3,7 +3,6 @@ import { formatValue } from '../../format';
 import { errorMessage, validationErrors } from '../../http';
 import { fetchAnalysisTrend } from './api';
 import { renderChart, trendChartConfig, trendSeries } from './chart';
-import { copySnapshot, trendColumns } from './analysis-copy';
 
 // The backend limits daily and weekly buckets to this many days.
 const MAX_SHORT_PERIOD_DAYS = 366;
@@ -103,10 +102,6 @@ export default function promoAnalysisTrend() {
 
         retry() {
             return this.fetch();
-        },
-
-        provideCopy(detail) {
-            if (detail.target === 'trend') detail.snapshot = copySnapshot(this, trendColumns(trendSeries(this.result?.datasets ?? [])), this.result?.rows ?? []);
         },
 
         provideExportParams({ params }) {

@@ -162,3 +162,15 @@ test('the old Kode Promo link still opens Kelola Kode, and subtabs leave the URL
     assert.equal(subtabs.tab, 'platform');
     assert.equal(replaced.length, 0);
 });
+
+test('Top 5 remains selectable in the breakdown tabs and can be reopened by its report link', async () => {
+    const { promoTabs, replaced } = await tabsFixture('?tab=analysis&breakdown=funnel');
+    const keys = ['top-codes', 'funnel', 'source', 'product-type', 'codes'];
+    const tabs = promoTabs('promo-breakdown', keys, 'breakdown');
+    assert.equal(tabs.tab, 'funnel');
+    tabs.select('top-codes');
+    assert.equal(tabs.tab, 'top-codes');
+    assert.equal(new URL(replaced.at(-1)).searchParams.get('breakdown'), 'top-codes');
+    const reopened = await tabsFixture('?tab=analysis&breakdown=top-codes');
+    assert.equal(reopened.promoTabs('promo-breakdown', keys, 'breakdown').tab, 'top-codes');
+});
