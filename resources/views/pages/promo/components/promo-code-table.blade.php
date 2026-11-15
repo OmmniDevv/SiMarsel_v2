@@ -4,15 +4,16 @@
 @endphp
 
 <div class="mt-4 overflow-hidden rounded-lg border border-line">
-    <div class="overflow-x-auto">
+    <div class="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" tabindex="0" role="region" aria-label="Daftar kode promo terdaftar">
         <table class="w-full min-w-[720px] text-left text-sm" :aria-busy="loading">
+            <caption class="sr-only">Kode promo terdaftar beserta platform, klasifikasi, dan penggunaan</caption>
             <thead class="bg-soft text-xs font-semibold text-label">
                 <tr>
                     <th scope="col" class="px-4 py-3">Kode Promo</th>
                     <th scope="col" class="px-4 py-3">Platform</th>
                     <th scope="col" class="px-4 py-3">Funnel</th>
                     <th scope="col" class="px-4 py-3">Source</th>
-                    <th scope="col" class="px-4 py-3">Penggunaan</th>
+                    <th scope="col" class="px-4 py-3 text-right">Penggunaan</th>
                     <th scope="col" class="px-4 py-3 text-right">Aksi</th>
                 </tr>
             </thead>
@@ -32,53 +33,12 @@
                             <span x-show="item.source" class="text-ink" x-text="item.source?.name"></span>
                             <span x-show="!item.source" class="{{ $notSet }}" title="Source belum diisi">Belum Diisi</span>
                         </td>
-                        <td class="px-4 py-3">
+                        <td class="px-4 py-3 text-right tabular-nums">
                             <span x-show="item.usages_count" class="text-muted" x-text="item.usages_count + ' transaksi'"></span>
                             <span x-show="!item.usages_count" class="{{ $notSet }}">Belum Dipakai</span>
                         </td>
                         <td class="px-4 py-3 text-right whitespace-nowrap">
-                            <div class="inline-flex items-center gap-1">
-                                <button
-                                    type="button"
-                                    class="inline-flex h-9 items-center rounded-md px-3 font-semibold text-primary hover:bg-primary-soft hover:text-primary-hover focus-visible:outline-2 focus-visible:outline-primary"
-                                    :aria-label="'Ubah ' + item.code"
-                                    @click="openEdit(item)"
-                                >Ubah</button>
-
-                                {{-- Hapus sits in "more actions"; the delete modal still enforces the existing rules. --}}
-                                <div x-data="promoRowMenu" @keydown.escape.prevent="close(true)" @click.outside="close()" @scroll.window="close()" @resize.window="close()">
-                                    <button
-                                        type="button"
-                                        x-ref="trigger"
-                                        class="inline-flex size-9 items-center justify-center rounded-md text-muted hover:bg-soft hover:text-ink focus-visible:outline-2 focus-visible:outline-primary"
-                                        aria-haspopup="menu"
-                                        :aria-expanded="open.toString()"
-                                        :aria-label="'Tindakan lainnya untuk ' + item.code"
-                                        @click="toggle()"
-                                    >
-                                        <x-icon name="more" class="size-5" />
-                                    </button>
-
-                                    <div
-                                        x-ref="menu"
-                                        x-show="open"
-                                        x-cloak
-                                        class="fixed z-40 min-w-40 rounded-lg border border-line bg-white p-1 text-left shadow-lg"
-                                        :style="position"
-                                        role="menu"
-                                        :aria-label="'Tindakan untuk ' + item.code"
-                                        @keydown.tab="close()"
-                                    >
-                                        <button
-                                            type="button"
-                                            role="menuitem"
-                                            class="flex h-10 w-full items-center rounded-md px-3 text-sm font-semibold text-red-700 hover:bg-red-50 focus-visible:bg-red-50 focus-visible:outline-2 focus-visible:outline-red-600"
-                                            :aria-label="'Hapus ' + item.code"
-                                            @click="close(); openDelete(item)"
-                                        >Hapus</button>
-                                    </div>
-                                </div>
-                            </div>
+                            @include('pages.promo.components.row-actions', ['identifier' => 'item.code'])
                         </td>
                     </tr>
                 </template>
@@ -113,13 +73,13 @@
     </div>
 </div>
 
-<nav x-show="meta && meta.last_page > 1" x-cloak class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" aria-label="Navigasi halaman kode promo">
+<nav x-show="meta" x-cloak class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" aria-label="Navigasi halaman kode promo">
     <p class="text-xs text-muted">
         Menampilkan <span class="font-semibold text-ink" x-text="meta?.from ?? 0"></span>–<span class="font-semibold text-ink" x-text="meta?.to ?? 0"></span>
         dari <span x-text="meta?.total ?? 0"></span> kode promo
     </p>
 
-    <div class="flex items-center gap-2">
+    <div class="flex flex-wrap items-center gap-2">
         <button type="button" class="{{ $pageButton }}" :disabled="loading || filter.page <= 1" @click="goToPage(filter.page - 1)">
             <x-icon name="chevron-left" class="size-3.5" />
             Sebelumnya

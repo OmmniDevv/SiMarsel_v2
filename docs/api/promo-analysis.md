@@ -640,7 +640,9 @@ Respons JSON dengan `message` yang bisa langsung ditampilkan:
 
 ### Tombol Salin
 
-Tombol **Salin** menyalin data komponen yang sedang dipilih dari respons endpoint komponen itu, dengan filter yang sama. Prosesnya sepenuhnya di frontend, tanpa endpoint khusus, dan status berhasil/gagal ditampilkan di frontend.
+**Ekspor Excel** berada di baris ringkasan filter aktif, di sebelah **Ubah filter**; ekspor mengikuti filter yang sudah diterapkan, periode grafik, dan urutan rekap. Perubahan pada form filter tidak memengaruhi ekspor sebelum diterapkan. Pemilih bagian dan tombol Salin di toolbar dihapus agar tidak disalahartikan sebagai pengatur grafik. Tab **Top 5 Kode Promo** tetap tersedia di Rincian Performa.
+
+Tombol **Salin** tetap tersedia di dialog **Detail Penggunaan Kode Promo** untuk menyalin seluruh transaksi kode tersebut sesuai filter saat detail dibuka. Prosesnya di frontend, tanpa endpoint khusus, dan status berhasil/gagal ditampilkan di dialog.
 
 ## 422 Validasi gagal
 

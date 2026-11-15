@@ -1,4 +1,4 @@
-{{-- Analisis tab: filter → summary → trend → breakdown. Every component stays mounted, so all of them follow the applied filter and answer Salin. --}}
+{{-- Analisis tab: active filter and actions → summary → trend → breakdown. Panels retain the applied filter. --}}
 @php
     $breakdownTabs = [
         'top-codes' => 'Top 5 Kode Promo',
@@ -22,7 +22,7 @@
     @include('pages.promo.components.promo-analysis-trend')
 
     <section
-        x-data="promoTabs('promo-breakdown', @js(array_keys($breakdownTabs)))"
+        x-data="promoTabs('promo-breakdown', @js(array_keys($breakdownTabs)), 'breakdown')"
         class="{{ $card }} min-w-0 p-5"
         aria-labelledby="promo-breakdown-title"
     >
@@ -40,7 +40,7 @@
                 tabindex="0"
                 x-show="tab === @js($key)"
                 @if (! $loop->first) x-cloak @endif
-                class="mt-5 min-w-0 focus-visible:outline-none"
+                class="mt-5 min-w-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
             >
                 @include('pages.promo.components.'.$view)
             </div>

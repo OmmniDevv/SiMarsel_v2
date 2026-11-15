@@ -1,5 +1,6 @@
 {{-- Shown before saving an edit that changes Funnel and/or Source. Cancel sends nothing; Continue sends the edit. --}}
 <div
+    x-dialog="confirming"
     x-show="confirming"
     x-cloak
     class="fixed inset-0 z-[60] flex items-center justify-center p-4"
@@ -8,7 +9,6 @@
     aria-labelledby="promo-code-confirm-title"
     aria-describedby="promo-code-confirm-desc"
     @keydown.escape.window="confirming && cancelConfirm()"
-    x-init="$watch('confirming', (value) => value && $nextTick(() => $refs.confirmCancel.focus()))"
 >
     <div x-show="confirming" x-transition.opacity class="absolute inset-0 bg-slate-900/50" @click="cancelConfirm()"></div>
 
@@ -43,8 +43,8 @@
         </dl>
 
         <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button type="button" x-ref="confirmCancel" class="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-line bg-white px-3 text-sm font-semibold text-ink hover:bg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" @click="cancelConfirm()">Batal</button>
-            <button type="button" class="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" @click="save()">Lanjutkan</button>
+            <button type="button" x-ref="confirmCancel" data-dialog-initial class="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-line bg-white px-3 text-sm font-semibold text-ink hover:bg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" @click="cancelConfirm()">Batal</button>
+            <button type="button" class="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" @click="save()">Lanjutkan</button>
         </div>
     </div>
 </div>

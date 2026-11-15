@@ -8,20 +8,40 @@
     $checkbox = 'size-4 rounded border-line accent-primary';
     $error = 'mt-1.5 text-xs break-words text-red-600';
     $button = 'inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:w-auto';
-    $platformSelect = ['field' => 'platforms', 'label' => 'Platform / Source App', 'options' => 'platformOptions', 'summary' => 'platformSummary', 'empty' => 'Belum ada platform.'];
+    $platformSelect = ['field' => 'platforms', 'label' => 'Platform', 'options' => 'platformOptions', 'summary' => 'platformSummary', 'empty' => 'Belum ada platform.'];
     $paymentSelect = ['field' => 'payment_methods', 'label' => 'Metode Pembayaran', 'options' => 'paymentMethodOptions', 'summary' => 'paymentMethodSummary', 'empty' => 'Belum ada metode pembayaran.'];
 @endphp
 
-<section class="{{ $card }} min-w-0 p-5" aria-labelledby="promo-analysis-title">
-    <h2 id="promo-analysis-title" class="text-base font-semibold text-ink">Filter Analisis</h2>
-    <p class="mt-1 text-sm text-muted">Bandingkan transaksi dan revenue dengan promo dan tanpa promo berdasarkan tanggal bayar Markaz.</p>
+<section class="{{ $card }} min-w-0 p-4" aria-labelledby="promo-analysis-title">
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div class="min-w-0 flex-1">
+            <h2 id="promo-analysis-title" class="sr-only">Filter Analisis</h2>
+            <p class="sr-only">Data yang ditampilkan</p>
+            <dl class="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm" aria-live="polite">
+                <template x-for="item in activeFilters" :key="item.label">
+                    <div class="flex min-w-0 flex-wrap gap-x-1.5">
+                        <dt class="text-muted" x-text="item.label + ':'"></dt>
+                        <dd class="font-semibold break-words text-ink" x-text="item.value"></dd>
+                    </div>
+                </template>
+            </dl>
+        </div>
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-start lg:shrink-0">
+            <button type="button" x-ref="filterToggle" class="{{ $button }} shrink-0 border border-line bg-white text-ink hover:bg-soft" aria-controls="promo-analysis-controls" :aria-expanded="filtersOpen.toString()" @click="filtersOpen = !filtersOpen">
+                <x-icon name="chevron-down" class="size-4" ::class="filtersOpen && 'rotate-180'" />
+                Ubah filter
+            </button>
+            @include('pages.promo.components.promo-analysis-actions')
+        </div>
+    </div>
 
     <p x-show="optionsError" x-cloak class="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700" role="alert">
         <span x-text="optionsError"></span>
         <button type="button" class="font-semibold underline hover:no-underline" @click="loadOptions()">Coba Lagi</button>
     </p>
 
-    <form class="mt-4" novalidate @submit.prevent="apply()">
+    <form id="promo-analysis-controls" x-show="filtersOpen" x-cloak class="mt-4 border-t border-line pt-4" novalidate @submit.prevent="apply()">
+        <p class="mb-4 text-sm text-muted">Bandingkan transaksi dan revenue dengan promo dan tanpa promo berdasarkan tanggal bayar Markaz.</p>
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {{-- Only one period mode may be active; the API answers 422 otherwise --}}
             <div>
@@ -153,17 +173,4 @@
         </div>
     </form>
 
-    <div class="mt-5 border-t border-line pt-4">
-        <p class="text-xs font-semibold text-label">Data yang ditampilkan</p>
-        <dl class="mt-2 flex flex-wrap gap-2 text-xs" aria-live="polite">
-            <template x-for="item in activeFilters" :key="item.label">
-                <div class="inline-flex max-w-full items-center gap-1 rounded-md bg-soft px-2 py-1">
-                    <dt class="text-muted" x-text="item.label + ':'"></dt>
-                    <dd class="font-semibold break-all text-ink" x-text="item.value"></dd>
-                </div>
-            </template>
-        </dl>
-
-        @include('pages.promo.components.promo-analysis-actions')
-    </div>
 </section>

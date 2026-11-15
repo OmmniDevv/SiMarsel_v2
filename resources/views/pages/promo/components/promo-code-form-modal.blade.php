@@ -1,13 +1,14 @@
 {{-- Single Entry and edit share one form. There is no code type, active status, or effective date input by design. --}}
 @php
     $labelClass = 'mb-1.5 block text-xs font-semibold text-label';
-    $inputClass = 'h-9 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink placeholder:text-label focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none disabled:cursor-not-allowed disabled:bg-soft disabled:text-muted';
+    $inputClass = 'h-11 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink placeholder:text-label focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none disabled:cursor-not-allowed disabled:bg-soft disabled:text-muted';
     $errorClass = 'mt-1.5 text-xs text-red-600';
     $helperClass = 'mt-1.5 text-xs text-muted';
     $required = '<span class="text-red-500" aria-hidden="true">*</span>';
 @endphp
 
 <div
+    x-dialog="modal === 'form'"
     x-show="modal === 'form'"
     x-cloak
     class="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -15,7 +16,6 @@
     aria-modal="true"
     aria-labelledby="promo-code-form-title"
     @keydown.escape.window="modal === 'form' && !confirming && closeModal()"
-    x-init="$watch('modal', (value) => value === 'form' && $nextTick(() => (isLocked ? $refs.funnelSelect : $refs.codeInput).focus()))"
 >
     <div x-show="modal === 'form'" x-transition.opacity class="absolute inset-0 bg-slate-900/50" @click="!confirming && closeModal()"></div>
 
@@ -26,11 +26,6 @@
     >
         <h2 id="promo-code-form-title" class="text-base font-semibold text-ink" x-text="editing ? 'Ubah Kode Promo' : (registering ? 'Daftarkan Kode Promo' : 'Tambah Kode Promo')">Tambah Kode Promo</h2>
         <p x-show="!editing" class="mt-1 text-sm text-muted">Daftarkan satu kode promo beserta platform, funnel, dan source-nya.</p>
-        <p x-show="registering" class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            Kode ini ditemukan di <span class="font-semibold" x-text="registering?.usages_count + ' penggunaan'"></span> transaksi Markaz.
-            Setelah didaftarkan, penggunaan historis yang sebelumnya belum terpetakan akan dihubungkan dan dilengkapi dengan funnel/source yang dipilih.
-            Hanya penggunaan yang belum terhubung ke kode promo yang diproses; penggunaan yang sudah terhubung tidak diproses ulang meskipun funnel/source-nya kosong. Klasifikasi Funnel/Source yang sudah ada tidak akan ditimpa.
-        </p>
         <p x-show="editing" class="mt-1 text-sm text-muted">Perubahan disimpan sebagai versi baru yang berlaku sejak disimpan.</p>
 
         <p x-show="optionsError" class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700" role="alert">
@@ -131,9 +126,15 @@
 
             <p x-show="formError" x-text="formError" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700" role="alert"></p>
 
+            <p id="promo-registration-impact" x-show="registering" class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Kode ini ditemukan di <span class="font-semibold" x-text="registering?.usages_count + ' penggunaan'"></span> transaksi Markaz.
+                Setelah didaftarkan, penggunaan historis yang sebelumnya belum terpetakan akan dihubungkan dan dilengkapi dengan funnel/source yang dipilih.
+                Hanya penggunaan yang belum terhubung ke kode promo yang diproses; penggunaan yang sudah terhubung tidak diproses ulang meskipun funnel/source-nya kosong. Klasifikasi Funnel/Source yang sudah ada tidak akan ditimpa.
+            </p>
+
             <div class="flex flex-col-reverse gap-2 border-t border-line pt-4 sm:flex-row sm:justify-end">
-                <button type="button" class="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-line bg-white px-3 text-sm font-semibold text-ink hover:bg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50" :disabled="saving" @click="closeModal()">Batal</button>
-                <button type="submit" :disabled="saving || (optionsLoading && !options.platforms.length)" class="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="button" class="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-line bg-white px-3 text-sm font-semibold text-ink hover:bg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50" :disabled="saving" @click="closeModal()">Batal</button>
+                <button type="submit" :aria-describedby="registering ? 'promo-registration-impact' : null" :disabled="saving || (optionsLoading && !options.platforms.length)" class="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">
                     <span x-text="saving ? 'Menyimpan…' : (editing ? 'Simpan Perubahan' : 'Simpan Kode Promo')">Simpan Kode Promo</span>
                 </button>
             </div>

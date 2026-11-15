@@ -140,8 +140,8 @@ export function filterErrorField(field) {
  * Button text for a multi-select: "All …", up to two names, or a count.
  */
 export function selectionSummary(options, selected, allLabel, countLabel) {
-    const names = options.filter(({ value }) => selected.includes(value)).map(({ label }) => label);
-    if (names.length === 0) return allLabel;
+    if (selected.length === 0) return allLabel;
+    const names = selected.map((value) => options.find((option) => option.value === value)?.label ?? value);
 
     return names.length <= 2 ? names.join(', ') : `${names.length} ${countLabel}`;
 }
@@ -151,6 +151,27 @@ export function selectionSummary(options, selected, allLabel, countLabel) {
  */
 export function cloneFilter(filter) {
     return { ...filter, platforms: [...filter.platforms], payment_methods: [...filter.payment_methods] };
+}
+
+export function filterFromUrl(search, now = new Date()) {
+    const params = new URLSearchParams(search);
+    const filter = defaultFilter(now);
+    for (const field of ['mode', 'year', 'month', 'date_from', 'date_to', 'search']) {
+        if (params.has(`pa_${field}`)) filter[field] = params.get(`pa_${field}`);
+    }
+    if (!PERIOD_MODES.some(({ value }) => value === filter.mode)) filter.mode = 'month';
+    for (const field of ['platforms', 'payment_methods']) filter[field] = params.getAll(`pa_${field}[]`);
+    return filter;
+}
+
+export function reportUrl(href, filter) {
+    const url = new URL(href);
+    [...url.searchParams.keys()].filter((key) => key.startsWith('pa_')).forEach((key) => url.searchParams.delete(key));
+    for (const field of ['mode', 'year', 'month', 'date_from', 'date_to', 'search']) {
+        if (filter[field]) url.searchParams.set(`pa_${field}`, filter[field]);
+    }
+    for (const field of ['platforms', 'payment_methods']) filter[field].forEach((value) => url.searchParams.append(`pa_${field}[]`, value));
+    return url;
 }
 
 function formatDate(value) {

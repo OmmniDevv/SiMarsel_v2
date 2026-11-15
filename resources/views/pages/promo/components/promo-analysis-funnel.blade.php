@@ -2,7 +2,6 @@
 <section
     x-data="promoAnalysisFunnel"
     @promo-analysis-filter.window="load($event.detail)"
-    @promo-analysis-copy.window="provideCopy($event.detail)"
     class="min-w-0"
     aria-labelledby="promo-funnel-title"
 >

@@ -76,3 +76,16 @@ test('a failed edit does not refresh the alert', async () => {
     assert.deepEqual(events, []);
     assert.equal(management.errors.code, 'Kode sudah terdaftar.');
 });
+
+
+test('ADMINRINA registration prefills the platform from the selected review item', async () => {
+    const { management } = await managementFixture();
+    for (const platformId of [4, 7]) {
+        const row = { code: 'ADMINRINA', platform: { id: platformId }, register: { code: 'ADMINRINA', platform_id: platformId } };
+        management.openRegister(row);
+        assert.equal(management.form.code, 'ADMINRINA');
+        assert.equal(management.form.platform_id, String(platformId));
+        assert.equal(management.registering, row);
+        assert.equal(management.changes().platform_id, platformId);
+    }
+});

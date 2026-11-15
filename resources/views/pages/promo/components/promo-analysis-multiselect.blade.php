@@ -8,7 +8,7 @@
         :class="errors.{{ $select['field'] }} && 'border-red-500'"
         :disabled="optionsLoading"
         aria-labelledby="promo-analysis-{{ $select['field'] }}-label promo-analysis-{{ $select['field'] }}-value"
-        aria-haspopup="listbox"
+        aria-controls="promo-analysis-{{ $select['field'] }}-options"
         :aria-expanded="open.toString()"
         :aria-invalid="Boolean(errors.{{ $select['field'] }}).toString()"
         aria-describedby="promo-analysis-{{ $select['field'] }}-error"
@@ -17,7 +17,7 @@
         <span id="promo-analysis-{{ $select['field'] }}-value" x-text="optionsLoading ? 'Memuat…' : {{ $select['summary'] }}"></span>
         <x-icon name="chevron-down" class="{{ $chevron }}" />
     </button>
-    <div x-show="open" x-cloak class="{{ $menu }}" role="listbox" aria-multiselectable="true" aria-labelledby="promo-analysis-{{ $select['field'] }}-label">
+    <div id="promo-analysis-{{ $select['field'] }}-options" x-show="open" x-cloak class="{{ $menu }}" role="group" aria-labelledby="promo-analysis-{{ $select['field'] }}-label">
         <template x-for="item in {{ $select['options'] }}" :key="item.value">
             <label class="{{ $option }}">
                 <input type="checkbox" class="{{ $checkbox }}" :checked="filter.{{ $select['field'] }}.includes(item.value)" @change="toggle(@js($select['field']), item.value)">
