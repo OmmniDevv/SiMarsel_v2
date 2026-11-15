@@ -33,6 +33,31 @@ class PageAccessTest extends TestCase
         ]);
     }
 
+    public function test_sidebar_preserves_menu_structure_and_has_a_mobile_dialog_lifecycle(): void
+    {
+        $this->actingAs($this->manager)->get('/dashboard')
+            ->assertOk()
+            ->assertSeeInOrder(['Analitik', 'Analisis Performa', 'Ringkasan', 'Produk', 'Pekerjaan', 'Tasklist', 'Penjualan &amp; Pemasaran', 'Manajemen Promo', 'Sistem', 'Keluar', 'Akun Aktif'], false)
+            ->assertSee('x-dialog="open && !desktop"', false)
+            ->assertSeeInOrder(['id="sidebar-dialog"', 'x-dialog="open && !desktop"', 'x-show="open"', 'id="sidebar"', '</aside>', '<main'], false)
+            ->assertSee(':inert="!desktop && !open"', false)
+            ->assertSee(':aria-hidden="!desktop && !open ? \'true\' : null"', false)
+            ->assertSee('@keydown.escape.stop="open = false"', false)
+            ->assertSee('aria-controls="sidebar-submenu-0-0"', false)
+            ->assertSee('id="sidebar-submenu-0-0"', false)
+            ->assertSee('aria-label="Analitik"', false);
+    }
+
+    public function test_direct_and_nested_active_sidebar_links_use_the_same_contrasted_treatment(): void
+    {
+        foreach (['/dashboard', '/promo'] as $url) {
+            $response = $this->actingAs($this->manager)->get($url)->assertOk();
+            $sidebar = str($response->getContent())->between('id="sidebar"', '</aside>');
+            $this->assertMatchesRegularExpression('/class="[^"<>]*bg-primary-hover text-white[^"<>]*"[^>]*aria-current="page"/s', (string) $sidebar);
+            $this->assertStringNotContainsString('before:w-[3px]', $sidebar);
+        }
+    }
+
     public function test_guest_is_redirected_to_login(): void
     {
         $this->get('/')->assertRedirect('/dashboard');

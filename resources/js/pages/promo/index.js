@@ -1,5 +1,4 @@
 import Alpine from 'alpinejs';
-import registerDialog from '../../components/dialog';
 import promoAnalysis from './analysis';
 import promoAnalysisActions from './analysis-actions';
 import promoAnalysisCode from './analysis-code';
@@ -18,7 +17,6 @@ import promoTabs from './tabs';
 import promoUnregisteredCodes from './unregistered';
 
 // "promo-codes" stays the key of Kelola Kode, so links from the unregistered code alert (?tab=promo-codes&code=…) keep working.
-registerDialog(Alpine);
 Alpine.data('promoManagement', () => promoTabs('promo', ['analysis', 'promo-codes', 'master-data'], 'tab'));
 Alpine.data('promoTabs', promoTabs);
 Alpine.data('promoRowMenu', promoRowMenu);

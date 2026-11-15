@@ -3,16 +3,25 @@
 @section('body_class', 'min-h-screen bg-canvas text-ink antialiased')
 
 @section('content')
-    <div x-data="sidebar" @keydown.escape.window="open = false" class="relative min-h-screen">
-        <div x-show="open" x-cloak x-transition.opacity class="fixed inset-0 z-40 bg-slate-900/50 lg:hidden" @click="open = false"></div>
-
-        <x-sidebar />
+    <div x-data="sidebar" class="relative min-h-screen">
+        <div
+            id="sidebar-dialog"
+            x-dialog="open && !desktop"
+            :role="desktop ? null : 'dialog'"
+            :aria-modal="open && !desktop ? 'true' : null"
+            aria-label="Menu Utama"
+            @keydown.escape.stop="open = false"
+            class="relative z-50 lg:z-auto"
+        >
+            <div x-show="open" x-cloak x-transition.opacity class="fixed inset-0 z-40 bg-slate-900/50 lg:hidden" @click="open = false"></div>
+            <x-sidebar />
+        </div>
 
         <div class="relative flex min-h-screen min-w-0 flex-col lg:ml-64">
             {{-- Header mobile --}}
             <header class="sticky top-0 z-30 flex items-center justify-between border-b border-navy-line bg-navy px-4 py-2.5 text-white lg:hidden">
                 <div class="flex items-center gap-3">
-                    <button type="button" class="inline-grid size-9 place-items-center rounded-lg hover:bg-white/10" aria-label="Buka Menu" aria-controls="sidebar" :aria-expanded="open" @click="open = true">
+                    <button type="button" class="inline-grid size-11 place-items-center rounded-lg hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" aria-label="Buka Menu" aria-controls="sidebar" :aria-expanded="open" @click="open = true">
                         <x-icon name="menu" class="size-5" />
                     </button>
                     <span class="text-base font-bold tracking-tight">SiMarsel</span>
