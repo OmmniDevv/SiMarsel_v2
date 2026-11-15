@@ -1,0 +1,415 @@
+import Alpine from 'alpinejs';
+import { BarController, BarElement, CategoryScale, Chart, LinearScale, Tooltip } from 'chart.js';
+import { exportCsv, exportExcel } from '../../export';
+import { errorMessage } from '../../http';
+import {
+    fetchPackagePerformance,
+    fetchProductFilters,
+    fetchTopPackagesByRevenue,
+    fetchTopPackagesByVolume,
+} from '../../services/products';
+
+Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip);
+
+const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+const rupiahFormat = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
+const numberFormat = new Intl.NumberFormat('id-ID');
+
+const rupiah = (value) => rupiahFormat.format(value ?? 0);
+const number = (value) => numberFormat.format(value ?? 0);
+
+// 1500000000 → "1.500 Juta"
+const millions = (value) => `${(value / 1_000_000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} Juta`;
+
+const truncate = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+
+const activePeriod = (item) => item.active_period ?? '-';
+
+// Warna batang mengikuti masa aktif paket (bukan peringkat), dipakai bersama oleh kedua diagram
+// agar satu masa aktif selalu berwarna sama walaupun filter berubah. Tiga slot pertama lolos
+// validator palet (aman buta warna); masa aktif lain mendapat slot berikutnya sesuai urutan kemunculan.
+const PERIOD_PALETTE = [
+    { bar: '#2a78d6', hover: '#1f62b8' },
+    { bar: '#eb6834', hover: '#c9531f' },
+    { bar: '#1baf7a', hover: '#158f63' },
+    { bar: '#eda100', hover: '#c78700' },
+    { bar: '#e87ba4', hover: '#d15a87' },
+    { bar: '#008300', hover: '#006a00' },
+    { bar: '#6250d6', hover: '#4c3bbd' },
+    { bar: '#e34948', hover: '#c73433' },
+];
+const NO_PERIOD = { label: 'Tanpa masa aktif', bar: '#9aa3ae', hover: '#7f8996' };
+
+const periodColors = new Map(['6 Bulan', '1 Tahun', '2 Tahun'].map((period, index) => [period, PERIOD_PALETTE[index]]));
+
+const periodColor = (period) => {
+    if (!period) return NO_PERIOD;
+
+    if (!periodColors.has(period)) periodColors.set(period, PERIOD_PALETTE[periodColors.size] ?? NO_PERIOD);
+
+    return periodColors.get(period);
+};
+
+// Legenda: hanya masa aktif yang ada pada data, urut sesuai slot warnanya.
+const periodLegend = (items) => {
+    const present = new Set(items.map((item) => item.active_period ?? null));
+    present.forEach(periodColor);
+
+    const periods = [...periodColors.keys()].filter((period) => present.has(period));
+    if (present.has(null)) periods.push(null);
+
+    return periods.map((period) => ({ label: period ?? NO_PERIOD.label, color: periodColor(period).bar }));
+};
+
+// Pecah teks per kata menjadi beberapa baris; kata atau baris terakhir yang terlalu panjang dipotong.
+const wrap = (text, width, maxLines) => {
+    const lines = [];
+
+    for (const word of text.split(' ')) {
+        const last = lines.at(-1);
+
+        if (last !== undefined && `${last} ${word}`.length <= width) lines[lines.length - 1] = `${last} ${word}`;
+        else lines.push(word);
+    }
+
+    const kept = lines.length <= maxLines ? lines : [...lines.slice(0, maxLines - 1), lines.slice(maxLines - 1).join(' ')];
+
+    return kept.map((line) => truncate(line, width));
+};
+
+// Perkiraan lebar satu karakter label sumbu (12px, tebal), untuk menghitung muatan per batang.
+const LABEL_CHAR_PX = 7.2;
+// Di bawah lebar ini per batang, label pasti bertumpuk: tampilkan nomor peringkat saja.
+// Cukup untuk masa aktif terpanjang yang umum, mis. "(6 Bulan)", tanpa dipotong.
+const MIN_LABEL_SLOT_PX = 72;
+
+// Label sumbu: nama paket (maks. 3 baris, selebar slot batang) lalu masa aktif utuh di baris terakhir.
+const packageLines = (item, slotWidth) => {
+    const width = Math.floor((slotWidth - 12) / LABEL_CHAR_PX);
+
+    return [...wrap(item.name, width, 3), ...(item.active_period ? [`(${item.active_period})`] : [])];
+};
+
+const currentYear = new Date().getFullYear();
+
+/**
+ * Induk halaman Product Overview: menyimpan filter yang dipakai bersama oleh semua kartu.
+ */
+Alpine.data('productOverview', () => ({
+    months: MONTHS,
+    platforms: [],
+    // Dipakai sampai daftar tahun dari API tersedia.
+    years: [currentYear, currentYear - 1, currentYear - 2],
+    optionsError: '',
+
+    filters: {
+        platform: '',
+        year: currentYear,
+        month: '',
+    },
+
+    async init() {
+        try {
+            const { data } = await fetchProductFilters();
+            this.platforms = data.platforms;
+            this.years = data.years;
+
+            if (!this.years.includes(Number(this.filters.year))) this.filters.year = this.years[0];
+        } catch (error) {
+            if (!error?.unavailable) this.optionsError = errorMessage(error, 'Gagal memuat pilihan filter.');
+        }
+    },
+
+    get periodLabel() {
+        const platform = this.platforms.find((item) => item.slug === this.filters.platform)?.name ?? 'Semua Platform';
+        const period = this.filters.month ? `${MONTHS[this.filters.month - 1]} ${this.filters.year}` : `Tahun ${this.filters.year}`;
+
+        return `${platform} · ${period}`;
+    },
+
+    get hasActiveFilter() {
+        return this.filters.platform !== '' || this.filters.month !== '';
+    },
+
+    resetFilters() {
+        this.filters = { platform: '', year: this.years[0], month: '' };
+    },
+}));
+
+/**
+ * State bersama tiap kartu: memuat data sesuai filter induk dan memuat ulang saat filter berubah.
+ * status: 'ready' | 'empty' | 'error' | 'unavailable' (API backend belum tersedia).
+ */
+function remoteData(fetcher) {
+    let requestId = 0;
+
+    return {
+        items: [],
+        status: null,
+        loading: true,
+        error: '',
+
+        init() {
+            this.load();
+            this.$watch('filters', () => this.load());
+        },
+
+        async load() {
+            const current = ++requestId;
+            this.loading = true;
+            this.error = '';
+
+            try {
+                const { data } = await fetcher({ ...this.filters });
+                if (current !== requestId) return;
+
+                this.items = data;
+                this.status = data.length ? 'ready' : 'empty';
+                await this.$nextTick();
+                this.render?.();
+            } catch (error) {
+                if (current !== requestId) return;
+
+                this.items = [];
+                this.status = error?.unavailable ? 'unavailable' : 'error';
+                this.error = errorMessage(error, 'Gagal memuat data.');
+            } finally {
+                if (current === requestId) this.loading = false;
+            }
+        },
+    };
+}
+
+/**
+ * Kartu diagram batang. Instance Chart.js disimpan di luar state Alpine
+ * agar tidak dibungkus Proxy reaktif.
+ */
+function barChartCard(fetcher, { value, valueTick, valueTitle, tooltipLines }) {
+    let chart = null;
+
+    return {
+        ...remoteData(fetcher),
+
+        destroy() {
+            chart?.destroy();
+        },
+
+        get legend() {
+            return periodLegend(this.items);
+        },
+
+        render() {
+            if (!this.items.length) return;
+
+            const labels = this.items.map((item) => item.name);
+            const values = this.items.map(value);
+            const colors = this.items.map((item) => periodColor(item.active_period));
+            const backgroundColor = colors.map((color) => color.bar);
+            const hoverBackgroundColor = colors.map((color) => color.hover);
+
+            if (chart) {
+                chart.data.labels = labels;
+                Object.assign(chart.data.datasets[0], { data: values, backgroundColor, hoverBackgroundColor });
+                chart.update();
+                return;
+            }
+
+            const items = () => this.items;
+
+            Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+
+            chart = new Chart(this.$refs.canvas, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor,
+                        hoverBackgroundColor,
+                        borderRadius: 4,
+                        maxBarThickness: 64,
+                    }],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 400 },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: '#1e293b',
+                                font: { size: 12, weight: 600, lineHeight: 1.3 },
+                                padding: 8,
+                                autoSkip: false,
+                                maxRotation: 0,
+                                minRotation: 0,
+                                // Label mengikuti lebar slot tiap batang agar tidak saling menumpuk.
+                                callback(tick) {
+                                    const slotWidth = this.width / items().length;
+
+                                    return slotWidth < MIN_LABEL_SLOT_PX ? String(tick + 1) : packageLines(items()[tick], slotWidth);
+                                },
+                            },
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#e3e6ea' },
+                            border: { display: false },
+                            ticks: { color: '#6b7685', font: { size: 12 }, padding: 8, callback: valueTick, maxTicksLimit: 8, precision: 0 },
+                            title: { display: true, text: valueTitle, color: '#6b7685', font: { size: 12, weight: 600 }, padding: { bottom: 8 } },
+                        },
+                    },
+                    plugins: {
+                        // Legenda bawaan hanya punya satu entri per dataset; legenda masa aktif dirender di Blade.
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#0f2340',
+                            padding: 12,
+                            cornerRadius: 8,
+                            displayColors: false,
+                            titleFont: { size: 13, weight: 700 },
+                            bodyFont: { size: 12 },
+                            callbacks: {
+                                title: ([item]) => `${item.dataIndex + 1}. ${items()[item.dataIndex].name}`,
+                                label: (item) => tooltipLines(items()[item.dataIndex]),
+                            },
+                        },
+                    },
+                },
+            });
+        },
+    };
+}
+
+Alpine.data('topPackagesByRevenue', () =>
+    barChartCard(fetchTopPackagesByRevenue, {
+        value: (item) => item.revenue,
+        valueTick: millions,
+        valueTitle: 'Total Pendapatan',
+        tooltipLines: (item) => [`Masa Aktif: ${activePeriod(item)}`, `Total Pendapatan: ${rupiah(item.revenue)}`],
+    }),
+);
+
+Alpine.data('topPackagesByVolume', () =>
+    barChartCard(fetchTopPackagesByVolume, {
+        value: (item) => item.transactions,
+        valueTick: (tick) => number(tick),
+        valueTitle: 'Jumlah Transaksi',
+        tooltipLines: (item) => [`Masa Aktif: ${activePeriod(item)}`, `Total Transaksi: ${number(item.transactions)}`],
+    }),
+);
+
+// `hint` = definisi metrik (sama dengan docs/api/products.md), tampil saat judul kolom di-hover.
+// `excelFormat` dipakai untuk kolom rata-rata agar nilai desimalnya tidak dibulatkan di Excel.
+const PERFORMANCE_COLUMNS = [
+    { key: 'name', header: 'Nama Paket', width: 34, hint: 'Nama produk lengkap, termasuk masa aktif' },
+    { key: 'revenue', header: 'Revenue', type: 'number', format: rupiah, hint: 'Total nominal transaksi berhasil' },
+    { key: 'trx', header: 'Trx', type: 'number', format: number, hint: 'Jumlah transaksi berhasil' },
+    { key: 'low_price', header: 'Harga Terendah', type: 'number', format: rupiah, hint: 'Nominal terendah dari satu transaksi' },
+    { key: 'low_trx', header: 'Trx Terendah', type: 'number', format: number, hint: 'Jumlah transaksi terendah dalam satu hari' },
+    { key: 'avg_price', header: 'Harga Rata-rata', type: 'number', format: rupiah, excelFormat: '#,##0.00', hint: 'Revenue dibagi Trx' },
+    { key: 'avg_trx', header: 'Rata-rata Trx', type: 'number', format: number, excelFormat: '#,##0.00', hint: 'Trx dibagi jumlah hari yang ada penjualannya' },
+    { key: 'high_price', header: 'Harga Tertinggi', type: 'number', format: rupiah, hint: 'Nominal tertinggi dari satu transaksi' },
+    { key: 'high_trx', header: 'Trx Tertinggi', type: 'number', format: number, hint: 'Jumlah transaksi tertinggi dalam satu hari' },
+].map((column) => ({ ...column, value: (row) => row[column.key] }));
+
+const PAGE_SIZE = 10;
+
+Alpine.data('packagePerformance', () => {
+    const data = remoteData(fetchPackagePerformance);
+
+    return {
+        ...data,
+
+        columns: PERFORMANCE_COLUMNS,
+        search: '',
+        exporting: null,
+        page: 1,
+
+        init() {
+            data.init.call(this);
+            this.$watch('search', () => (this.page = 1));
+            this.$watch('filters', () => (this.page = 1));
+        },
+
+        // Semua baris hasil pencarian; dipakai juga untuk ekspor.
+        get rows() {
+            const keyword = this.search.trim().toLowerCase();
+            if (!keyword) return this.items;
+
+            return this.items.filter((row) => row.name.toLowerCase().includes(keyword));
+        },
+
+        get pageCount() {
+            return Math.max(1, Math.ceil(this.rows.length / PAGE_SIZE));
+        },
+
+        get currentPage() {
+            return Math.min(this.page, this.pageCount);
+        },
+
+        get pageRows() {
+            const start = (this.currentPage - 1) * PAGE_SIZE;
+
+            return this.rows.slice(start, start + PAGE_SIZE);
+        },
+
+        get rangeStart() {
+            return this.rows.length ? (this.currentPage - 1) * PAGE_SIZE + 1 : 0;
+        },
+
+        get rangeEnd() {
+            return Math.min(this.currentPage * PAGE_SIZE, this.rows.length);
+        },
+
+        // Nomor halaman yang ditampilkan: halaman pertama, terakhir, dan sekitar halaman aktif; celah jadi "…".
+        get pageLinks() {
+            const total = this.pageCount;
+            const current = this.currentPage;
+            const pages = new Set([1, total, current - 1, current, current + 1]);
+
+            if (current <= 3) [2, 3, 4].forEach((page) => pages.add(page));
+            if (current >= total - 2) [total - 3, total - 2, total - 1].forEach((page) => pages.add(page));
+
+            const sorted = [...pages].filter((page) => page >= 1 && page <= total).sort((a, b) => a - b);
+
+            return sorted.flatMap((page, index) => {
+                const gap = index > 0 && page - sorted[index - 1] > 1 ? [{ key: `gap-${page}`, page: null }] : [];
+
+                return [...gap, { key: `page-${page}`, page }];
+            });
+        },
+
+        goTo(page) {
+            this.page = Math.min(Math.max(1, page), this.pageCount);
+        },
+
+        cell(row, column) {
+            return column.format ? column.format(row[column.key]) : row[column.key];
+        },
+
+        fileName() {
+            const { platform, year, month } = this.filters;
+
+            return ['detail-performa-paket', platform || 'semua-platform', year, month ? String(month).padStart(2, '0') : 'semua-bulan'].join('_');
+        },
+
+        async exportAs(type) {
+            if (!this.rows.length || this.exporting) return;
+
+            this.exporting = type;
+
+            try {
+                if (type === 'csv') {
+                    exportCsv(this.fileName(), this.columns, this.rows);
+                } else {
+                    await exportExcel(this.fileName(), this.columns, this.rows);
+                }
+            } finally {
+                this.exporting = null;
+            }
+        },
+    };
+});

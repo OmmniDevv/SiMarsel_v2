@@ -3,7 +3,7 @@
 namespace App\View\Components;
 
 use App\Models\Account;
-use App\Models\Division;
+use App\Models\PromoCode;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\Component;
 use Illuminate\View\View;
@@ -22,9 +22,20 @@ class Sidebar extends Component
     public function __construct()
     {
         $this->sections = [
+            'Analitik' => [
+                $this->group('Analisis Performa', 'chart', [
+                    $this->link('Ringkasan', 'chart', 'dashboard'),
+                    $this->link('Produk', 'cube', 'performance.products'),
+                ]),
+            ],
+            'Pekerjaan' => [
+                $this->link('Tasklist', 'checklist', 'tasks.index'),
+            ],
+            'Penjualan & Pemasaran' => [
+                $this->link('Manajemen Promo', 'ticket', 'promo.index', ['viewAny', PromoCode::class]),
+            ],
             'Sistem' => [
-                $this->link('Manajemen akun', 'gear', 'settings.index', ['viewAny', Account::class]),
-                $this->link('Manajemen divisi', 'building', 'divisions.index', ['viewAny', Division::class]),
+                $this->link('Manajemen Organisasi', 'users', 'settings.index', ['viewAny', Account::class]),
             ],
         ];
     }
