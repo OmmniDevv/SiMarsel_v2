@@ -4,15 +4,16 @@
 @endphp
 
 <div class="mt-4 overflow-hidden rounded-lg border border-line">
-    <div class="overflow-x-auto">
+    <div class="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" tabindex="0" role="region" aria-label="Daftar kode promo terdaftar">
         <table class="w-full min-w-[720px] text-left text-sm" :aria-busy="loading">
+            <caption class="sr-only">Kode promo terdaftar beserta platform, klasifikasi, dan penggunaan</caption>
             <thead class="bg-soft text-xs font-semibold text-label">
                 <tr>
                     <th scope="col" class="px-4 py-3">Kode Promo</th>
                     <th scope="col" class="px-4 py-3">Platform</th>
                     <th scope="col" class="px-4 py-3">Funnel</th>
                     <th scope="col" class="px-4 py-3">Source</th>
-                    <th scope="col" class="px-4 py-3">Penggunaan</th>
+                    <th scope="col" class="px-4 py-3 text-right">Penggunaan</th>
                     <th scope="col" class="px-4 py-3 text-right">Aksi</th>
                 </tr>
             </thead>
@@ -32,7 +33,7 @@
                             <span x-show="item.source" class="text-ink" x-text="item.source?.name"></span>
                             <span x-show="!item.source" class="{{ $notSet }}" title="Source belum diisi">Belum Diisi</span>
                         </td>
-                        <td class="px-4 py-3">
+                        <td class="px-4 py-3 text-right tabular-nums">
                             <span x-show="item.usages_count" class="text-muted" x-text="item.usages_count + ' transaksi'"></span>
                             <span x-show="!item.usages_count" class="{{ $notSet }}">Belum Dipakai</span>
                         </td>
@@ -72,13 +73,13 @@
     </div>
 </div>
 
-<nav x-show="meta && meta.last_page > 1" x-cloak class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" aria-label="Navigasi halaman kode promo">
+<nav x-show="meta" x-cloak class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" aria-label="Navigasi halaman kode promo">
     <p class="text-xs text-muted">
         Menampilkan <span class="font-semibold text-ink" x-text="meta?.from ?? 0"></span>–<span class="font-semibold text-ink" x-text="meta?.to ?? 0"></span>
         dari <span x-text="meta?.total ?? 0"></span> kode promo
     </p>
 
-    <div class="flex items-center gap-2">
+    <div class="flex flex-wrap items-center gap-2">
         <button type="button" class="{{ $pageButton }}" :disabled="loading || filter.page <= 1" @click="goToPage(filter.page - 1)">
             <x-icon name="chevron-left" class="size-3.5" />
             Sebelumnya

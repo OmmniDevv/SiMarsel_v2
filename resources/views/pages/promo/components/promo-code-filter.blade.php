@@ -1,5 +1,5 @@
-<div class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
-    <div class="w-full sm:max-w-xs">
+<div class="mt-5 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-end">
+    <div class="min-w-0 flex-1">
         <label for="promo-code-search" class="mb-1.5 block text-xs font-semibold text-label">Cari Kode Promo</label>
         <div class="relative">
             <svg class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-label" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
@@ -17,7 +17,7 @@
         </div>
     </div>
 
-    <div class="w-full sm:w-48">
+    <div class="w-full sm:w-52 sm:shrink-0">
         <label for="promo-code-platform-filter" class="mb-1.5 block text-xs font-semibold text-label">Platform</label>
         <select
             id="promo-code-platform-filter"
@@ -32,7 +32,10 @@
         </select>
     </div>
 
-    <p class="text-xs text-muted sm:ml-auto sm:pb-3" aria-live="polite" x-show="meta" x-cloak>
-        Total <span class="font-semibold text-ink" x-text="meta?.total ?? 0"></span> kode promo
-    </p>
+    <button type="button" x-show="hasFilter" x-cloak @click="resetFilter()" class="inline-flex h-10 shrink-0 items-center justify-center rounded-lg border border-line px-3 text-sm font-semibold text-ink hover:bg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Atur ulang filter</button>
 </div>
+
+<p x-show="optionsError" x-cloak class="mt-3 text-sm text-red-700" role="alert">
+    <span x-text="optionsError"></span>
+    <button type="button" @click="fetchOptions()" class="font-semibold underline focus-visible:outline-2 focus-visible:outline-primary">Coba Lagi</button>
+</p>

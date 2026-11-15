@@ -92,3 +92,18 @@ test('closing a lower dialog first preserves the original trigger and existing b
     assert.equal(hidden.inert, true);
     assert.equal(f.doc.body.style.overflow, 'auto');
 });
+
+test('native disclosure summaries remain reachable at the end of the dialog tab order', () => {
+    const f = fixture();
+    const summary = f.node(f.dialog);
+    // Model the browser selector: summary is natively focusable without an explicit tabindex.
+    f.dialog.querySelectorAll = (selector = '') => [f.first, f.last, ...(selector.includes('summary') ? [summary] : [])];
+    f.manager.open(f.dialog);
+    f.last.focus();
+    assert.equal(f.tab().prevented, false, 'Tab must reach the disclosure after the last button');
+    summary.focus();
+    assert.equal(f.tab().prevented, true);
+    assert.equal(f.doc.activeElement, f.first);
+    assert.equal(f.tab(true).prevented, true);
+    assert.equal(f.doc.activeElement, summary);
+});

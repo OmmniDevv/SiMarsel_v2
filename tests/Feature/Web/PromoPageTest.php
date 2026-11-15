@@ -129,7 +129,7 @@ class PromoPageTest extends TestCase
                 'x-data="promoAnalysisTrend"',
                 'x-data="promoAnalysisTopCodes"',
                 'x-data="promoAnalysisFunnel"',
-                'Daftar Kode Promo',
+                'Kode promo terdaftar',
             ], false)
             ->assertSeeInOrder(['Tren Penggunaan Promo', 'aria-label="Periode Grafik"', 'Harian', 'Mingguan', 'Bulanan', 'x-ref="canvas"'], false)
             ->assertSee('@change="setPeriod(\'weekly\')"', false)
@@ -152,7 +152,7 @@ class PromoPageTest extends TestCase
                 'x-data="promoAnalysis"',
                 'x-data="promoAnalysisSummary',
                 'x-data="promoAnalysisFunnel"',
-                'Daftar Kode Promo',
+                'Kode promo terdaftar',
             ], false)
             ->assertSee('@promo-analysis-filter.window="load($event.detail)"', false)
             ->assertSeeInOrder(['Analisis Promo per Funnel', 'Funnel', 'Jumlah Transaksi', 'Jumlah Revenue', 'Kontribusi Funnel (%)'])
@@ -167,7 +167,7 @@ class PromoPageTest extends TestCase
                 'x-data="promoAnalysis"',
                 'x-data="promoAnalysisFunnel"',
                 'x-data="promoAnalysisSource"',
-                'Daftar Kode Promo',
+                'Kode promo terdaftar',
             ], false)
             ->assertSeeInOrder(['Analisis Promo per Source', 'Source', 'Jumlah Penggunaan', 'Jumlah Revenue', 'Kontribusi Source (%)'])
             ->assertSee('Jumlah penggunaan dapat melebihi jumlah transaksi unik karena satu transaksi dapat memakai dua kode promo.')
@@ -183,7 +183,7 @@ class PromoPageTest extends TestCase
                 'x-data="promoAnalysisSource"',
                 'x-data="promoAnalysisProductType"',
                 'x-data="promoAnalysisCode"',
-                'Daftar Kode Promo',
+                'Kode promo terdaftar',
             ], false)
             ->assertSeeInOrder(['Analisis Promo Perdana vs Perpanjangan', 'Tipe Produk', 'Jumlah Transaksi', 'Revenue'])
             ->assertDontSee('Persentase Transaksi (%)')
@@ -243,7 +243,7 @@ class PromoPageTest extends TestCase
                 'x-data="promoAnalysisSource"',
                 'x-data="promoAnalysisCode"',
                 'x-data="promoAnalysisCodeUsage"',
-                'Daftar Kode Promo',
+                'Kode promo terdaftar',
             ], false)
             ->assertSee('@promo-code-usage-open.window', false)
             ->assertSeeInOrder(['Rekap per Kode Promo', 'Kode Promo', 'Platform', 'Kategori/Funnel', 'Source', 'Jumlah Penggunaan', 'Jumlah Revenue', 'Kontribusi (%)'])
@@ -251,7 +251,7 @@ class PromoPageTest extends TestCase
             ->assertSee('Detail Penggunaan Kode Promo')
             ->assertSeeInOrder(['Tanggal', 'Platform/Aplikasi', 'Jumlah Penggunaan', 'Revenue', 'Total']);
 
-        $summary = str($response->getContent())->between('id="promo-code-summary-title"', 'Daftar Kode Promo');
+        $summary = str($response->getContent())->between('id="promo-code-summary-title"', 'Kode promo terdaftar');
         $this->assertStringNotContainsString('Tipe', $summary);
         $this->assertStringNotContainsString('Import', $summary);
     }
@@ -347,15 +347,18 @@ class PromoPageTest extends TestCase
             ->assertSee('@keydown.ctrl.enter.prevent="submit()"', false);
     }
 
-    public function test_code_management_orders_actions_alert_filter_list_and_pagination(): void
+    public function test_code_management_separates_transaction_review_from_registered_table_actions(): void
     {
         $this->actingAs($this->employee)
             ->get(route('promo.index'))
             ->assertSeeInOrder([
                 'x-data="promoCodeManagement"',
+                'x-data="promoUnregisteredCodes"',
+                'id="unregistered-review"',
+                'id="promo-list-title"',
+                'Kode promo terdaftar',
                 'Tambah kode promo',
                 'Input massal',
-                'x-data="promoUnregisteredCodes"',
                 'for="promo-code-search"',
                 'for="promo-code-platform-filter"',
                 '<table',
@@ -377,26 +380,48 @@ class PromoPageTest extends TestCase
             ], false);
     }
 
-    public function test_unregistered_codes_show_as_an_alert_with_review_cards_instead_of_a_table(): void
+    public function test_unregistered_codes_open_a_compact_review_list_with_platform_identity(): void
     {
         $response = $this->actingAs($this->employee)
             ->get(route('promo.index'))
             ->assertSee('x-data="promoUnregisteredCodes"', false)
             ->assertSee('x-show="visible"', false)
-            ->assertSeeInOrder(['x-show="totalError"', 'x-text="totalError"', '@click="refresh()">Coba Lagi'], false)
+            ->assertSeeInOrder(['x-show="totalError && !reviewOpen"', 'x-text="totalError"', '@click="refresh()">Coba Lagi'], false)
             ->assertSeeInOrder([
                 'Kode transaksi belum terdaftar',
-                'Ada kode pada transaksi yang belum punya master di platform terkait. Cek kode lalu daftarkan agar pemetaannya dapat dilengkapi.',
-                'Lihat kode',
+                'Ada kode pada transaksi yang belum terdaftar pada sistem. Silakan daftarkan kode tersebut agar dapat dianalisis.',
+                'Tinjau kode',
                 'aria-label="Daftar kode transaksi belum terdaftar"',
             ], false)
-            ->assertSeeInOrder(['Kode asli', 'Didaftarkan sebagai', 'Platform', 'Penggunaan', 'Terakhir dipakai', 'Daftarkan kode'])
+            ->assertSeeInOrder(['Cari kode belum terdaftar', 'Kode transaksi untuk ditinjau', 'Variasi kode asli', 'Kode asli', 'Didaftarkan sebagai:', 'Daftarkan', 'Tentang pemetaan transaksi'])
             ->assertSee('aria-label="Navigasi halaman kode belum terdaftar"', false)
             ->assertSee('Transaksi dengan kode ini tetap tersimpan dan tetap dihitung dalam analisis.')
             ->assertDontSee('Kode Promo Belum Terdaftar');
 
-        $alert = str($response->getContent())->between('x-data="promoUnregisteredCodes"', 'for="promo-code-search"');
-        $this->assertStringNotContainsString('<table', $alert);
+        $review = str($response->getContent())->between('id="unregistered-review"', 'id="promo-list-title"');
+        $this->assertStringContainsString('<ul', $review);
+        $this->assertStringNotContainsString('<table', $review);
+        $this->assertStringContainsString('divide-y divide-line', $review);
+        $this->assertStringContainsString("item.platform.id + ':' + item.code", $review);
+        $this->assertStringContainsString('x-text="item.platform.name"', $review);
+        $this->assertStringContainsString('x-text="item.register.code"', $review);
+        $this->assertStringContainsString('@click="register(item)"', $review);
+        $this->assertStringContainsString('item.transactions_count', $review);
+        $this->assertStringContainsString('item.first_used_on', $review);
+        $this->assertStringContainsString('x-show="totalError && !loadError"', $review);
+        $this->assertStringContainsString('@click="fetchPendingTotal()"', $review);
+        $response->assertSee('x-show="reviewOpen"', false)
+            ->assertSee('aria-controls="unregistered-review"', false)
+            ->assertSee(':aria-expanded="reviewOpen.toString()"', false)
+            ->assertSee('pendingTotal + \' perlu ditinjau\'', false)
+            ->assertSee('hasil tinjauan')
+            ->assertSee('x-dialog="reviewOpen"', false)
+            ->assertSee('@keydown.escape.stop="closeReview()"', false)
+            ->assertSee('aria-labelledby="unregistered-review-title"', false)
+            ->assertSee('h-dvh w-full min-w-0 flex-col bg-surface shadow-xl lg:max-w-3xl', false)
+            ->assertSee('id="unregistered-search" data-dialog-initial', false)
+            ->assertSee('x-show="visible || totalError || reviewOpen"', false)
+            ->assertSee('Semua kode transaksi sudah terdaftar.');
     }
 
     public function test_registering_from_alert_opens_prefilled_single_entry(): void
@@ -406,6 +431,7 @@ class PromoPageTest extends TestCase
             ->assertSee('@promo-code-register.window="openRegister($event.detail)"', false)
             ->assertSee('@promo-codes-changed.window="refresh()"', false)
             ->assertSee('Daftarkan Kode Promo')
+            ->assertSeeInOrder(['for="promo-code-source"', 'id="promo-registration-impact"', 'penggunaan historis yang sebelumnya belum terpetakan akan dihubungkan', 'Simpan Kode Promo'], false)
             ->assertSee('Mendaftarkan kode dari alert juga dapat melengkapi')
             ->assertSee('penggunaan historis yang sebelumnya belum terpetakan akan dihubungkan')
             ->assertSee('Hanya penggunaan yang belum terhubung ke kode promo yang diproses; penggunaan yang sudah terhubung tidak diproses ulang meskipun funnel/source-nya kosong. Klasifikasi Funnel/Source yang sudah ada tidak akan ditimpa.')
