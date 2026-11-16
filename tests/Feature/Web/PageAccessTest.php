@@ -37,15 +37,30 @@ class PageAccessTest extends TestCase
     {
         $this->actingAs($this->manager)->get('/dashboard')
             ->assertOk()
-            ->assertSeeInOrder(['Analitik', 'Analisis Performa', 'Ringkasan', 'Pekerjaan', 'Tasklist', 'Penjualan &amp; Pemasaran', 'Manajemen Promo', 'Sistem', 'Keluar', 'Akun Aktif'], false)
+            ->assertSeeInOrder(['Analitik', 'Dashboard', 'Pekerjaan', 'Tasklist', 'Penjualan &amp; Pemasaran', 'Manajemen Promo', 'Sistem', 'Keluar', 'Akun Aktif'], false)
             ->assertSee('x-dialog="open && !desktop"', false)
             ->assertSeeInOrder(['id="sidebar-dialog"', 'x-dialog="open && !desktop"', 'x-show="open"', 'id="sidebar"', '</aside>', '<main'], false)
             ->assertSee(':inert="!desktop && !open"', false)
             ->assertSee(':aria-hidden="!desktop && !open ? \'true\' : null"', false)
             ->assertSee('@keydown.escape.stop="open = false"', false)
-            ->assertSee('aria-controls="sidebar-submenu-0-0"', false)
-            ->assertSee('id="sidebar-submenu-0-0"', false)
             ->assertSee('aria-label="Analitik"', false);
+    }
+
+    public function test_sidebar_has_a_single_dashboard_item_without_the_legacy_submenu(): void
+    {
+        $response = $this->actingAs($this->manager)->get('/dashboard')->assertOk();
+        $sidebar = (string) str($response->getContent())->between('id="sidebar"', '</aside>');
+
+        $analytics = (string) str($sidebar)->between('aria-label="Analitik"', '</nav>');
+
+        $this->assertSame(1, substr_count($analytics, '<a '));
+        $this->assertStringContainsString('Dashboard', $analytics);
+        $this->assertMatchesRegularExpression('/href="'.preg_quote(route('dashboard'), '/').'"[^>]*aria-current="page"/s', $analytics);
+        $this->assertSame(1, substr_count($sidebar, 'aria-current="page"'));
+
+        foreach (['Analisis Performa', 'Ringkasan', 'Produk', 'sidebar-submenu', '/performance/products'] as $legacy) {
+            $this->assertStringNotContainsString($legacy, $sidebar);
+        }
     }
 
     public function test_direct_and_nested_active_sidebar_links_use_the_same_contrasted_treatment(): void

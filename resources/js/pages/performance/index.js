@@ -20,6 +20,7 @@ import performanceContribution from './contribution';
 import performancePaymentMethod from './payment-method';
 import performancePurchaseTime from './purchase-time';
 import performanceTrend from './trend';
+import dashboardShell from './shell';
 
 Alpine.data('performanceSummary', (platforms = [], years = []) => ({
     platforms,
@@ -216,6 +217,7 @@ Alpine.data('performanceSummary', (platforms = [], years = []) => ({
     },
 }));
 
+Alpine.data('dashboardShell', dashboardShell);
 Alpine.data('performanceTrend', performanceTrend);
 Alpine.data('performanceContribution', performanceContribution);
 Alpine.data('performancePaymentMethod', performancePaymentMethod);

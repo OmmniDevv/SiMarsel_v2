@@ -23,9 +23,7 @@ class Sidebar extends Component
     {
         $this->sections = [
             'Analitik' => [
-                $this->group('Analisis Performa', 'chart', [
-                    $this->link('Ringkasan', 'chart', 'dashboard'),
-                ]),
+                $this->link('Dashboard', 'chart', 'dashboard'),
             ],
             'Pekerjaan' => [
                 $this->link('Tasklist', 'checklist', 'tasks.index'),
