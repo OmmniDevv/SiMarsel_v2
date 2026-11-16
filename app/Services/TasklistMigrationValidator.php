@@ -24,7 +24,7 @@ class TasklistMigrationValidator
     /**
      * Migration file prefixes of the TASK-19 changes, including the agenda move and rollback guard (PR revision).
      */
-    private const MIGRATION_PREFIXES = ['2026_11_13_', '2026_11_16_'];
+    private const MIGRATION_PREFIXES = ['2026_11_13_', '2026_11_16_090'];
 
     private const LEGACY_STATUSES = ['ready_for_qa', 'on_qa'];
 

@@ -21,6 +21,8 @@ use Illuminate\Support\Facades\DB;
  */
 class TasklistRecoveryService
 {
+    public const FIRST_MIGRATION = '2026_11_13_083909_widen_name_columns_on_roles_and_divisions_tables';
+
     public const LEGACY_STATUSES = [
         'ready_review' => 'ready_for_qa',
         'on_review' => 'on_qa',
@@ -42,6 +44,15 @@ class TasklistRecoveryService
             'Evidence yang dihapus (soft delete)' => DB::table('task_evidences')->whereNotNull('deleted_at')->count(),
             'Akun nonaktif' => DB::table('accounts')->where('is_active', false)->count(),
         ];
+    }
+
+    /**
+     * Number of migrations `migrate:rollback --step` must undo to return to the schema before TASK-19, including
+     * any migration applied after it.
+     */
+    public function rollbackSteps(): int
+    {
+        return DB::table('migrations')->where('migration', '>=', self::FIRST_MIGRATION)->count();
     }
 
     public function hasNewData(): bool

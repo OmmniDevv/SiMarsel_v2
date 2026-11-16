@@ -6,8 +6,10 @@ use App\Exceptions\AccountHasTaskHistoryException;
 use App\Exceptions\CannotChangeOwnRoleException;
 use App\Exceptions\CannotDeleteOwnAccountException;
 use App\Models\Account;
+use App\Models\AccountRoleChange;
 use App\Repositories\AccountRepository;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 
 class AccountService
 {
@@ -22,11 +24,18 @@ class AccountService
     }
 
     /**
+     * Create the account and record its first role in the role audit.
+     *
      * @param  array<string, mixed>  $data
      */
-    public function create(array $data): Account
+    public function create(array $data, Account $actor): Account
     {
-        return $this->accountRepository->create($data);
+        return DB::transaction(function () use ($data, $actor) {
+            $account = $this->accountRepository->create($data);
+            $this->recordRoleChange($account, null, $actor);
+
+            return $account;
+        });
     }
 
     /**
@@ -40,7 +49,19 @@ class AccountService
             throw new CannotChangeOwnRoleException;
         }
 
-        return $this->accountRepository->update($account, $data);
+        $oldRoleId = $account->role_id;
+
+        return DB::transaction(function () use ($account, $data, $actor, $oldRoleId) {
+            $account = $this->accountRepository->update($account, $data);
+
+            // A role change takes effect on the next request, since permissions are read from the role; task history
+            // is left as it is.
+            if ((int) $account->role_id !== (int) $oldRoleId) {
+                $this->recordRoleChange($account, $oldRoleId, $actor);
+            }
+
+            return $account;
+        });
     }
 
     /**
@@ -58,5 +79,16 @@ class AccountService
         }
 
         $this->accountRepository->delete($account);
+    }
+
+    private function recordRoleChange(Account $account, ?int $oldRoleId, Account $actor): void
+    {
+        AccountRoleChange::create([
+            'account_id' => $account->id,
+            'old_role_id' => $oldRoleId,
+            'new_role_id' => $account->role_id,
+            'changed_by' => $actor->id,
+            'changed_at' => now(),
+        ]);
     }
 }

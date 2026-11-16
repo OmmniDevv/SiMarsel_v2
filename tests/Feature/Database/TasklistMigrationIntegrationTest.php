@@ -22,7 +22,10 @@ class TasklistMigrationIntegrationTest extends TestCase
 {
     use DatabaseMigrations;
 
-    private const TASK19_MIGRATIONS = 15;
+    /**
+     * The first TASK-19 migration; rolling back to before it also rolls back every later migration.
+     */
+    private const FIRST_TASK19_MIGRATION = '2026_11_13_083909_widen_name_columns_on_roles_and_divisions_tables';
 
     /**
      * Rows that existed before TASK-19 and must all still be there afterwards.
@@ -39,7 +42,7 @@ class TasklistMigrationIntegrationTest extends TestCase
         parent::setUp();
 
         $this->travelTo('2026-11-12 09:00:00');
-        $this->artisan('migrate:rollback', ['--step' => self::TASK19_MIGRATIONS])->assertSuccessful();
+        $this->artisan('migrate:rollback', ['--step' => $this->stepsBackToBeforeTask19()])->assertSuccessful();
         $this->seed(LegacyTasklistSeeder::class);
         $this->before = $this->counts();
     }
@@ -187,7 +190,7 @@ class TasklistMigrationIntegrationTest extends TestCase
         $legacyHistory = DB::table('task_activities')->orderBy('id')->pluck('changes')->map(fn ($changes) => json_decode((string) $changes, true))->all();
 
         $this->migrateAndSeed();
-        $this->artisan('migrate:rollback', ['--step' => self::TASK19_MIGRATIONS])->assertSuccessful();
+        $this->artisan('migrate:rollback', ['--step' => $this->stepsBackToBeforeTask19()])->assertSuccessful();
 
         $this->assertEquals($legacyTasks, DB::table('tasks')->orderBy('id')->get(['id', 'status', 'pic_id', 'version'])->map(fn ($task) => (array) $task)->all());
         $this->assertEquals($legacyHistory, DB::table('task_activities')->orderBy('id')->pluck('changes')->map(fn ($changes) => json_decode((string) $changes, true))->all());
@@ -237,5 +240,10 @@ class TasklistMigrationIntegrationTest extends TestCase
     private function account(string $username): Account
     {
         return Account::where('username', $username)->sole();
+    }
+
+    private function stepsBackToBeforeTask19(): int
+    {
+        return DB::table('migrations')->where('migration', '>=', self::FIRST_TASK19_MIGRATION)->count();
     }
 }

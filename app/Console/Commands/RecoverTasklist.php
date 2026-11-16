@@ -31,7 +31,7 @@ class RecoverTasklist extends Command
             $this->warn('Ada data yang tidak bisa dipulihkan dengan migrate:rollback. Jangan rollback skema.');
             $this->line('Pakai prosedur pemulihan: php artisan tasks:recovery to-legacy --apply, lalu jalankan aplikasi versi lama.');
         } else {
-            $this->info('Belum ada data baru. Rollback aman: php artisan migrate:rollback --step=15 --force');
+            $this->info("Belum ada data baru. Rollback aman: php artisan migrate:rollback --step={$recovery->rollbackSteps()} --force");
         }
 
         return self::SUCCESS;

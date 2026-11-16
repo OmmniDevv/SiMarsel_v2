@@ -23,7 +23,7 @@ class AccountController extends Controller
 
     public function store(StoreAccountRequest $request): JsonResponse
     {
-        $account = $this->accountService->create($request->validated());
+        $account = $this->accountService->create($request->validated(), $request->user());
 
         return AccountResource::make($account)
             ->additional(['message' => 'Akun berhasil dibuat.'])
