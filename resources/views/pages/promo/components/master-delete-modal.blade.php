@@ -1,5 +1,6 @@
 {{-- Variables come from master-table. A rejected delete (409) shows the backend message in formError. --}}
 <div
+    x-dialog="modal === 'delete'"
     x-show="modal === 'delete'"
     x-cloak
     class="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -8,7 +9,6 @@
     aria-labelledby="{{ $type }}-delete-title"
     aria-describedby="{{ $type }}-delete-desc"
     @keydown.escape.window="modal === 'delete' && closeModal()"
-    x-init="$watch('modal', (value) => value === 'delete' && $nextTick(() => $refs.deleteCancel.focus()))"
 >
     <div x-show="modal === 'delete'" x-transition.opacity class="absolute inset-0 bg-slate-900/50" @click="closeModal()"></div>
 
@@ -32,8 +32,8 @@
         <p x-show="formError" x-text="formError" class="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700" role="alert"></p>
 
         <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button type="button" x-ref="deleteCancel" class="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-line bg-white px-3 text-sm font-semibold text-ink hover:bg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50" :disabled="saving" @click="closeModal()">Batal</button>
-            <button type="button" class="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:cursor-not-allowed disabled:opacity-50" :disabled="saving" @click="confirmDelete()" x-text="saving ? 'Menghapus…' : 'Ya, Hapus'">Ya, Hapus</button>
+            <button type="button" x-ref="deleteCancel" data-dialog-initial class="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-line bg-white px-3 text-sm font-semibold text-ink hover:bg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50" :disabled="saving" @click="closeModal()">Batal</button>
+            <button type="button" class="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:cursor-not-allowed disabled:opacity-50" :disabled="saving" @click="confirmDelete()" x-text="saving ? 'Menghapus…' : 'Ya, Hapus'">Ya, Hapus</button>
         </div>
     </div>
 </div>

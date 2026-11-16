@@ -5,20 +5,26 @@
 
 <section x-data="promoMasterTable(@js($type), @js($label))" class="{{ $card }} min-w-0 p-5" aria-labelledby="{{ $type }}-list-title">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+        <div class="min-w-0">
             <h2 id="{{ $type }}-list-title" class="text-base font-semibold text-ink">Daftar {{ $label }}</h2>
             <p class="mt-1 text-sm text-muted">{{ $description }}</p>
+            <p x-show="!loading && !loadError" x-cloak class="mt-2 text-xs tabular-nums text-muted" aria-live="polite">
+                <span class="font-semibold text-ink" x-text="filteredItems.length"></span><span x-show="search.trim()"> dari <span x-text="items.length"></span></span> {{ $noun }}
+            </p>
         </div>
 
         <button
             type="button"
             class="inline-flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:w-auto"
             @click="openCreate()"
-        >Tambah {{ $label }}</button>
+        >
+            <x-icon name="plus" />
+            Tambah {{ $label }}
+        </button>
     </div>
 
-    <div class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div class="w-full sm:max-w-xs">
+    <div class="mt-5 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-end">
+        <div class="min-w-0 flex-1">
             <label for="{{ $type }}-search" class="mb-1.5 block text-xs font-semibold text-label">Cari {{ $label }}</label>
             <div class="relative">
                 <svg class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-label" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
@@ -35,44 +41,28 @@
             </div>
         </div>
 
-        <p class="text-xs text-muted sm:ml-auto sm:pb-3" aria-live="polite">
-            Menampilkan <span class="font-semibold text-ink" x-text="filteredItems.length"></span>
-            dari <span x-text="items.length"></span> {{ $noun }}
-        </p>
+        <button type="button" x-show="search.trim()" x-cloak @click="search = ''" class="inline-flex h-10 shrink-0 items-center justify-center rounded-lg border border-line px-3 text-sm font-semibold text-ink hover:bg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Atur ulang pencarian</button>
     </div>
 
     <div class="mt-4 overflow-hidden rounded-lg border border-line">
-        <div class="overflow-x-auto">
-            <table class="w-full min-w-[420px] text-left text-sm">
+        <div class="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" tabindex="0" role="region" aria-label="Daftar {{ $label }}">
+            <table class="w-full min-w-[420px] text-left text-sm" :aria-busy="loading.toString()">
+                <caption class="sr-only">Daftar {{ $label }} dan jumlah kode promo yang terkait saat ini</caption>
                 <thead class="bg-soft text-xs font-semibold text-label">
                     <tr>
                         <th scope="col" class="px-4 py-3">Nama {{ $label }}</th>
-                        <th scope="col" class="px-4 py-3">Penggunaan</th>
+                        <th scope="col" class="px-4 py-3 text-right">Kode promo terkait</th>
                         <th scope="col" class="px-4 py-3 text-right">Aksi</th>
                     </tr>
                 </thead>
 
                 <tbody class="divide-y divide-line">
                     <template x-for="item in filteredItems" :key="item.id">
-                        <tr class="hover:bg-soft/60">
+                        <tr x-show="!loading && !loadError" class="hover:bg-soft/60">
                             <td class="px-4 py-3 font-semibold break-all text-ink" x-text="item.name"></td>
-                            <td class="px-4 py-3">
-                                <span x-show="item.promo_codes_count" class="text-muted" x-text="item.promo_codes_count + ' kode promo'"></span>
-                                <span x-show="!item.promo_codes_count" class="inline-flex items-center rounded-md bg-soft px-2 py-0.5 text-xs font-semibold text-muted">Belum Dipakai</span>
-                            </td>
+                            <td class="px-4 py-3 text-right tabular-nums text-muted" x-text="item.promo_codes_count + ' kode promo'"></td>
                             <td class="px-4 py-3 text-right whitespace-nowrap">
-                                <button
-                                    type="button"
-                                    class="rounded-md px-2 py-1 font-semibold text-primary hover:text-primary-hover focus-visible:outline-2 focus-visible:outline-primary"
-                                    :aria-label="'Ubah ' + item.name"
-                                    @click="openEdit(item)"
-                                >Ubah</button>
-                                <button
-                                    type="button"
-                                    class="ml-2 rounded-md px-2 py-1 font-semibold text-red-600 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-red-600"
-                                    :aria-label="'Hapus ' + item.name"
-                                    @click="openDelete(item)"
-                                >Hapus</button>
+                                @include('pages.promo.components.row-actions', ['identifier' => 'item.name'])
                             </td>
                         </tr>
                     </template>

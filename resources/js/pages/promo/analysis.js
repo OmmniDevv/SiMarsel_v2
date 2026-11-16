@@ -7,8 +7,10 @@ import {
     cloneFilter,
     defaultFilter,
     filterErrorField,
+    filterFromUrl,
     isFutureMonth,
     periodLabel,
+    reportUrl,
     selectionSummary,
     toDateString,
     toQueryString,
@@ -38,8 +40,10 @@ export default function promoAnalysis() {
         query: null,
         errors: {},
         advancedOpen: false,
+        filtersOpen: false,
 
         init() {
+            if (typeof window !== 'undefined') this.filter = filterFromUrl(window.location.search);
             this.loadOptions();
             this.apply();
         },
@@ -125,20 +129,26 @@ export default function promoAnalysis() {
         apply() {
             this.errors = validateFilter(this.filter);
             if (this.filterInvalid) {
+                this.filtersOpen = true;
                 // An invalid advanced field must be visible to be fixed.
                 if (this.errors.search) this.advancedOpen = true;
                 return;
             }
 
             const query = toQueryString(this.filter);
+            const wasOpen = this.filtersOpen;
+            this.filtersOpen = false;
+            if (wasOpen) this.$nextTick(() => this.$refs?.filterToggle?.focus());
             if (query === this.query) return;
 
             this.query = query;
             this.applied = cloneFilter(this.filter);
+            if (typeof window !== 'undefined') window.history.replaceState(null, '', reportUrl(window.location.href, this.applied));
             this.$nextTick(() => this.$dispatch('promo-analysis-filter', query));
         },
 
         showServerErrors(errors) {
+            this.filtersOpen = true;
             this.errors = Object.fromEntries(
                 Object.entries(errors).map(([field, message]) => [filterErrorField(field), message]),
             );

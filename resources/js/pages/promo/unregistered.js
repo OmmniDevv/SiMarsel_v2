@@ -10,7 +10,7 @@ function formatUsedOn(date) {
 
 /**
  * Alert of promo codes found in Markaz transactions without a master for their platform. The alert only
- * shows while such codes exist; "Lihat kode" opens their review cards.
+ * shows while such codes exist; "Tinjau kode" opens their review drawer.
  */
 export default function promoUnregisteredCodes() {
     return {
@@ -133,7 +133,10 @@ export default function promoUnregisteredCodes() {
 
         toggleReview() {
             this.reviewOpen = !this.reviewOpen;
-            if (this.reviewOpen) this.$nextTick(() => this.$refs.review?.focus());
+        },
+
+        closeReview() {
+            this.reviewOpen = false;
         },
 
         register(item) {

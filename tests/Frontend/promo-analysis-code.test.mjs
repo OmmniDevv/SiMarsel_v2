@@ -17,7 +17,7 @@ async function loadModule(path, api) {
         '../../components/toast': { showToast: () => {} },
     };
     const module = new vm.SourceTextModule(await source(path), { context });
-    const copy = await analysisCopyModule(context);
+    const copy = path.endsWith('analysis-code-usage.js') ? await analysisCopyModule(context) : null;
     await module.link((specifier) => {
         if (specifier === '../../format') return format;
         if (specifier === './analysis-copy') return copy;
@@ -113,6 +113,11 @@ test('sorting toggles direction, text columns start ascending, and both reset to
 
     await table.sortBy('usages');
     assert.deepEqual({ ...table.sort }, { key: 'usages', dir: 'desc' });
+    const exportParams = new URLSearchParams('year=2026&month=9&search=cpns');
+    table.provideExportParams({ params: exportParams });
+    assert.equal(exportParams.get('sort'), 'usages');
+    assert.equal(exportParams.get('direction'), 'desc');
+    assert.equal(exportParams.get('search'), 'cpns');
 
     assert.deepEqual(queries, [
         'sort=revenue&direction=desc&page=1',

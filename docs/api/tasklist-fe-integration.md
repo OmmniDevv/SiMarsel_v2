@@ -3,7 +3,8 @@
 Panduan untuk tim FE: data yang dikirim backend setelah TASK-19 (STEAM-268), selisih dengan kode FE saat ini, dan fitur
 mana yang sudah siap diintegrasikan. Kontrak lengkap tetap di [tasks.md](tasks.md); dokumen ini merangkum yang berubah.
 
-Diverifikasi pada 16 Nov 2026 terhadap branch `feat/DB-tasklist-database-foundation` dan kode FE di `dev`
+Diverifikasi pada 16 Nov 2026 terhadap branch `feat/DB-tasklist-database-foundation` yang sudah disinkronkan dengan `dev`
+(termasuk PR #111 ringkasan monitoring) dan kode FE di `dev`
 (`resources/js/pages/tasks/*`, `resources/js/services/tasks.js`, `resources/views/pages/tasks/components/*`).
 
 ## 1. Data yang dibutuhkan FE
@@ -31,7 +32,7 @@ ditolak `422`.
 |---|---|---|
 | `resources/js/pages/tasks/workflow.js` (STATUSES) | `ready_for_qa` "Ready for QA", `on_qa` "On QA" | `ready_review` "Ready Review", `on_review` "On Review" |
 | `workflow.js` (`LOCKED_ASSIGNMENT`, transisi, `summary`) | `ready_for_qa`, `on_qa` | `ready_review`, `on_review` |
-| Monitoring (`GET /api/tasks/monitoring`) | metrik `ready_for_qa`, `on_qa` | `ready_review`, `on_review` |
+| `index.js` `STATUS_METRICS` (ringkasan dari `GET /api/tasks/monitoring`, PR #111) | status dan metrik `ready_for_qa`, `on_qa` | `ready_review: 'ready_review'`, `on_review: 'on_review'` (nama metrik `metrics.ready_review`, `metrics.on_review`) |
 
 ### PIC
 
@@ -45,7 +46,7 @@ ditolak `422`.
 | `index.js` + `task-detail.blade.php` atur PIC | `assignForm.pic_id`, `current_pic`, `divisions[].pics`, tampil `task.pic` | `pic_ids` = **daftar PIC lengkap** setelah perubahan (PIC yang tidak dikirim dilepas), opsional `note`; tampilkan `current_pics`/`task.pics`; opsi dari `assignment-options.pics`; `division_id` hanya untuk Admin meneruskan |
 | `index.js` toast setelah atur PIC | `data.pic?.fullname` | `data.pics` |
 | `index.js` pesan error | `errors.pic_id` | `errors.pic_ids` atau `errors['pic_ids.N']` (N = urutan PIC yang ditolak) |
-| `task-board.blade.php`, `task-calendar.blade.php`, `task-detail.blade.php` | `task.pic`, `task.pic.fullname` | `task.pics` (bisa lebih dari satu) |
+| `task-board.blade.php`, `task-table.blade.php`, `task-calendar.blade.php`, `task-detail.blade.php` | `task.pic`, `task.pic.fullname` | `task.pics` (bisa lebih dari satu) |
 | `services/tasks.js` (komentar kontrak) | `pic_id` | `pic_ids`, `pics` |
 
 ### Lainnya

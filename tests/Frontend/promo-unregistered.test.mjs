@@ -184,3 +184,57 @@ test('a failed total check during a search also shows the error', async () => {
     assert.equal(alert.totalError, 'Request failed');
     assert.equal(alert.loadError, '');
 });
+
+
+test('closing the review drawer preserves its search and loaded rows', async () => {
+    const { alert } = await alertFixture([2]);
+    await alert.fetchItems();
+    alert.filter.search = 'KODE';
+    const items = alert.items;
+
+    alert.toggleReview();
+    assert.equal(alert.reviewOpen, true);
+    alert.closeReview();
+    assert.equal(alert.reviewOpen, false);
+    assert.equal(alert.filter.search, 'KODE');
+    assert.equal(alert.items, items);
+});
+
+test('registering a review row dispatches its original platform and registration prefill', async () => {
+    const { alert } = await alertFixture([]);
+    const events = [];
+    alert.$dispatch = (name, item) => events.push({ name, item });
+    const row = { code: 'HEMAT', platform: { id: 4, name: 'JadiASN' }, register: { code: 'HEMAT', platform_id: 4 } };
+    alert.register(row);
+    assert.deepEqual(events, [{ name: 'promo-code-register', item: row }]);
+});
+
+
+test('registering the last review item keeps the drawer open to show completion', async () => {
+    const { alert } = await alertFixture([1, 0]);
+    await alert.fetchItems();
+    alert.toggleReview();
+    await alert.refresh();
+    assert.equal(alert.visible, false);
+    assert.equal(alert.reviewOpen, true);
+    assert.equal(alert.items.length, 0);
+    alert.closeReview();
+    assert.equal(alert.reviewOpen, false);
+});
+
+test('retrying the pending count inside an open drawer preserves its search and results', async () => {
+    const { alert } = await alertFixture([3, 1, 1, new Error('down'), 2]);
+    await alert.fetchItems();
+    alert.toggleReview();
+    await search(alert, 'ADMINRINA');
+    await alert.refresh();
+    assert.equal(alert.totalError, 'Request failed');
+    const rows = alert.items;
+
+    await alert.fetchPendingTotal();
+    assert.equal(alert.totalError, '');
+    assert.equal(alert.pendingTotal, 2);
+    assert.equal(alert.reviewOpen, true);
+    assert.equal(alert.filter.search, 'ADMINRINA');
+    assert.equal(alert.items, rows);
+});

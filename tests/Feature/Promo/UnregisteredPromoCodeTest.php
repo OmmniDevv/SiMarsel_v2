@@ -194,6 +194,33 @@ class UnregisteredPromoCodeTest extends TestCase
             ->assertJsonValidationErrors(['per_page' => 'Jumlah per halaman harus di antara 1 dan 100.']);
     }
 
+    public function test_adminrina_review_keeps_platform_identity_through_search_pagination_and_registration(): void
+    {
+        $first = $this->transaction(['ADMINRINA', ' adminrina '], '2026-09-10');
+        $other = $this->transaction(['ADMINRINA'], '2026-09-12', $this->cerebrum);
+
+        $pageOne = $this->alert('?search=adminrina&per_page=1');
+        $pageTwo = $this->alert('?search=adminrina&per_page=1&page=2');
+        $this->assertSame(2, $pageOne['meta']['total']);
+        $this->assertSame(['ADMINRINA', 'ADMINRINA'], [$pageOne['data'][0]['code'], $pageTwo['data'][0]['code']]);
+        $this->assertEqualsCanonicalizing([$this->jadiasn->id, $this->cerebrum->id], [$pageOne['data'][0]['platform']['id'], $pageTwo['data'][0]['platform']['id']]);
+
+        $jadiasn = $this->alert('?search=adminrina&platform_id='.$this->jadiasn->id)['data'][0];
+        $this->assertSame([' adminrina ', 'ADMINRINA'], $jadiasn['raw_codes']);
+        $this->assertSame([2, 1], [$jadiasn['usages_count'], $jadiasn['transactions_count']]);
+        $this->postJson('/api/promo-codes', [
+            ...$jadiasn['register'],
+            'funnel_id' => $this->aplikasi->id,
+            'source_id' => $this->instagram->id,
+        ])->assertCreated()->assertJsonPath('data.platform.id', $this->jadiasn->id);
+
+        $remaining = $this->alert('?search=adminrina');
+        $this->assertSame(1, $remaining['meta']['total']);
+        $this->assertSame(['code' => 'ADMINRINA', 'platform_id' => $this->cerebrum->id], $remaining['data'][0]['register']);
+        $this->assertNotNull($first->promoCodeUsages()->first()->promo_code_id);
+        $this->assertNull($other->promoCodeUsages()->first()->promo_code_id);
+    }
+
     public function test_alert_is_empty_when_every_code_is_registered(): void
     {
         app(PromoCodeService::class)->register($this->jadiasn->id, 'CPNS26');

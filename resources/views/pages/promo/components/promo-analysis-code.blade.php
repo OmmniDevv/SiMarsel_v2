@@ -15,12 +15,12 @@
 <section
     x-data="promoAnalysisCode"
     @promo-analysis-filter.window="load($event.detail)"
-    @promo-analysis-copy.window="provideCopy($event.detail)"
     @promo-analysis-export-params.window="provideExportParams($event.detail)"
     class="min-w-0"
     aria-labelledby="promo-code-summary-title"
 >
     <h3 id="promo-code-summary-title" class="text-sm font-semibold text-ink">Rekap per Kode Promo</h3>
+    <p class="mt-1 text-xs leading-relaxed text-muted">Kontribusi adalah revenue atribusi kode dibagi total revenue transaksi sesuai filter aktif. Source adalah kanal asal kode promo; Platform adalah aplikasi penjualannya.</p>
 
     <div class="mt-4 overflow-hidden rounded-lg border border-line">
         <div class="overflow-x-auto">

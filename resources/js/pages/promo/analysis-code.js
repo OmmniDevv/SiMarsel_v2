@@ -1,7 +1,6 @@
 import { errorMessage, validationErrors } from '../../http';
 import { formatValue } from '../../format';
 import { fetchAnalysisCodes } from './api';
-import { CODE_COLUMNS, allPages, copyAllSnapshot } from './analysis-copy';
 
 const TEXT_SORTS = ['code', 'platform', 'funnel', 'source'];
 
@@ -85,13 +84,6 @@ export default function promoAnalysisCode() {
 
         retry() {
             return this.fetch();
-        },
-
-        provideCopy(detail) {
-            if (detail.target !== 'codes') return;
-
-            const query = this.query();
-            detail.snapshot = copyAllSnapshot(this, CODE_COLUMNS, this.meta?.total ?? this.rows.length, () => allPages(fetchAnalysisCodes, query));
         },
 
         provideExportParams({ params }) {

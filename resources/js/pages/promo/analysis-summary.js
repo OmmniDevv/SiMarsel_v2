@@ -1,7 +1,6 @@
 import { errorMessage, validationErrors } from '../../http';
-import { formatValue, trendBadge } from '../../format';
+import { formatDateRange, formatValue, trendBadge } from '../../format';
 import { fetchAnalysisSummary } from './api';
-import { SUMMARY_COLUMNS, copySnapshot } from './analysis-copy';
 
 /**
  * Up/down change against the previous period, or null when the previous value is 0 or null:
@@ -16,10 +15,9 @@ export function comparison(metric) {
 
 /**
  * KPI cards for the active promo analysis filter, compared with the equivalent previous period.
- * Every value and comparison comes from GET /api/promo-analysis/summary. `metrics` are the cards
- * ({ key, label }) in page order, which Copy also follows.
+ * Every value and comparison comes from GET /api/promo-analysis/summary.
  */
-export default function promoAnalysisSummary(metrics = []) {
+export default function promoAnalysisSummary() {
     return {
         query: null,
         summary: null,
@@ -37,6 +35,31 @@ export default function promoAnalysisSummary(metrics = []) {
 
         get emptyMessage() {
             return this.summary?.message || 'Data tidak tersedia untuk filter yang dipilih.';
+        },
+
+        periodLabel(period) {
+            if (!period) return 'Tidak tersedia';
+            const ranges = period.ranges ?? [period];
+            return ranges.filter(({ date_from, date_to }) => date_from && date_to).map(formatDateRange).join(', ') || 'Tidak tersedia';
+        },
+
+        get currentPeriod() {
+            return this.periodLabel(this.summary?.filter);
+        },
+
+        get previousPeriod() {
+            return this.periodLabel(this.summary?.previous_period);
+        },
+
+        previousValue(key, format) {
+            return formatValue(this.kpis[key]?.previous_value, format);
+        },
+
+        comparisonDescription(key) {
+            const metric = this.kpis[key];
+            if (metric?.previous_value === null || metric?.previous_value === undefined) return 'Tidak ada data pembanding';
+            if (Number(metric.previous_value) === 0) return 'Pembanding bernilai nol; perubahan persentase tidak dihitung';
+            return comparison(metric)?.sentence ?? 'Perubahan persentase tidak tersedia';
         },
 
         value(key, format) {
@@ -77,19 +100,6 @@ export default function promoAnalysisSummary(metrics = []) {
 
         retry() {
             this.load(this.query);
-        },
-
-        provideCopy(detail) {
-            if (detail.target !== 'summary') return;
-
-            const rows = this.summary
-                ? metrics.map(({ key, label }) => ({
-                    label,
-                    value: this.kpis[key]?.value,
-                    change: this.comparison(key) ? this.kpis[key].change_percentage : null,
-                }))
-                : [];
-            detail.snapshot = copySnapshot(this, SUMMARY_COLUMNS, rows);
         },
     };
 }

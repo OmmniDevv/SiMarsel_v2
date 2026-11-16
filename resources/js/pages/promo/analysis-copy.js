@@ -1,88 +1,7 @@
 import { copyText, toTsv } from '../../export';
 import { errorMessage } from '../../http';
 
-/**
- * "Copy" for the promo analysis components (docs/api/promo-analysis.md#tombol-salin). The actions bar
- * dispatches `promo-analysis-copy` with { target, snapshot: null }; the selected component fills
- * `snapshot` with copySnapshot() from the data it shows, so the copy always matches the page.
- * Paginated tables use copyAllSnapshot(), which copies every row of the active filter, not one page.
- */
-export const COPY_TARGETS = [
-    { value: 'summary', label: 'Ringkasan KPI' },
-    { value: 'trend', label: 'Tren Penggunaan Promo' },
-    { value: 'top-codes', label: '5 Kode Promo Teratas' },
-    { value: 'funnel', label: 'Analisis Promo per Funnel' },
-    { value: 'source', label: 'Analisis Promo per Source' },
-    { value: 'product-type', label: 'Perdana vs Perpanjangan' },
-    { value: 'codes', label: 'Rekap per Kode Promo' },
-];
-
-const registration = (row) => (row.is_registered ? 'Terdaftar' : 'Belum terdaftar');
-
-/**
- * Rows are { label, value, change }, as a card shows them; `change` is empty when the card shows no badge.
- */
-export const SUMMARY_COLUMNS = [
-    { header: 'KPI', value: (row) => row.label },
-    { header: 'Nilai', value: (row) => row.value },
-    { header: 'Perubahan (%)', value: (row) => row.change },
-];
-
-/**
- * The bucket plus one column per series the chart shows, with the backend labels.
- */
-export function trendColumns(series = []) {
-    return [
-        { header: 'Periode', value: (row) => row.label },
-        ...series.map(({ key, label }) => ({ header: label, value: (row) => row[key] })),
-    ];
-}
-
-export const TOP_CODE_COLUMNS = [
-    { header: 'Peringkat', value: (row) => row.rank },
-    { header: 'Kode Promo', value: (row) => row.display_code },
-    { header: 'Jumlah Penggunaan', value: (row) => row.usages },
-    { header: 'Revenue', value: (row) => row.revenue },
-];
-
-export const FUNNEL_COLUMNS = [
-    { header: 'Funnel', value: (row) => row.name },
-    { header: 'Jumlah Transaksi', value: (row) => row.transactions },
-    { header: 'Jumlah Revenue', value: (row) => row.revenue },
-    { header: 'Kontribusi Funnel (%)', value: (row) => row.contribution_percentage },
-];
-
-export const SOURCE_COLUMNS = [
-    { header: 'Source', value: (row) => row.name },
-    { header: 'Jumlah Penggunaan', value: (row) => row.usages },
-    { header: 'Jumlah Revenue', value: (row) => row.revenue },
-    { header: 'Kontribusi Source (%)', value: (row) => row.contribution_percentage },
-];
-
-export const PRODUCT_TYPE_COLUMNS = [
-    { header: 'Tipe Produk', value: (row) => row.name },
-    { header: 'Jumlah Transaksi', value: (row) => row.transactions },
-    { header: 'Revenue', value: (row) => row.revenue },
-];
-
-/**
- * Unregistered codes keep their status and raw Markaz spellings, as the table shows them.
- */
-export const CODE_COLUMNS = [
-    { header: 'Kode Promo', value: (row) => row.code },
-    { header: 'Kode Asli Markaz', value: (row) => (row.raw_codes ?? []).join(', ') },
-    { header: 'Status', value: registration },
-    { header: 'Platform', value: (row) => row.platform?.name },
-    { header: 'Kategori/Funnel', value: (row) => row.funnel?.name },
-    { header: 'Source', value: (row) => row.source?.name },
-    { header: 'Jumlah Penggunaan', value: (row) => row.usages },
-    { header: 'Jumlah Revenue', value: (row) => row.revenue },
-    { header: 'Kontribusi (%)', value: (row) => row.contribution_percentage },
-];
-
-/**
- * The usage detail table, one row per transaction.
- */
+/** Shared clipboard helpers for the code-usage detail dialog. */
 export const USAGE_COLUMNS = [
     { header: 'Tanggal', value: (row) => row.paid_date },
     { header: 'Platform/Aplikasi', value: (row) => row.platform?.name },
@@ -119,19 +38,7 @@ export async function allPages(fetchPage, query, pick = (result) => result.data)
 }
 
 /**
- * What a component can hand over right now. Nothing is copied while it loads, after a failed load,
- * or when the filter has no data.
- */
-export function copySnapshot({ loading, loadError, isEmpty }, columns, rows) {
-    if (loading) return { status: 'loading' };
-    if (loadError) return { status: 'error' };
-    if (isEmpty || rows.length === 0) return { status: 'empty' };
-
-    return { status: 'ready', text: toTsv(columns, rows), rows: rows.length };
-}
-
-/**
- * Like copySnapshot() for a paginated table: `total` rows of the active filter, loaded by `loadRows`
+ * A paginated detail snapshot: `total` rows of the active filter, loaded by `loadRows`
  * when the copy runs.
  */
 export function copyAllSnapshot({ loading, loadError, isEmpty }, columns, total, loadRows) {

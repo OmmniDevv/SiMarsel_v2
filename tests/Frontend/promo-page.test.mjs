@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import vm from 'node:vm';
-import { cloneFilter, defaultFilter, periodLabel, withMode } from '../../resources/js/pages/promo/analysis-filter.js';
+import { cloneFilter, defaultFilter, filterFromUrl, periodLabel, reportUrl, selectionSummary, withMode } from '../../resources/js/pages/promo/analysis-filter.js';
 
 const NOW = new Date(2026, 10, 3);
 const source = (path) => readFile(new URL(`../../resources/js/pages/promo/${path}`, import.meta.url), 'utf8');
@@ -51,6 +51,25 @@ test('a cloned filter does not follow later edits', () => {
 
     assert.deepEqual(copy.platforms, []);
     assert.equal(copy.search, '');
+});
+
+test('report links restore the full filter and preserve unrelated page navigation', () => {
+    const filter = {
+        ...withMode(defaultFilter(NOW), 'date_range', NOW),
+        platforms: ['jadiasn', 'cerebrum'], payment_methods: ['BCA'], search: 'HEMAT & BARU',
+    };
+    const url = reportUrl('http://localhost/promo?tab=analysis&breakdown=codes', filter);
+    assert.deepEqual(filterFromUrl(url.search, NOW), filter);
+    assert.equal(url.searchParams.get('tab'), 'analysis');
+    assert.equal(url.searchParams.get('breakdown'), 'codes');
+    const reset = reportUrl(url.href, defaultFilter(NOW));
+    assert.equal(reset.searchParams.has('pa_platforms[]'), false);
+    assert.equal(reset.searchParams.has('pa_search'), false);
+});
+
+test('restored selections never claim all platforms while filter options are still loading', () => {
+    assert.equal(selectionSummary([], ['jadiasn'], 'Semua Platform', 'platform'), 'jadiasn');
+    assert.equal(selectionSummary([{ value: 'jadiasn', label: 'JadiASN' }], ['jadiasn'], 'Semua Platform', 'platform'), 'JadiASN');
 });
 
 test('the analysis loads once on open and only reloads on Terapkan filter', async () => {
@@ -142,4 +161,16 @@ test('the old Kode Promo link still opens Kelola Kode, and subtabs leave the URL
 
     assert.equal(subtabs.tab, 'platform');
     assert.equal(replaced.length, 0);
+});
+
+test('Top 5 remains selectable in the breakdown tabs and can be reopened by its report link', async () => {
+    const { promoTabs, replaced } = await tabsFixture('?tab=analysis&breakdown=funnel');
+    const keys = ['top-codes', 'funnel', 'source', 'product-type', 'codes'];
+    const tabs = promoTabs('promo-breakdown', keys, 'breakdown');
+    assert.equal(tabs.tab, 'funnel');
+    tabs.select('top-codes');
+    assert.equal(tabs.tab, 'top-codes');
+    assert.equal(new URL(replaced.at(-1)).searchParams.get('breakdown'), 'top-codes');
+    const reopened = await tabsFixture('?tab=analysis&breakdown=top-codes');
+    assert.equal(reopened.promoTabs('promo-breakdown', keys, 'breakdown').tab, 'top-codes');
 });

@@ -1,18 +1,20 @@
 @php
     $account = auth()->user();
 
-    $base = 'relative flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-left text-[13px] font-medium transition-colors';
+    $base = 'relative flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-left text-[13px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white';
     $idle = 'text-slate-300 hover:bg-white/5 hover:text-white';
-    $active = 'bg-white/10 text-white before:absolute before:inset-y-2 before:-left-4 before:w-[3px] before:rounded-full before:bg-primary';
-    $soon = 'text-slate-500 hover:bg-white/5 hover:text-slate-300';
+    $active = 'bg-primary-hover text-white';
+    $soon = 'text-slate-400 hover:bg-white/5 hover:text-white';
 
-    $subBase = 'flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-left text-[13px] font-medium transition-colors';
-    $subActive = 'bg-primary text-white';
+    $subBase = $base;
+    $subActive = $active;
 @endphp
 
 <aside
     id="sidebar"
-    class="fixed inset-y-0 left-0 z-50 flex w-64 -translate-x-full flex-col overflow-hidden bg-navy transition-transform duration-300 ease-in-out lg:translate-x-0"
+    :inert="!desktop && !open"
+    :aria-hidden="!desktop && !open ? 'true' : null"
+    class="fixed inset-y-0 left-0 z-50 flex w-64 -translate-x-full flex-col overflow-hidden bg-navy transition-transform duration-300 ease-in-out motion-reduce:transition-none lg:translate-x-0"
     :class="{ '-translate-x-full': !open }"
     aria-label="Menu Utama"
 >
@@ -25,7 +27,7 @@
                 <span class="block text-[9px] leading-tight font-bold tracking-wider text-slate-400 uppercase">PT. Cerebrum<br>Edukanesia Nusantara</span>
             </span>
         </a>
-        <button type="button" class="p-2 text-slate-400 hover:text-white lg:hidden" aria-label="Tutup Menu" @click="open = false">
+        <button type="button" data-dialog-initial class="inline-grid size-11 place-items-center rounded-lg text-slate-400 hover:text-white focus-visible:outline-2 focus-visible:outline-white lg:hidden" aria-label="Tutup Menu" @click="open = false">
             <x-icon name="close" class="size-5" />
         </button>
     </div>
@@ -35,7 +37,7 @@
         @foreach ($sections as $title => $items)
             <p class="mb-2 px-2 text-[11px] font-semibold text-slate-400">{{ $title }}</p>
 
-            <nav class="mb-6 space-y-1">
+            <nav class="mb-6 space-y-1" aria-label="{{ $title }}">
                 @foreach ($items as $item)
                     @if ($item['locked'])
                         <button type="button" class="{{ $base }} {{ $soon }}" title="Anda tidak memiliki akses ke menu ini" @click="locked(@js($item['label']))">
@@ -45,13 +47,13 @@
                         </button>
                     @elseif (isset($item['children']))
                         <div x-data="{ expanded: @js($item['active']) }" class="space-y-1">
-                            <button type="button" class="{{ $base }} {{ $idle }}" :aria-expanded="expanded" @click="expanded = !expanded">
+                            <button type="button" class="{{ $base }} {{ $idle }}" aria-controls="sidebar-submenu-{{ $loop->parent->index }}-{{ $loop->index }}" :aria-expanded="expanded" @click="expanded = !expanded">
                                 <x-icon :name="$item['icon']" />
                                 <span>{{ $item['label'] }}</span>
-                                <x-icon name="chevron-down" class="ml-auto size-3 transition-transform duration-200" ::class="expanded && 'rotate-180'" />
+                                <x-icon name="chevron-down" class="ml-auto size-3 transition-transform duration-200 motion-reduce:transition-none" ::class="expanded && 'rotate-180'" />
                             </button>
 
-                            <div x-show="expanded" @unless ($item['active']) x-cloak @endunless class="space-y-1 pl-4">
+                            <div id="sidebar-submenu-{{ $loop->parent->index }}-{{ $loop->index }}" x-show="expanded" @unless ($item['active']) x-cloak @endunless class="space-y-1 pl-4">
                                 @foreach ($item['children'] as $child)
                                     @if ($child['url'])
                                         <a

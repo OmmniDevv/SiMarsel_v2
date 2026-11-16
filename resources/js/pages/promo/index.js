@@ -11,7 +11,6 @@ import promoAnalysisTopCodes from './analysis-top-codes';
 import promoAnalysisTrend from './analysis-trend';
 import promoCodeBulkEntry from './bulk-entry';
 import promoCodeManagement from './promo-code';
-import promoRowMenu from './row-menu';
 import { promoMasterTable, promoPlatformTable } from './table';
 import promoTabs from './tabs';
 import promoUnregisteredCodes from './unregistered';
@@ -19,7 +18,6 @@ import promoUnregisteredCodes from './unregistered';
 // "promo-codes" stays the key of Kelola Kode, so links from the unregistered code alert (?tab=promo-codes&code=…) keep working.
 Alpine.data('promoManagement', () => promoTabs('promo', ['analysis', 'promo-codes', 'master-data'], 'tab'));
 Alpine.data('promoTabs', promoTabs);
-Alpine.data('promoRowMenu', promoRowMenu);
 
 Alpine.data('promoAnalysis', promoAnalysis);
 Alpine.data('promoAnalysisActions', promoAnalysisActions);
