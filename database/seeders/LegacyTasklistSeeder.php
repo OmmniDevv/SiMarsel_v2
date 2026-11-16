@@ -105,12 +105,24 @@ class LegacyTasklistSeeder extends Seeder
             ['task_id' => $done, 'reviewer_id' => $financeManager, 'cycle' => 1, 'decision' => 'approve', 'note' => null, 'created_at' => '2026-11-08 16:00:00'],
         ]);
 
-        $agenda = DB::table('schedule_events')->insertGetId([
-            'title' => 'Rapat evaluasi bulanan', 'description' => 'Agenda bersama', 'owner_division_id' => $marketing,
-            'start_date' => '2026-11-15', 'end_date' => null, 'is_shared' => true, 'task_id' => null, 'creator_id' => $admin,
-            'created_at' => $now, 'updated_at' => $now,
-        ]);
-        DB::table('schedule_event_divisions')->insert(['schedule_event_id' => $agenda, 'division_id' => $finance]);
+        // Agendas in every shape the Calendar and Timeline read: shared (one with a stray target division), internal
+        // for one or several divisions, internal for Admin only, related to a task, several days, and without creator.
+        $agenda = fn (string $title, ?int $owner, string $start, ?string $end, bool $shared, array $targets, ?int $taskId = null, ?int $creator = null) => tap(
+            DB::table('schedule_events')->insertGetId([
+                'title' => $title, 'description' => "Agenda lama: {$title}", 'owner_division_id' => $owner,
+                'start_date' => $start, 'end_date' => $end, 'is_shared' => $shared, 'task_id' => $taskId, 'creator_id' => $creator,
+                'created_at' => $now, 'updated_at' => $now,
+            ]),
+            fn (int $id) => DB::table('schedule_event_divisions')->insert(
+                array_map(fn (int $division) => ['schedule_event_id' => $id, 'division_id' => $division], $targets),
+            ),
+        );
+
+        $agenda('Rapat evaluasi bulanan', $marketing, '2026-11-15', null, true, [$finance], creator: $admin);
+        $agenda('Briefing internal Marketing', $marketing, '2026-11-16', null, false, [$marketing], creator: $manager);
+        $agenda('Sinkronisasi Marketing dan Finance', $finance, '2026-11-17', '2026-11-18', false, [$marketing, $finance], creator: $financeManager);
+        $agenda('Rapat pimpinan', null, '2026-11-19', null, false, []);
+        $agenda('Shooting video teaser', $marketing, '2026-11-20', '2026-11-22', true, [], $readyForQa, $manager);
     }
 
     /**

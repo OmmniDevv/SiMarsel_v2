@@ -3,11 +3,11 @@
 namespace Database\Seeders;
 
 use App\Models\Division;
-use App\Models\ScheduleEvent;
+use App\Models\CalendarEvent;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 
-class ScheduleEventSeeder extends Seeder
+class CalendarEventSeeder extends Seeder
 {
     /**
      * Agendas shared with everyone: title => [days from this Monday to the start, length in days].
@@ -25,17 +25,17 @@ class ScheduleEventSeeder extends Seeder
      */
     public function run(): void
     {
-        if (ScheduleEvent::query()->exists()) {
+        if (CalendarEvent::query()->exists()) {
             return;
         }
 
         $monday = CarbonImmutable::today()->startOfWeek();
 
         foreach (self::SHARED_AGENDAS as $title => [$offset, $days]) {
-            ScheduleEvent::create([
+            CalendarEvent::create([
                 'title' => $title,
-                'start_date' => $monday->addDays($offset),
-                'end_date' => $days > 1 ? $monday->addDays($offset + $days - 1) : null,
+                'start_at' => $monday->addDays($offset),
+                'end_at' => $days > 1 ? $monday->addDays($offset + $days - 1) : null,
                 'is_shared' => true,
             ]);
         }
@@ -63,10 +63,10 @@ class ScheduleEventSeeder extends Seeder
      */
     private function internal(string $title, CarbonImmutable $date, ?Division $owner, array $targetDivisionIds): void
     {
-        ScheduleEvent::create([
+        CalendarEvent::create([
             'title' => $title,
-            'owner_division_id' => $owner?->id,
-            'start_date' => $date,
+            'division_id' => $owner?->id,
+            'start_at' => $date,
             'is_shared' => false,
         ])->targetDivisions()->attach($targetDivisionIds);
     }

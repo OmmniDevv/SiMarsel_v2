@@ -2,29 +2,29 @@
 
 namespace Database\Factories;
 
+use App\Models\CalendarEvent;
 use App\Models\Division;
-use App\Models\ScheduleEvent;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends Factory<ScheduleEvent>
+ * @extends Factory<CalendarEvent>
  */
-class ScheduleEventFactory extends Factory
+class CalendarEventFactory extends Factory
 {
     /**
-     * Define the model's default state.
+     * Define the model's default state: a shared agenda covering whole days.
      *
      * @return array<string, mixed>
      */
     public function definition(): array
     {
-        $startDate = fake()->dateTimeBetween('-2 weeks', '+2 weeks');
+        $start = fake()->dateTimeBetween('-2 weeks', '+2 weeks')->setTime(0, 0);
 
         return [
             'title' => fake()->sentence(3),
             'description' => fake()->optional()->sentence(),
-            'start_date' => $startDate,
-            'end_date' => fake()->optional()->dateTimeBetween($startDate, (clone $startDate)->modify('+5 days')),
+            'start_at' => $start,
+            'end_at' => fake()->optional()->dateTimeBetween($start, (clone $start)->modify('+5 days'))?->setTime(0, 0),
             'is_shared' => true,
         ];
     }
@@ -37,7 +37,7 @@ class ScheduleEventFactory extends Factory
     public function internalFor(array $divisions): static
     {
         return $this->state(['is_shared' => false])
-            ->afterCreating(fn (ScheduleEvent $event) => $event->targetDivisions()->attach(
+            ->afterCreating(fn (CalendarEvent $event) => $event->targetDivisions()->attach(
                 array_map(fn (Division $division) => $division->id, $divisions),
             ));
     }

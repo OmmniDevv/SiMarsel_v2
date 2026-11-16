@@ -25,7 +25,7 @@ class ScheduleItemResource extends JsonResource
     {
         $isTask = $this->resource instanceof Task;
         $task = $isTask ? $this->resource : $this->task;
-        $division = $isTask ? $this->division : $this->ownerDivision;
+        $division = $this->division;
 
         return [
             'id' => $this->id,
@@ -35,8 +35,8 @@ class ScheduleItemResource extends JsonResource
             'target_divisions' => $isTask || $this->is_shared
                 ? []
                 : $this->targetDivisions->map(fn (Division $division) => $this->divisionData($division))->all(),
-            'start_date' => $this->start_date?->toDateString(),
-            'end_date' => ($isTask ? $this->deadline : $this->end_date)?->toDateString(),
+            'start_date' => ($isTask ? $this->start_date : $this->start_at)?->toDateString(),
+            'end_date' => ($isTask ? $this->deadline : $this->end_at)?->toDateString(),
             'status' => $isTask ? $this->status->value : null,
             'priority' => $isTask ? $this->priority->value : null,
             'task_id' => $task?->id,

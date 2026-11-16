@@ -23,12 +23,12 @@ class CalendarEventResource extends JsonResource
         return [
             'id' => $this->id,
             'title' => $this->title,
-            'division' => $this->ownerDivision ? $this->divisionData($this->ownerDivision) : null,
+            'division' => $this->division ? $this->divisionData($this->division) : null,
             'target_divisions' => $this->is_shared
                 ? []
                 : $this->targetDivisions->map(fn (Division $division) => $this->divisionData($division))->all(),
-            'start_date' => $this->start_date->toDateString(),
-            'end_date' => $this->end_date?->toDateString(),
+            'start_date' => $this->start_at->toDateString(),
+            'end_date' => $this->end_at?->toDateString(),
             'description' => $this->description,
             'task_id' => $this->task_id,
             'can_view_detail' => $this->task !== null && $request->user()->can('view', $this->task),

@@ -22,7 +22,7 @@ class TasklistMigrationIntegrationTest extends TestCase
 {
     use DatabaseMigrations;
 
-    private const TASK19_MIGRATIONS = 13;
+    private const TASK19_MIGRATIONS = 15;
 
     /**
      * Rows that existed before TASK-19 and must all still be there afterwards.
@@ -134,8 +134,51 @@ class TasklistMigrationIntegrationTest extends TestCase
         $this->actingAs($this->account('legacy.admin'))
             ->getJson('/api/tasks/calendar?month=2026-11')
             ->assertOk()
-            ->assertJsonCount(1, 'data.events')
+            ->assertJsonCount(5, 'data.events')
             ->assertJsonCount(6, 'data.deadlines');
+    }
+
+    public function test_every_agenda_moves_to_calendar_events_and_each_account_still_sees_the_same_agendas(): void
+    {
+        $legacy = DB::table('schedule_events')->orderBy('id')->get()->keyBy('id');
+        $legacyTargets = DB::table('schedule_event_divisions')->get()->groupBy('schedule_event_id')
+            ->map(fn ($rows) => $rows->pluck('division_id')->sort()->values()->all());
+        // The access rule before the move, computed on the old tables: shared for everyone, internal for Admin and
+        // the target divisions.
+        $visibleBefore = fn (Account $account) => $legacy
+            ->filter(fn ($agenda) => $account->isAdmin() || $agenda->is_shared || in_array($account->division_id, $legacyTargets[$agenda->id] ?? []))
+            ->pluck('title')->sort()->values()->all();
+
+        $this->migrateAndSeed();
+
+        $this->assertSame($legacy->count(), DB::table('calendar_events')->count());
+
+        foreach ($legacy as $id => $agenda) {
+            $copy = DB::table('calendar_events')->where('legacy_schedule_event_id', $id)->sole();
+            $this->assertSame($id, $copy->id, 'Agenda keeps its id');
+            $this->assertEquals(
+                [$agenda->title, $agenda->description, $agenda->owner_division_id, $agenda->start_date, $agenda->end_date, (bool) $agenda->is_shared, $agenda->task_id, $agenda->creator_id, $agenda->created_at],
+                [$copy->title, $copy->description, $copy->division_id, substr($copy->start_at, 0, 10), $copy->end_at === null ? null : substr($copy->end_at, 0, 10), (bool) $copy->is_shared, $copy->task_id, $copy->creator_id, $copy->created_at],
+            );
+            $this->assertEquals($legacyTargets[$id] ?? [], DB::table('calendar_event_divisions')->where('calendar_event_id', $id)->orderBy('division_id')->pluck('division_id')->all());
+        }
+
+        foreach (['legacy.admin', 'legacy.manager', 'legacy.finmanager', 'legacy.budi', 'legacy.dewi'] as $username) {
+            $account = $this->account($username);
+            $titles = fn (string $path, string $url) => collect($this->actingAs($account)->getJson($url)->assertOk()->json($path))
+                ->where('type', '!=', 'task')->pluck('title')->sort()->values()->all();
+
+            $this->assertSame($visibleBefore($account), $titles('data.events', '/api/tasks/calendar?month=2026-11'), "Calendar {$username}");
+            $this->assertSame($visibleBefore($account), $titles('data', '/api/tasks/schedule?from=2026-11-01&to=2026-11-30'), "Timeline {$username}");
+        }
+
+        $teaser = $this->task('Video teaser');
+        $this->actingAs($this->account('legacy.admin'))
+            ->getJson('/api/tasks/calendar?month=2026-11')
+            ->assertJsonPath('data.events.4.title', 'Shooting video teaser')
+            ->assertJsonPath('data.events.4.task_id', $teaser->id)
+            ->assertJsonPath('data.events.4.start_date', '2026-11-20')
+            ->assertJsonPath('data.events.4.end_date', '2026-11-22');
     }
 
     public function test_rolling_back_restores_the_legacy_data_and_migrating_again_succeeds(): void

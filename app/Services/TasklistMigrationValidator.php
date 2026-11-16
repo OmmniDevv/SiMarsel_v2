@@ -22,9 +22,9 @@ class TasklistMigrationValidator
     public const SKIP = 'SKIP';
 
     /**
-     * Migration file prefix of the TASK-19 changes.
+     * Migration file prefixes of the TASK-19 changes, including the agenda move and rollback guard (PR revision).
      */
-    private const MIGRATION_PREFIX = '2026_11_13_';
+    private const MIGRATION_PREFIXES = ['2026_11_13_', '2026_11_16_'];
 
     private const LEGACY_STATUSES = ['ready_for_qa', 'on_qa'];
 
@@ -61,6 +61,8 @@ class TasklistMigrationValidator
             $this->repliesStayInTheirTask(),
             $this->ownerIsNotCollaborator(),
             $this->historyForeignKeysRestrict(),
+            $this->agendasCopied(),
+            $this->agendaCopiesMatch(),
         ];
     }
 
@@ -74,7 +76,8 @@ class TasklistMigrationValidator
 
     private function migrationsApplied(): array
     {
-        $files = collect(glob(database_path('migrations/'.self::MIGRATION_PREFIX.'*.php')))
+        $files = collect(self::MIGRATION_PREFIXES)
+            ->flatMap(fn (string $prefix) => glob(database_path("migrations/{$prefix}*.php")))
             ->map(fn (string $path) => basename($path, '.php'));
         $missing = $files->diff(DB::table('migrations')->pluck('migration'))->values();
 
@@ -266,6 +269,61 @@ class TasklistMigrationValidator
         return $wrong->isEmpty()
             ? $this->result($check, self::PASS, 'task_id, account_id, author_id, parent_comment_id')
             : $this->result($check, self::FAIL, $wrong->implode(', '));
+    }
+
+    /**
+     * Every agenda of schedule_events has its copy in calendar_events, which is the only source the application reads.
+     */
+    private function agendasCopied(): array
+    {
+        $missing = DB::table('schedule_events')
+            ->whereNotExists(fn ($query) => $query->from('calendar_events')
+                ->whereColumn('calendar_events.legacy_schedule_event_id', 'schedule_events.id'))
+            ->count();
+
+        return $this->countResult('Agenda lama tersalin ke calendar_events', $missing, 'agenda schedule_events belum punya salinan');
+    }
+
+    /**
+     * A copy that was not edited since the move still matches its original: dates, shared or internal, target
+     * divisions, organising division, related task, and creator. Edited copies are newer than schedule_events,
+     * which the application no longer writes, so they are counted but not compared.
+     */
+    private function agendaCopiesMatch(): array
+    {
+        $check = 'Salinan agenda sama dengan aslinya (termasuk akses internal)';
+        $targets = fn (string $table, string $key) => DB::table($table)->get([$key, 'division_id'])
+            ->groupBy($key)
+            ->map(fn ($rows) => $rows->pluck('division_id')->map(fn ($id) => (int) $id)->sort()->values()->all());
+        $originalTargets = $targets('schedule_event_divisions', 'schedule_event_id');
+        $copyTargets = $targets('calendar_event_divisions', 'calendar_event_id');
+        $originals = DB::table('schedule_events')->get()->keyBy('id');
+        $date = fn ($value) => $value === null ? null : substr((string) $value, 0, 10);
+
+        $copies = DB::table('calendar_events')->whereNotNull('legacy_schedule_event_id')->get();
+        $edited = 0;
+        $different = $copies->filter(function (object $copy) use ($originals, $originalTargets, $copyTargets, $date, &$edited) {
+            $original = $originals[$copy->legacy_schedule_event_id] ?? null;
+
+            if ($original === null) {
+                return false;
+            }
+
+            if ($copy->deleted_at !== null || (string) $copy->updated_at !== (string) $original->updated_at) {
+                $edited++;
+
+                return false;
+            }
+
+            return [$copy->title, $copy->description, $copy->division_id, $date($copy->start_at), $date($copy->end_at), (bool) $copy->is_shared, $copy->task_id, $copy->creator_id, $copyTargets[$copy->id] ?? []]
+                != [$original->title, $original->description, $original->owner_division_id, $date($original->start_date), $date($original->end_date), (bool) $original->is_shared, $original->task_id, $original->creator_id, $originalTargets[$original->id] ?? []];
+        })->count();
+
+        if ($different > 0) {
+            return $this->result($check, self::FAIL, "{$different} salinan berbeda dari agenda aslinya");
+        }
+
+        return $this->result($check, self::PASS, ($copies->count() - $edited).' sama'.($edited > 0 ? ", {$edited} sudah diubah setelah dipindah" : ''));
     }
 
     private function countResult(string $check, int $count, string $problem): array
