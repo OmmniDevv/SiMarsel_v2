@@ -27,7 +27,7 @@
                 class="h-9 w-full rounded-lg border border-line bg-white pr-3 pl-9 text-sm text-ink placeholder:text-label focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none">
         </label>
 
-        <label x-show="user.role !== 'staff'" class="block min-w-0 flex-1 sm:max-w-60 sm:flex-none">
+        <label x-show="user.role !== 'staff' && view !== 'timeline'" class="block min-w-0 flex-1 sm:max-w-60 sm:flex-none">
             <span class="sr-only">Divisi</span>
             <select id="task-division" x-model="filters.division" class="{{ $selectClass }}" :disabled="user.role === 'manager'" title="Divisi">
                 <template x-if="user.role === 'admin'"><option value="">Semua Divisi</option></template>
