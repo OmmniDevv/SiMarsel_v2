@@ -1208,10 +1208,13 @@ Alpine.data('taskTimeline', () => ({
         return this.division ?? (this.user.role === 'manager' ? (this.user.division ?? '') : '');
     },
 
+    // Label mengikuti divisi yang benar-benar dikirim ke backend; bila namanya belum dimuat, tampilkan kodenya.
     get timelineScopeLabel() {
+        if (!this.timelineDivision) return 'Semua Divisi';
+
         const division = this.timelineDivisionOptions.find((item) => item.code_division === this.timelineDivision);
 
-        return division ? `Divisi ${division.name}` : 'Semua Divisi';
+        return `Divisi ${division?.name ?? this.timelineDivision}`;
     },
 
     // Master divisi; bila gagal dimuat, pakai divisi dari meta Tasklist agar filter tetap tersedia.
