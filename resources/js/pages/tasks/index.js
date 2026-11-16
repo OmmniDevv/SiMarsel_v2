@@ -7,6 +7,7 @@ import {
     createTask,
     fetchAssignmentOptions,
     fetchCalendar,
+    fetchDivisions,
     fetchSchedule,
     fetchActivities,
     fetchTask,
@@ -294,12 +295,13 @@ Alpine.data('tasklist', () => ({
 
     /**
      * Filter tambahan untuk item Timeline/Calendar yang tidak diambil oleh daftar Task.
+     * Timeline memakai filter divisinya sendiri (lintas divisi), sehingga divisi Tasklist dapat dilewati.
      */
-    matchesFilters(item) {
+    matchesFilters(item, { division = true } = {}) {
         const keyword = this.filters.search.trim().toLowerCase();
 
         return (!keyword || (item.title ?? '').toLowerCase().includes(keyword))
-            && (!this.filters.division || item.division?.code_division === this.filters.division)
+            && (!division || !this.filters.division || item.division?.code_division === this.filters.division)
             && (!this.filters.priority || !item.priority || item.priority === this.filters.priority)
             && (!this.filters.status || !item.status || item.status === this.filters.status);
     },
@@ -1189,11 +1191,43 @@ Alpine.data('taskTimeline', () => ({
     items: [],
     state: 'idle',
     message: '',
+    periodSequence: 0,
+
+    // Filter divisi Timeline terpisah dari cakupan Tasklist: semua role dapat melihat jadwal lintas divisi.
+    // Default Admin dan Staff: Semua Divisi; Manajer: divisinya, dan dapat memilih Semua Divisi atau divisi lain.
+    division: null,
+    timelineDivisions: [],
 
     init() {
         this.$watch('view', (view) => view === 'timeline' && this.loadPeriod());
-        this.$watch('filters.division', () => this.view === 'timeline' && this.loadPeriod());
+        this.$watch('division', () => this.view === 'timeline' && this.loadPeriod());
         if (this.view === 'timeline') this.loadPeriod();
+    },
+
+    get timelineDivision() {
+        return this.division ?? (this.user.role === 'manager' ? (this.user.division ?? '') : '');
+    },
+
+    get timelineScopeLabel() {
+        const division = this.timelineDivisionOptions.find((item) => item.code_division === this.timelineDivision);
+
+        return division ? `Divisi ${division.name}` : 'Semua Divisi';
+    },
+
+    // Master divisi; bila gagal dimuat, pakai divisi dari meta Tasklist agar filter tetap tersedia.
+    get timelineDivisionOptions() {
+        return this.timelineDivisions.length ? this.timelineDivisions : this.divisions;
+    },
+
+    async loadTimelineDivisions() {
+        if (this.timelineDivisions.length) return;
+
+        try {
+            const { data } = await fetchDivisions();
+            this.timelineDivisions = data.map(({ code_division, name }) => ({ code_division, name }));
+        } catch {
+            this.timelineDivisions = [];
+        }
     },
 
     get length() {
@@ -1231,14 +1265,19 @@ Alpine.data('taskTimeline', () => ({
         this.loadPeriod();
     },
 
+    // Respons periode atau divisi sebelumnya yang datang terlambat diabaikan.
     async loadPeriod() {
+        const sequence = ++this.periodSequence;
         this.state = 'loading';
+        this.loadTimelineDivisions();
 
         try {
-            const { data } = await fetchSchedule({ from: this.start, to: this.end, division: this.filters.division });
+            const { data } = await fetchSchedule({ from: this.start, to: this.end, division: this.timelineDivision });
+            if (sequence !== this.periodSequence) return;
             this.items = data;
             this.state = 'ready';
         } catch (error) {
+            if (sequence !== this.periodSequence) return;
             this.items = [];
             this.state = error?.unavailable ? 'unavailable' : 'error';
             this.message = taskErrorMessage(error, 'Jadwal gagal dimuat.');
@@ -1250,8 +1289,8 @@ Alpine.data('taskTimeline', () => ({
         const total = this.length;
 
         return this.items
-            // Filter tugas (cari, prioritas, status) ikut berlaku; agenda bersama selalu tampil.
-            .filter((item) => item.type === 'event' || this.matchesFilters(item))
+            // Filter tugas (cari, prioritas, status) ikut berlaku; divisi sudah disaring backend; agenda selalu tampil.
+            .filter((item) => item.type === 'event' || this.matchesFilters(item, { division: false }))
             .map((item) => {
                 const from = item.start_date ?? item.end_date;
                 const to = item.end_date ?? item.start_date;
@@ -1276,9 +1315,11 @@ Alpine.data('taskTimeline', () => ({
         return this.items.filter((item) => !item.start_date && !item.end_date).length;
     },
 
+    // Tugas, atau agenda yang terkait tugas, membuka detail tugas bila backend mengizinkan (can_view_detail);
+    // selain itu hanya informasi jadwal yang ditampilkan.
     select(item) {
-        if (item.type === 'task' && item.can_view_detail) {
-            this.openTask(item);
+        if (item.can_view_detail === true && item.task_id) {
+            this.openTask({ id: item.task_id, can_view_detail: true });
             return;
         }
 

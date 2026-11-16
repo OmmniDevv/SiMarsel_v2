@@ -1,7 +1,7 @@
 import { http } from '../http';
 
 /**
- * API daftar, meta, monitoring, detail, pembuatan, pembaruan, penugasan, status, evidence, review, dan histori tugas sudah tersedia dan dipakai langsung.
+ * API daftar, meta, monitoring, detail, pembuatan, pembaruan, penugasan, status, evidence, review, histori, dan jadwal (Timeline) tugas sudah tersedia dan dipakai langsung.
  * Endpoint Tasklist lain yang belum terintegrasi tetap menunggu VITE_TASK_API_READY=true.
  * Kontrak lengkap ada di docs/api/tasks.md.
  *
@@ -63,7 +63,11 @@ export const reviewTask = (id, body) => http(`/api/tasks/${id}/reviews`, { metho
 // Histori aktivitas tidak bergantung pada VITE_TASK_API_READY: API-nya sudah tersedia.
 export const fetchActivities = (id) => http(`/api/tasks/${id}/activities`);
 
-export const fetchSchedule = (params) => request(`/api/tasks/schedule${query(params)}`);
+// Jadwal Timeline tidak bergantung pada VITE_TASK_API_READY: API-nya sudah tersedia.
+export const fetchSchedule = (params) => http(`/api/tasks/schedule${query(params)}`);
+
+// Master divisi untuk filter Timeline: jadwal lintas divisi dapat difokuskan ke divisi mana pun oleh semua role.
+export const fetchDivisions = () => http('/api/divisions');
 
 export const fetchCalendar = (params) => request(`/api/tasks/calendar${query(params)}`);
 
