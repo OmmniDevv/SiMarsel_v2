@@ -264,7 +264,7 @@ class PerformancePageTest extends TestCase
         $this->actingAs($this->employee)
             ->get('/dashboard')
             ->assertOk()
-            ->assertSeeInOrder(['Analitik', 'Analisis Performa', 'Ringkasan', 'Produk', 'Sistem'])
+            ->assertSeeInOrder(['Analitik', 'Analisis Performa', 'Ringkasan', 'Sistem'])
             ->assertSee('href="'.route('dashboard').'"', false)
             ->assertSee('aria-current="page"', false);
     }
