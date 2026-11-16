@@ -245,7 +245,7 @@ class TaskReviewTest extends TestCase
             [TaskActivity::RESUBMITTED, TaskActivity::REVISION_REQUESTED],
             $activities->pluck('action')->all(),
         );
-        $this->assertSame(['old' => 'on_review', 'new' => 'in_progress'], $activities[1]->changes['status']);
+        $this->assertSame(['old' => 'on_review', 'new' => 'in_progress'], $activities[1]->orderedChanges()['status']);
         $this->assertSame('Lengkapi data bulan Oktober.', $activities[1]->changes['review']['new']['note']);
         $this->assertSame($this->manager->id, $activities[1]->account_id);
     }

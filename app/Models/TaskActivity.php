@@ -140,12 +140,34 @@ class TaskActivity extends Model
     }
 
     /**
+     * The stored changes in a fixed order: fields in the order of FIELD_LABELS (other keys such as evidence and review
+     * after them), each as old then new. MySQL's JSON column does not keep key order, so without this the history would
+     * read differently depending on the database.
+     *
+     * @return array<string, mixed>
+     */
+    public function orderedChanges(): array
+    {
+        // $this->changes is Eloquent's own dirty-tracking property, not the column.
+        $changes = $this->getAttribute('changes') ?? [];
+        $rank = array_flip(array_keys(self::FIELD_LABELS));
+
+        uksort($changes, fn (string $a, string $b) => [$rank[$a] ?? PHP_INT_MAX, $a] <=> [$rank[$b] ?? PHP_INT_MAX, $b]);
+
+        return array_map(
+            fn (mixed $change) => is_array($change) && array_key_exists('old', $change) && array_key_exists('new', $change)
+                ? ['old' => $change['old'], 'new' => $change['new']] + $change
+                : $change,
+            $changes,
+        );
+    }
+
+    /**
      * Human-readable summary of what changed, built from the stored old and new values.
      */
     public function description(): string
     {
-        // $this->changes is Eloquent's own dirty-tracking property, not the column.
-        $changes = $this->getAttribute('changes') ?? [];
+        $changes = $this->orderedChanges();
         $parts = [];
 
         foreach ($changes as $field => $change) {

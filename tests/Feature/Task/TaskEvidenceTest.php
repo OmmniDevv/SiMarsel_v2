@@ -112,7 +112,8 @@ class TaskEvidenceTest extends TestCase
 
         $this->assertSame($task->id, $activity->task_id);
         $this->assertSame($this->staff->id, $activity->account_id);
-        $this->assertSame(
+        // assertEquals: the raw JSON column does not keep key order on MySQL.
+        $this->assertEquals(
             ['evidence' => ['old' => null, 'new' => ['id' => $evidence->id, 'type' => 'link', 'name' => 'https://example.com/hasil']]],
             $activity->changes,
         );
