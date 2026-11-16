@@ -9,7 +9,7 @@
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <h2 id="calendar-title" class="text-base font-semibold text-ink capitalize" x-text="monthLabel"></h2>
-            <p class="mt-0.5 text-sm text-muted" x-text="scopeLabel"></p>
+            <p class="mt-0.5 text-sm text-muted" x-text="calendarScopeLabel"></p>
         </div>
         <div class="flex items-center gap-2">
             <button type="button" class="{{ $button }} px-2.5" @click="shift(-1)" aria-label="Bulan sebelumnya"><x-icon name="chevron-left" /></button>
@@ -51,7 +51,7 @@
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-        <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-navy"></span> Agenda bersama</span>
+        <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-navy"></span> Agenda (bersama atau internal divisi)</span>
         <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-primary"></span> Deadline tugas</span>
         <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-red-600"></span> Ada deadline terlewat (masih aktif)</span>
     </div>
@@ -69,7 +69,7 @@
 
     <div x-show="state === 'ready'" x-cloak class="mt-5 grid gap-4 lg:grid-cols-2">
         <div>
-            <h3 class="text-sm font-semibold text-ink">Agenda Bersama · <span x-text="formatDate(selected)"></span></h3>
+            <h3 class="text-sm font-semibold text-ink">Agenda · <span x-text="formatDate(selected)"></span></h3>
             <p class="mt-0.5 text-xs text-muted">Informasi umum kegiatan lintas divisi. Pilih agenda untuk melihat ringkasannya.</p>
             <ul class="mt-3 flex flex-col gap-2">
                 <template x-for="event in selectedEvents" :key="event.id">
@@ -77,12 +77,15 @@
                         <button type="button" class="w-full rounded-lg border bg-white p-3 text-left hover:border-navy/40 focus-visible:outline-2 focus-visible:outline-primary"
                             :class="isPicked('event', event) ? 'border-navy ring-1 ring-navy' : 'border-line'" :aria-expanded="isPicked('event', event)" @click="pick('event', event)">
                             <span class="block text-sm font-semibold break-words text-ink" x-text="event.title"></span>
-                            <span class="mt-0.5 block text-xs text-muted" x-text="event.division?.name ?? 'Lintas divisi'"></span>
+                            <span class="mt-0.5 block text-xs text-muted">
+                                <span x-text="event.division?.name ?? 'Lintas divisi'"></span>
+                                <span x-text="event.target_divisions?.length ? ` · Agenda internal ${event.target_divisions.map(({ name }) => name).join(', ')}` : ' · Agenda bersama'"></span>
+                            </span>
                         </button>
                     </li>
                 </template>
             </ul>
-            <p x-show="!selectedEvents.length" class="mt-3 rounded-lg border border-dashed border-line bg-soft px-3 py-4 text-center text-sm text-muted">Tidak ada agenda bersama pada tanggal ini.</p>
+            <p x-show="!selectedEvents.length" class="mt-3 rounded-lg border border-dashed border-line bg-soft px-3 py-4 text-center text-sm text-muted">Tidak ada agenda pada tanggal ini.</p>
         </div>
 
         <div>
@@ -117,7 +120,7 @@
             <div class="rounded-lg border p-4 lg:col-span-2" :class="picked.kind === 'task' ? 'border-primary/40 bg-primary-soft/40' : 'border-navy/30 bg-soft'" data-testid="calendar-summary" role="region" aria-label="Ringkasan item terpilih">
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
-                        <p class="text-[11px] font-bold tracking-wide text-label uppercase" x-text="picked.kind === 'task' ? 'Ringkasan Tugas' : 'Ringkasan Agenda Bersama'"></p>
+                        <p class="text-[11px] font-bold tracking-wide text-label uppercase" x-text="picked.kind === 'task' ? 'Ringkasan Tugas' : 'Ringkasan Agenda'"></p>
                         <h4 class="mt-0.5 text-base font-semibold break-words text-ink" x-text="picked.item.title"></h4>
                     </div>
                     <button type="button" class="grid size-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-white hover:text-ink" @click="picked = null" aria-label="Tutup ringkasan">
@@ -137,8 +140,15 @@
                         <dt class="{{ $summaryLabel }}">Status</dt>
                         <dd><span class="{{ $badge }}" :class="statusOf(picked.item.status).badge" x-text="statusOf(picked.item.status).label"></span></dd>
                     </div>
+                    <div class="{{ $summaryRow }}" x-show="picked.kind === 'task'">
+                        <dt class="{{ $summaryLabel }}">PIC</dt><dd class="text-ink" x-text="picked.item.pic?.fullname ?? '-'"></dd>
+                    </div>
+                    <div class="{{ $summaryRow }}" x-show="picked.kind === 'task'">
+                        <dt class="{{ $summaryLabel }}">Prioritas</dt>
+                        <dd><span class="{{ $badge }}" :class="priorityOf(picked.item.priority).badge" x-text="priorityOf(picked.item.priority).label"></span></dd>
+                    </div>
                     <div class="{{ $summaryRow }}" x-show="picked.item.description">
-                        <dt class="{{ $summaryLabel }}">Deskripsi</dt><dd class="line-clamp-3 text-ink" x-text="picked.item.description"></dd>
+                        <dt class="{{ $summaryLabel }}" x-text="picked.kind === 'task' ? 'Deskripsi' : 'Keterangan'"></dt><dd class="line-clamp-3 text-ink" x-text="picked.item.description"></dd>
                     </div>
                 </dl>
 
@@ -146,10 +156,11 @@
                     <button x-show="canOpen(picked.item)" type="button" class="{{ $primaryButton }}" @click="focusTask(picked.item)">Lihat Detail</button>
                     <p x-show="!canOpen(picked.item)" class="text-xs text-muted">Detail tugas ini hanya dapat dibuka oleh pengguna yang berwenang.</p>
                 </div>
-                <div class="mt-4" x-show="picked.kind === 'event' && picked.item.task_id">
-                    <button type="button" class="{{ $primaryButton }}" @click="focusTask({ id: picked.item.task_id, can_view_detail: picked.item.can_view_detail })">Lihat Detail Tugas Terkait</button>
+                <div class="mt-4" x-show="picked.kind === 'event' && canOpenEventTask(picked.item)">
+                    <button type="button" class="{{ $primaryButton }}" @click="focusTask({ id: picked.item.task_id, can_view_detail: true })">Lihat Detail Tugas Terkait</button>
                 </div>
-                <p x-show="picked.kind === 'event' && !picked.item.task_id" class="mt-3 text-xs text-muted">Agenda bersama ini tidak terhubung ke tugas, sehingga tidak dibuka di Papan.</p>
+                <p x-show="picked.kind === 'event' && picked.item.task_id && !canOpenEventTask(picked.item)" class="mt-3 text-xs text-muted">Agenda ini terkait tugas yang detailnya hanya dapat dibuka oleh pengguna yang berwenang.</p>
+                <p x-show="picked.kind === 'event' && !picked.item.task_id" class="mt-3 text-xs text-muted">Agenda ini tidak terhubung ke tugas, sehingga tidak dibuka di Papan.</p>
             </div>
         </template>
     </div>
