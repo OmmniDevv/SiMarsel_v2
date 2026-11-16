@@ -25,7 +25,6 @@ class Sidebar extends Component
             'Analitik' => [
                 $this->group('Analisis Performa', 'chart', [
                     $this->link('Ringkasan', 'chart', 'dashboard'),
-                    $this->link('Produk', 'cube', 'performance.products'),
                 ]),
             ],
             'Pekerjaan' => [
