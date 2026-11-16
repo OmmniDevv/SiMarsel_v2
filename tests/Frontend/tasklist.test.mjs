@@ -13,7 +13,8 @@ import vm from 'node:vm';
  * - PATCH /api/tasks/{id}/assignment (AssignTaskRequest: pic_id, division_id, version) from the detail;
  * - POST /api/tasks/{id}/evidences (StoreTaskEvidenceRequest: file or url, note) with the default VITE_TASK_API_READY=false;
  * - GET /api/tasks/{id}/activities for the detail's history, with its loading, error, and empty states;
- * - GET /api/tasks/monitoring?scope=tasklist for the summary KPIs, with the same filters as the list.
+ * - GET /api/tasks/monitoring?scope=tasklist for the summary KPIs, with the same filters as the list;
+ * - GET /api/tasks/schedule for the Timeline, with its own division filter across divisions.
  */
 const PIC = { id: 10, role: { code_role: 'EMP' }, division: { code_division: 'MKT' } };
 const ADMIN = { id: 1, role: { code_role: 'ADM' }, division: null };
@@ -999,6 +1000,159 @@ test('While a new filter is loading the summary shows — instead of the previou
     assert.equal(board.metric('total_tasks'), 7);
     assert.equal(board.completionRateText, '0%');
     assert.deepEqual([...board.statusSummary].map(({ value }) => value), [0, 4, 3, 0, 0, 0]);
+});
+
+const scheduleItem = (overrides = {}) => ({
+    id: 7,
+    type: 'task',
+    title: 'Konten promo November',
+    division: { code_division: 'MKT', name: 'Marketing' },
+    target_divisions: [],
+    start_date: '2026-11-17',
+    end_date: '2026-11-19',
+    status: 'in_progress',
+    priority: 'high',
+    task_id: 7,
+    can_view_detail: true,
+    ...overrides,
+});
+const divisionList = [{ id: 1, code_division: 'FIN', name: 'Finance' }, { id: 2, code_division: 'MKT', name: 'Marketing' }, { id: 3, code_division: 'SLS', name: 'Sales' }];
+const scheduleRequests = (requests) => requests.filter(({ url }) => url.startsWith('/api/tasks/schedule'));
+
+async function timelinePage(items, user = ADMIN, extraRoutes = {}) {
+    const page = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [], meta: { status_counts: {} } } }),
+        'GET /api/divisions': () => ({ json: { data: divisionList } }),
+        'GET /api/tasks/schedule': () => ({ json: { data: typeof items === 'function' ? items() : items } }),
+        ...extraRoutes,
+    }, user);
+    page.board.view = 'timeline';
+    const timeline = page.instance('taskTimeline');
+    timeline.start = '2026-11-16';
+
+    return { ...page, timeline };
+}
+
+test('With the default config, the Timeline loads the shared schedule of the week and draws each item as a date range', async () => {
+    const { timeline, requests } = await timelinePage([
+        scheduleItem(),
+        scheduleItem({ id: 8, title: 'Laporan bulanan', division: { code_division: 'FIN', name: 'Finance' }, start_date: null, end_date: '2026-11-20', status: 'todo', task_id: 8, can_view_detail: false }),
+        scheduleItem({ id: 3, type: 'event', title: 'Rapat koordinasi', division: null, start_date: '2026-11-16', end_date: '2026-11-22', status: null, priority: null, task_id: null, can_view_detail: false }),
+        scheduleItem({ id: 9, title: 'Tanpa tanggal', start_date: null, end_date: null }),
+    ]);
+    await timeline.loadPeriod();
+
+    const sent = scheduleRequests(requests);
+    assert.equal(sent.length, 1, 'the schedule is requested although VITE_TASK_API_READY is false');
+    assert.equal(sent[0].url, '/api/tasks/schedule?from=2026-11-16&to=2026-11-22', 'Admin: Semua Divisi by default');
+    assert.equal(timeline.state, 'ready');
+    assert.equal(timeline.timelineScopeLabel, 'Semua Divisi');
+
+    const rows = Object.fromEntries([...timeline.rows].map((row) => [row.title, row]));
+    assert.deepEqual(Object.keys(rows).sort(), ['Konten promo November', 'Laporan bulanan', 'Rapat koordinasi']);
+    assert.deepEqual([rows['Konten promo November'].left, rows['Konten promo November'].width], [`${(1 / 7) * 100}%`, `${(3 / 7) * 100}%`]);
+    assert.equal(rows['Konten promo November'].division.name, 'Marketing');
+    assert.equal(rows['Konten promo November'].status, 'in_progress');
+    assert.equal(rows['Laporan bulanan'].partial, true, 'a task with only a deadline is one day on the deadline');
+    assert.equal(rows['Laporan bulanan'].width, `${(1 / 7) * 100}%`);
+    assert.equal(rows['Rapat koordinasi'].width, '100%');
+    assert.equal(timeline.undatedCount, 1);
+
+    // Two-week mode and the next period ask the backend for the new range.
+    timeline.setMode('biweek');
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.equal(scheduleRequests(requests).at(-1).url, '/api/tasks/schedule?from=2026-11-16&to=2026-11-29');
+    timeline.shift(1);
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.equal(scheduleRequests(requests).at(-1).url, '/api/tasks/schedule?from=2026-11-30&to=2026-12-13');
+});
+
+test('Every role sees the schedule across divisions and can focus a division without changing the Tasklist scope', async () => {
+    // Manager: own division by default, can switch to Semua Divisi or another division.
+    const manager = await timelinePage([scheduleItem()], MANAGER);
+    manager.board.filters.division = 'MKT';
+    await manager.timeline.loadPeriod();
+    assert.equal(scheduleRequests(manager.requests).at(-1).url, '/api/tasks/schedule?from=2026-11-16&to=2026-11-22&division=MKT');
+    assert.equal(manager.timeline.timelineScopeLabel, 'Divisi Marketing');
+    manager.timeline.division = '';
+    await manager.timeline.loadPeriod();
+    assert.equal(scheduleRequests(manager.requests).at(-1).url, '/api/tasks/schedule?from=2026-11-16&to=2026-11-22');
+    manager.timeline.division = 'SLS';
+    await manager.timeline.loadPeriod();
+    assert.equal(scheduleRequests(manager.requests).at(-1).url, '/api/tasks/schedule?from=2026-11-16&to=2026-11-22&division=SLS');
+    assert.equal(manager.timeline.timelineScopeLabel, 'Divisi Sales');
+    assert.equal(manager.board.filters.division, 'MKT', 'the Board stays on the manager division');
+    assert.deepEqual([...manager.timeline.timelineDivisionOptions].map(({ code_division }) => code_division), ['FIN', 'MKT', 'SLS'], 'every division can be chosen');
+
+    // Staff: Semua Divisi by default and can focus any division.
+    const staff = await timelinePage([scheduleItem({ division: { code_division: 'FIN', name: 'Finance' }, can_view_detail: false })], PIC);
+    await staff.timeline.loadPeriod();
+    assert.equal(scheduleRequests(staff.requests).at(-1).url, '/api/tasks/schedule?from=2026-11-16&to=2026-11-22');
+    staff.timeline.division = 'FIN';
+    await staff.timeline.loadPeriod();
+    assert.equal(scheduleRequests(staff.requests).at(-1).url, '/api/tasks/schedule?from=2026-11-16&to=2026-11-22&division=FIN');
+    assert.deepEqual([...staff.timeline.rows].map(({ title }) => title), ['Konten promo November'], 'tasks of another division are shown');
+
+    // Search, priority, and status of the Tasklist still apply to tasks; agendas stay.
+    const filtered = await timelinePage([scheduleItem(), scheduleItem({ id: 3, type: 'event', title: 'Rapat koordinasi', status: null, priority: null, task_id: null, can_view_detail: false })]);
+    filtered.board.filters.status = 'done';
+    await filtered.timeline.loadPeriod();
+    assert.deepEqual([...filtered.timeline.rows].map(({ title }) => title), ['Rapat koordinasi']);
+});
+
+test('Choosing a schedule item opens the task detail only when the backend allows it, otherwise only the schedule information', async () => {
+    const { board, timeline, toasts } = await timelinePage([]);
+
+    timeline.select(scheduleItem({ id: 7, task_id: 7, can_view_detail: true }));
+    assert.equal(board.detailId, 7);
+    board.detailId = null;
+
+    timeline.select(scheduleItem({ id: 3, type: 'event', title: 'Review kampanye', task_id: 12, can_view_detail: true }));
+    assert.equal(board.detailId, 12, 'an agenda linked to a task opens that task');
+    board.detailId = null;
+
+    timeline.select(scheduleItem({ id: 8, title: 'Laporan bulanan', division: { code_division: 'FIN', name: 'Finance' }, can_view_detail: false }));
+    assert.equal(board.detailId, null);
+    assert.equal(toasts.at(-1).title, 'Laporan bulanan');
+    assert.match(toasts.at(-1).text, /Finance · 17 Nov 2026 – 19 Nov 2026 · Detail hanya untuk pengguna berwenang\./);
+
+    timeline.select(scheduleItem({ id: 4, type: 'event', title: 'Libur bersama', division: null, task_id: null, can_view_detail: false }));
+    assert.equal(board.detailId, null);
+    assert.match(toasts.at(-1).text, /^Lintas divisi · /);
+});
+
+test('The Timeline shows loading, empty, and error states, and ignores the response of an earlier period', async () => {
+    let reply = () => ({ json: { data: [] } });
+    const states = [];
+    const { timeline } = await timelinePage([], ADMIN, {
+        'GET /api/tasks/schedule': () => {
+            states.push(timeline.state);
+            return reply();
+        },
+    });
+    await timeline.loadPeriod();
+    assert.deepEqual(states, ['loading']);
+    assert.equal(timeline.state, 'ready');
+    assert.equal(timeline.rows.length, 0, 'empty state');
+
+    reply = () => ({ status: 500, json: { message: 'Server Error' } });
+    await timeline.loadPeriod();
+    assert.equal(timeline.state, 'error');
+    assert.equal(timeline.message, 'Jadwal gagal dimuat.');
+
+    // The previous week answers after the next week: the next week stays on screen.
+    let releaseOld;
+    reply = () => new Promise((resolve) => {
+        releaseOld = () => resolve({ json: { data: [scheduleItem({ title: 'Minggu lalu', start_date: '2026-11-09', end_date: '2026-11-10' })] } });
+    });
+    const older = timeline.loadPeriod();
+    timeline.start = '2026-11-23';
+    reply = () => ({ json: { data: [scheduleItem({ title: 'Minggu depan', start_date: '2026-11-24', end_date: '2026-11-25' })] } });
+    await timeline.loadPeriod();
+    releaseOld();
+    await older;
+    assert.equal(timeline.state, 'ready');
+    assert.deepEqual([...timeline.rows].map(({ title }) => title), ['Minggu depan']);
 });
 
 test('With the default config, the PIC sends a file and a link as evidence and the saved evidence shows again in the detail', async () => {
