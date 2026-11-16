@@ -58,6 +58,8 @@ class TaskPageTest extends TestCase
                 ->assertSee('x-data="taskCalendar"', false)
                 ->assertSee('x-text="calendarScopeLabel"', false)
                 ->assertSee('canOpenEventTask(picked.item)', false)
+                ->assertSee('@click="choose(cell.iso)"', false)
+                ->assertSee('x-if="pickedVisible"', false)
                 ->assertSee('x-data="taskDetail"', false)
                 ->assertSee('Belum ada tugas yang tersedia.')
                 ->assertSee('Tidak ada tugas yang sesuai dengan filter.')

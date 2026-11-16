@@ -1261,6 +1261,49 @@ test('Calendar items open the task detail only when the backend allows it', asyn
     assert.equal(board.view, 'board');
 });
 
+test('A day of another month shows no partial marks and choosing it opens that month from the backend', async () => {
+    const { calendar, requests } = await calendarPage(() => ({ json: { data: {
+        events: [calendarEvent({ title: 'Rapat akhir bulan', start_date: '2026-11-30', end_date: '2026-12-02' })],
+        deadlines: calendarRequests(requests).at(-1).url.includes('2026-12')
+            ? [{ ...task({ title: 'Laporan Desember', deadline: '2026-12-01' }), description: null, is_overdue: false }]
+            : [],
+    } } }));
+    await calendar.loadPeriod();
+
+    const cell = (iso) => calendar.cells.find((item) => item.iso === iso);
+    assert.deepEqual([cell('2026-11-30').events, cell('2026-12-01').events, cell('2026-12-01').deadlines], [1, 0, 0], 'November data is not shown as the whole of 1 Dec');
+
+    calendar.choose('2026-12-01');
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.equal(calendarRequests(requests).at(-1).url, '/api/tasks/calendar?month=2026-12');
+    assert.equal(calendar.month, '2026-12');
+    assert.equal(calendar.selected, '2026-12-01');
+    assert.deepEqual([...calendar.selectedDeadlines].map(({ title }) => title), ['Laporan Desember']);
+
+    calendar.choose('2026-12-02');
+    assert.equal(calendarRequests(requests).length, 2, 'a day of the shown month does not reload');
+});
+
+test('The summary of a chosen item follows the filters and the latest data of the month', async () => {
+    let status = 'todo';
+    const { calendar } = await calendarPage(() => ({ json: { data: {
+        events: [],
+        deadlines: [{ ...task({ deadline: '2026-11-17', status }), description: null, is_overdue: false }],
+    } } }));
+    await calendar.loadPeriod();
+    calendar.pick('task', calendar.selectedDeadlines[0]);
+    assert.equal(calendar.pickedVisible, true);
+
+    calendar.filters.status = 'done';
+    assert.equal(calendar.pickedVisible, false, 'a task hidden by the filter has no summary');
+    calendar.filters.status = '';
+
+    status = 'in_progress';
+    await calendar.loadPeriod();
+    assert.equal(calendar.pickedVisible, true);
+    assert.equal(calendar.picked.item.status, 'in_progress', 'the summary shows the reloaded task');
+});
+
 test('The Calendar shows loading and error states, and ignores the response of an earlier month', async () => {
     let reply = () => ({ json: { data: { events: [], deadlines: [] } } });
     const states = [];
