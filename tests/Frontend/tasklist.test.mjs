@@ -1093,6 +1093,15 @@ test('Every role sees the schedule across divisions and can focus a division wit
     assert.equal(scheduleRequests(staff.requests).at(-1).url, '/api/tasks/schedule?from=2026-11-16&to=2026-11-22&division=FIN');
     assert.deepEqual([...staff.timeline.rows].map(({ title }) => title), ['Konten promo November'], 'tasks of another division are shown');
 
+    // Before the division names load (or if they fail), the label still names the division that was requested.
+    const early = await timelinePage([scheduleItem()], MANAGER, { 'GET /api/divisions': () => ({ status: 500, json: { message: 'Server Error' } }) });
+    early.board.divisions = [];
+    await early.timeline.loadPeriod();
+    assert.equal(scheduleRequests(early.requests).at(-1).url, '/api/tasks/schedule?from=2026-11-16&to=2026-11-22&division=MKT');
+    assert.equal(early.timeline.timelineScopeLabel, 'Divisi MKT', 'never Semua Divisi while a division is requested');
+    early.timeline.division = '';
+    assert.equal(early.timeline.timelineScopeLabel, 'Semua Divisi');
+
     // Search, priority, and status of the Tasklist still apply to tasks; agendas stay.
     const filtered = await timelinePage([scheduleItem(), scheduleItem({ id: 3, type: 'event', title: 'Rapat koordinasi', status: null, priority: null, task_id: null, can_view_detail: false })]);
     filtered.board.filters.status = 'done';
