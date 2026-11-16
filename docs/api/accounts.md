@@ -86,6 +86,10 @@ Memperbarui akun berdasarkan ID. **Kirim hanya field yang ingin diubah**, karena
 
 **200 OK**: objek Account terbaru di `data`, dengan `"message": "Akun berhasil diperbarui."`
 
+Setiap kali role berubah, perubahannya dicatat di tabel audit `account_role_changes` (role lama, role baru, siapa yang
+mengubah, waktu). Pembuatan akun juga dicatat dengan role lama kosong. Hak akses Tasklist langsung mengikuti role baru
+pada request berikutnya, tanpa mengubah histori tugas. Belum ada endpoint untuk membaca audit ini.
+
 **422**, jika Manager mencoba mengubah role akunnya sendiri:
 
 ```json

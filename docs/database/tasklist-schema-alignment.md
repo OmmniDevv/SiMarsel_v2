@@ -186,15 +186,15 @@ kedua.
   bernilai `false` dan `editable_fields`, `next_statuses` kosong. Perubahan lewat API ditolak `403`.
 - PIC yang dilepas tetap melihat task lewat `all_tasks`, tetapi hilang dari `my_tasks` dan kehilangan hak PIC.
 - Perubahan role berlaku pada request berikutnya (permission dibaca dari database) tanpa mengubah histori task.
-- Hapus Task Card belum punya endpoint; permission `task.delete` sudah tersedia untuk Admin, Manajer, dan Supervisor.
+- Hapus Task Card (TASK-12): `DELETE /api/tasks/{id}`, soft delete oleh Admin/Manajer (semua divisi) dan Supervisor (divisinya), kecuali tugas Done.
+- Perubahan role akun dicatat di `account_role_changes` (TASK-12, migration `2026_11_16_142438_create_account_role_changes_table`). Rollback migration itu ditolak bila audit sudah berisi data, kecuali `TASKLIST_ALLOW_DESTRUCTIVE_ROLLBACK=true`.
 
 ## 6. Hal yang belum dikerjakan
 
 - **FE** masih memakai kontrak lama (`pic_id`/`pic`, status QA lama) dan perlu disesuaikan **sebelum** perubahan ini
   dipakai pengguna. Lihat [../api/tasklist-fe-integration.md](../api/tasklist-fe-integration.md).
-- **Hapus Task Card, komentar, hapus evidence, endpoint tulis agenda, nonaktifkan akun**: tabel/kolom siap, endpoint di
-  ticket lain.
-- **Audit perubahan role akun**: belum ada mekanisme audit untuk akun.
+- **Komentar, hapus evidence, endpoint tulis agenda, nonaktifkan akun, pulihkan task terhapus, baca audit role**: tabel/kolom
+  siap, endpoint di ticket lain.
 - **Drop `schedule_events` dan `tasks.pic_id`**: setelah verifikasi production dan FE tidak lagi memakai kontrak lama.
 - **Catatan kerja PIC (TASK-13)**: masih PENDING di ERD, menunggu keputusan SA.
 - **Divisi yang dikelola Supervisor**: sementara memakai `accounts.division_id`.
@@ -273,6 +273,9 @@ php artisan tasks:recovery           # sama dengan: tasks:recovery status
 ```bash
 php artisan migrate:rollback --step=15 --force
 ```
+
+15 adalah jumlah migration TASK-19. Bila sudah ada migration lain setelahnya (misalnya audit role TASK-12), angkanya
+bertambah; `tasks:recovery` menampilkan angka yang tepat untuk database tersebut.
 
 Semua migration punya `down()`. Status lama kembali di `tasks` dan `task_activities`, tabel/kolom baru dihapus, salinan
 agenda dihapus (aslinya masih di `schedule_events`), dan `tasks.pic_id` utuh karena tidak pernah diubah.

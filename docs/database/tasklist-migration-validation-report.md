@@ -94,7 +94,8 @@ Diuji di `TaskRoleCompatibilityTest`, `TaskListingTest`, `TaskAssignmentTest`, `
 | PIC ditambah/dilepas | PIC yang dilepas tetap melihat task, hilang dari `my_tasks`, kehilangan hak status dan evidence (`403`) |
 | Perubahan role | Staff yang diubah menjadi Supervisor langsung bisa mengatur PIC dan membuat task; histori task tidak berubah |
 | Akun nonaktif | Login ditolak ("Akun Anda nonaktif. Hubungi Admin."); request Tasklist `403` |
-| Hapus Task Card | Belum ada endpoint (`405` untuk semua role); permission `task.delete` hanya Admin, Manajer, Supervisor |
+| Hapus Task Card (TASK-12) | Admin dan Manajer semua divisi, Supervisor divisinya `200`; Staff/Freelance (termasuk PIC) dan Supervisor divisi lain `403`; tugas Done `422`; task terhapus hilang dari semua tampilan dan `404` (`TaskDeletionAndPreviewTest`) |
+| Audit role (TASK-12) | Pembuatan akun dan setiap perubahan role tercatat di `account_role_changes`; histori task tidak berubah (`AccountRoleAuditTest`) |
 
 ### 4.4 Pemulihan setelah fitur dipakai
 
