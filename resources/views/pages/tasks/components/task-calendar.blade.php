@@ -32,8 +32,8 @@
                     selected === cell.iso ? 'ring-2 ring-primary ring-inset' : 'hover:bg-primary-soft/50',
                 ]"
                 :aria-selected="selected === cell.iso"
-                :aria-label="`${formatDate(cell.iso)}: ${cell.events} agenda, ${cell.deadlines} deadline`"
-                @click="selected = cell.iso"
+                :aria-label="cell.inMonth ? `${formatDate(cell.iso)}: ${cell.events} agenda, ${cell.deadlines} deadline` : `${formatDate(cell.iso)}: buka bulan ini`"
+                @click="choose(cell.iso)"
             >
                 <span class="grid size-6 place-items-center rounded-full text-xs font-semibold"
                     :class="cell.today ? 'bg-primary text-white' : (cell.inMonth ? 'text-ink' : 'text-label')" x-text="cell.day"></span>
@@ -116,7 +116,7 @@
         </div>
 
         {{-- Ringkasan item yang dipilih --}}
-        <template x-if="picked">
+        <template x-if="pickedVisible">
             <div class="rounded-lg border p-4 lg:col-span-2" :class="picked.kind === 'task' ? 'border-primary/40 bg-primary-soft/40' : 'border-navy/30 bg-soft'" data-testid="calendar-summary" role="region" aria-label="Ringkasan item terpilih">
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">

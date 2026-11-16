@@ -1374,24 +1374,37 @@ Alpine.data('taskCalendar', () => ({
         return monthLabel.format(parseISODate(`${this.month}-01`));
     },
 
-    // 6 minggu (Senin–Minggu) yang memuat bulan aktif.
+    // 6 minggu (Senin–Minggu) yang memuat bulan aktif. Backend hanya mengirim data bulan aktif, jadi tanggal
+    // bulan lain tidak diberi penanda (datanya tidak lengkap) dan memilihnya membuka bulan tersebut.
     get cells() {
         const first = `${this.month}-01`;
         const start = mondayOf(first);
 
         return Array.from({ length: 42 }, (_, index) => {
             const iso = addDays(start, index);
+            const inMonth = iso.startsWith(this.month);
 
             return {
                 iso,
                 day: parseISODate(iso).getDate(),
-                inMonth: iso.startsWith(this.month),
+                inMonth,
                 today: iso === today(),
-                events: this.eventsOn(iso).length,
-                deadlines: this.deadlinesOn(iso).length,
-                overdue: this.deadlinesOn(iso).some((task) => this.isOverdue(task)),
+                events: inMonth ? this.eventsOn(iso).length : 0,
+                deadlines: inMonth ? this.deadlinesOn(iso).length : 0,
+                overdue: inMonth && this.deadlinesOn(iso).some((task) => this.isOverdue(task)),
             };
         });
+    },
+
+    choose(iso) {
+        if (iso.startsWith(this.month)) {
+            this.selected = iso;
+            return;
+        }
+
+        this.month = iso.slice(0, 7);
+        this.selected = iso;
+        this.loadPeriod();
     },
 
     eventsOn(iso) {
@@ -1419,6 +1432,15 @@ Alpine.data('taskCalendar', () => ({
 
     isPicked(kind, item) {
         return this.picked?.kind === kind && this.picked.item.id === item.id;
+    },
+
+    // Ringkasan hanya tampil selama itemnya masih ada di daftar tanggal terpilih (setelah filter atau muat ulang).
+    get pickedVisible() {
+        if (!this.picked) return false;
+
+        const list = this.picked.kind === 'task' ? this.selectedDeadlines : this.selectedEvents;
+
+        return list.some((item) => item.id === this.picked.item.id);
     },
 
     get selectedEvents() {
@@ -1454,6 +1476,12 @@ Alpine.data('taskCalendar', () => ({
             this.events = data.events ?? [];
             this.deadlines = data.deadlines ?? [];
             this.state = 'ready';
+            // Ringkasan yang terbuka memakai data terbaru dari respons ini.
+            if (this.picked) {
+                const list = this.picked.kind === 'task' ? this.deadlines : this.events;
+                const item = list.find(({ id }) => id === this.picked.item.id);
+                this.picked = item ? { kind: this.picked.kind, item } : null;
+            }
         } catch (error) {
             if (sequence !== this.periodSequence) return;
             this.events = [];
