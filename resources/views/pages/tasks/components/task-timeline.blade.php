@@ -3,10 +3,20 @@
     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
             <h2 id="timeline-title" class="text-base font-semibold text-ink">Linimasa</h2>
-            <p class="mt-1 text-sm text-muted"><span x-text="periodLabel"></span> · <span x-text="scopeLabel"></span></p>
+            <p class="mt-1 text-sm text-muted"><span x-text="periodLabel"></span> · <span x-text="timelineScopeLabel"></span></p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
+            <label class="block">
+                <span class="sr-only">Divisi linimasa</span>
+                <select id="timeline-division" class="h-9 rounded-lg border border-line bg-white pr-8 pl-3 text-sm text-ink focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+                    :value="timelineDivision" @change="division = $event.target.value" title="Divisi linimasa">
+                    <option value="">Semua Divisi</option>
+                    <template x-for="item in timelineDivisionOptions" :key="item.code_division">
+                        <option :value="item.code_division" x-text="item.name" :selected="item.code_division === timelineDivision"></option>
+                    </template>
+                </select>
+            </label>
             <div class="inline-flex rounded-lg border border-line bg-soft p-1" role="group" aria-label="Rentang linimasa">
                 <button type="button" class="rounded-md px-3 py-1 text-xs font-semibold" :class="mode === 'week' ? 'bg-white text-ink shadow-sm' : 'text-muted'" :aria-pressed="mode === 'week'" @click="setMode('week')">1 Minggu</button>
                 <button type="button" class="rounded-md px-3 py-1 text-xs font-semibold" :class="mode === 'biweek' ? 'bg-white text-ink shadow-sm' : 'text-muted'" :aria-pressed="mode === 'biweek'" @click="setMode('biweek')">2 Minggu</button>
@@ -36,7 +46,7 @@
                             <p class="truncate text-sm font-semibold text-ink" x-text="item.title"></p>
                             <p class="truncate text-xs text-muted">
                                 <span x-text="item.division?.name ?? 'Lintas divisi'"></span>
-                                <span x-show="item.type === 'event'"> · Agenda bersama</span>
+                                <span x-show="item.type === 'event'" x-text="item.target_divisions?.length ? ` · Agenda internal ${item.target_divisions.map(({ name }) => name).join(', ')}` : ' · Agenda bersama'"></span>
                                 <span x-show="item.type === 'task' && item.end_date" :class="item.overdue && 'font-semibold text-red-700'" x-text="` · Deadline ${formatDate(item.end_date)}`"></span>
                             </p>
                         </div>
@@ -49,7 +59,7 @@
                             <button
                                 type="button"
                                 class="absolute top-1 bottom-1 flex min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-[11px] font-semibold text-white shadow-xs focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
-                                :class="item.type === 'event' ? 'bg-navy' : (item.overdue ? 'bg-red-600' : (item.status === 'done' ? 'bg-emerald-600' : 'bg-primary'))"
+                                :class="item.type === 'event' ? 'bg-navy' : (item.overdue ? 'bg-red-600' : (item.status === 'done' ? 'bg-slate-500' : 'bg-primary'))"
                                 :style="`left: ${item.left}; width: ${item.width}`"
                                 :title="`${item.title} · ${formatDate(item.start_date)} – ${formatDate(item.end_date)}`"
                                 @click="select(item)"
@@ -88,8 +98,8 @@
     <div x-show="state === 'ready'" x-cloak class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
         <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-primary"></span> Tugas aktif</span>
         <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-red-600"></span> Terlambat (aktif, lewat deadline)</span>
-        <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-emerald-600"></span> Tugas selesai</span>
-        <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-navy"></span> Agenda bersama</span>
+        <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-slate-500"></span> Tugas selesai</span>
+        <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-navy"></span> Agenda (bersama atau internal divisi)</span>
         <span>"1 hari" = hanya memiliki tanggal mulai atau deadline.</span>
         <span x-show="undatedCount" x-text="`${undatedCount} item tanpa tanggal tidak ditampilkan.`"></span>
     </div>
