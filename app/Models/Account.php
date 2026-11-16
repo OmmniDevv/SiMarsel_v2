@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 
 #[Fillable(['role_id', 'division_id', 'fullname', 'username', 'password', 'is_active'])]
@@ -40,6 +42,29 @@ class Account extends Authenticatable
     public function division(): BelongsTo
     {
         return $this->belongsTo(Division::class);
+    }
+
+    /**
+     * Every PIC assignment of the account, active and released.
+     */
+    public function taskAssignments(): HasMany
+    {
+        return $this->hasMany(TaskAssignment::class);
+    }
+
+    /**
+     * Tasks the account is an active PIC of.
+     */
+    public function assignedTasks(): BelongsToMany
+    {
+        return $this->belongsToMany(Task::class, 'task_assignments')
+            ->wherePivotNull('unassigned_at')
+            ->withPivot(['id', 'assigned_by', 'assigned_at']);
+    }
+
+    public function taskComments(): HasMany
+    {
+        return $this->hasMany(TaskComment::class, 'author_id');
     }
 
     /**
