@@ -56,6 +56,8 @@ class TaskPageTest extends TestCase
                 ->assertSee('id="timeline-division"', false)
                 ->assertSee('Agenda internal')
                 ->assertSee('x-data="taskCalendar"', false)
+                ->assertSee('x-text="calendarScopeLabel"', false)
+                ->assertSee('canOpenEventTask(picked.item)', false)
                 ->assertSee('x-data="taskDetail"', false)
                 ->assertSee('Belum ada tugas yang tersedia.')
                 ->assertSee('Tidak ada tugas yang sesuai dengan filter.')

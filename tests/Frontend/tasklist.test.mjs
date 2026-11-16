@@ -15,6 +15,7 @@ import vm from 'node:vm';
  * - GET /api/tasks/{id}/activities for the detail's history, with its loading, error, and empty states;
  * - GET /api/tasks/monitoring?scope=tasklist for the summary KPIs, with the same filters as the list;
  * - GET /api/tasks/schedule for the Timeline, with its own division filter across divisions.
+ * - GET /api/tasks/calendar for the Calendar, agendas across divisions and deadlines in the user's scope.
  */
 const PIC = { id: 10, role: { code_role: 'EMP' }, division: { code_division: 'MKT' } };
 const ADMIN = { id: 1, role: { code_role: 'ADM' }, division: null };
@@ -1162,6 +1163,134 @@ test('The Timeline shows loading, empty, and error states, and ignores the respo
     await older;
     assert.equal(timeline.state, 'ready');
     assert.deepEqual([...timeline.rows].map(({ title }) => title), ['Minggu depan']);
+});
+
+const calendarEvent = (overrides = {}) => ({
+    id: 3,
+    title: 'Rapat koordinasi',
+    division: { code_division: 'FIN', name: 'Finance' },
+    target_divisions: [],
+    start_date: '2026-11-17',
+    end_date: '2026-11-18',
+    description: 'Koordinasi akhir bulan',
+    task_id: null,
+    can_view_detail: false,
+    ...overrides,
+});
+const calendarRequests = (requests) => requests.filter(({ url }) => url.startsWith('/api/tasks/calendar'));
+
+async function calendarPage(reply, user = ADMIN) {
+    const page = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [], meta: { status_counts: {} } } }),
+        'GET /api/tasks/calendar': () => (typeof reply === 'function' ? reply() : { json: { data: reply } }),
+    }, user);
+    page.board.divisions = divisionList.map(({ code_division, name }) => ({ code_division, name }));
+    page.board.monitoring = { as_of: '2026-11-16' };
+    page.board.view = 'calendar';
+    const calendar = page.instance('taskCalendar');
+    calendar.month = '2026-11';
+    calendar.selected = '2026-11-17';
+
+    return { ...page, calendar };
+}
+
+test('With the default config, the Calendar loads agendas and deadlines of the month as two lists and marks the chosen date', async () => {
+    const { calendar, requests } = await calendarPage({
+        events: [calendarEvent(), calendarEvent({ id: 4, title: 'Agenda internal Sales', division: { code_division: 'SLS', name: 'Sales' }, target_divisions: [{ code_division: 'SLS', name: 'Sales' }], start_date: '2026-11-20', end_date: null })],
+        deadlines: [
+            { ...task({ deadline: '2026-11-17', status: 'in_progress' }), description: null, is_overdue: false },
+            { ...task({ id: 8, title: 'Laporan bulanan', deadline: '2026-11-10', status: 'todo' }), description: null, is_overdue: true },
+        ],
+    });
+    await calendar.loadPeriod();
+
+    const sent = calendarRequests(requests);
+    assert.equal(sent.length, 1, 'the calendar is requested although VITE_TASK_API_READY is false');
+    assert.equal(sent[0].url, '/api/tasks/calendar?month=2026-11', 'Admin: Semua Divisi by default');
+    assert.equal(calendar.state, 'ready');
+    assert.equal(calendar.calendarScopeLabel, 'Semua Divisi');
+
+    assert.deepEqual([...calendar.selectedEvents].map(({ title }) => title), ['Rapat koordinasi']);
+    assert.deepEqual([...calendar.selectedDeadlines].map(({ title }) => title), ['Konten promo November']);
+    const cell = (iso) => calendar.cells.find((item) => item.iso === iso);
+    assert.deepEqual([cell('2026-11-18').events, cell('2026-11-18').deadlines], [1, 0], 'an agenda is marked on every day of its range');
+    assert.equal(cell('2026-11-10').overdue, true, 'an active deadline that has passed is marked late');
+    assert.equal(cell('2026-11-17').overdue, false);
+
+    calendar.selected = '2026-11-19';
+    assert.equal(calendar.selectedDeadlines.length, 0, 'a date without deadlines shows the empty message');
+
+    // The Admin division filter is sent, and another month asks the backend again.
+    calendar.filters.division = 'FIN';
+    await calendar.loadPeriod();
+    assert.equal(calendarRequests(requests).at(-1).url, '/api/tasks/calendar?month=2026-11&division=FIN');
+    assert.equal(calendar.calendarScopeLabel, 'Divisi Finance');
+    calendar.shift(1);
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.equal(calendarRequests(requests).at(-1).url, '/api/tasks/calendar?month=2026-12&division=FIN');
+    assert.equal(calendar.selected, '2026-12-01');
+});
+
+test('Managers and Staff see agendas across divisions: the Tasklist division is not sent, and deadlines stay in their scope', async () => {
+    const manager = await calendarPage({ events: [calendarEvent()], deadlines: [] }, MANAGER);
+    manager.board.filters.division = 'MKT';
+    await manager.calendar.loadPeriod();
+    assert.equal(calendarRequests(manager.requests).at(-1).url, '/api/tasks/calendar?month=2026-11', 'shared agendas of other divisions are not filtered out');
+    assert.equal(manager.calendar.calendarScopeLabel, 'Agenda lintas divisi · Deadline Divisi Marketing');
+    assert.deepEqual([...manager.calendar.selectedEvents].map(({ title }) => title), ['Rapat koordinasi']);
+
+    const staff = await calendarPage({ events: [calendarEvent()], deadlines: [] }, PIC);
+    await staff.calendar.loadPeriod();
+    assert.equal(calendarRequests(staff.requests).at(-1).url, '/api/tasks/calendar?month=2026-11');
+    assert.equal(staff.calendar.calendarScopeLabel, 'Agenda lintas divisi · Deadline tugas yang ditugaskan kepada Anda');
+});
+
+test('Calendar items open the task detail only when the backend allows it', async () => {
+    const { board, calendar, toasts } = await calendarPage({ events: [], deadlines: [] });
+
+    assert.equal(calendar.canOpenEventTask(calendarEvent({ task_id: 12, can_view_detail: true })), true);
+    assert.equal(calendar.canOpenEventTask(calendarEvent({ task_id: 12, can_view_detail: false })), false, 'a linked task without access is not offered');
+    assert.equal(calendar.canOpenEventTask(calendarEvent()), false, 'an agenda without a task has no detail');
+
+    calendar.focusTask({ ...task({ id: 9 }), can_view_detail: false });
+    assert.equal(board.detailId, null);
+    assert.equal(toasts.at(-1).title, 'Akses terbatas');
+
+    calendar.focusTask({ id: 12, can_view_detail: true });
+    assert.equal(board.detailId, 12);
+    assert.equal(board.view, 'board');
+});
+
+test('The Calendar shows loading and error states, and ignores the response of an earlier month', async () => {
+    let reply = () => ({ json: { data: { events: [], deadlines: [] } } });
+    const states = [];
+    const { calendar } = await calendarPage(() => {
+        states.push(calendar.state);
+        return reply();
+    });
+    await calendar.loadPeriod();
+    assert.deepEqual(states, ['loading']);
+    assert.equal(calendar.state, 'ready');
+
+    reply = () => ({ status: 500, json: { message: 'Server Error' } });
+    await calendar.loadPeriod();
+    assert.equal(calendar.state, 'error');
+    assert.equal(calendar.message, 'Kalender gagal dimuat.');
+
+    // November answers after December: December stays on screen.
+    let releaseOld;
+    reply = () => new Promise((resolve) => {
+        releaseOld = () => resolve({ json: { data: { events: [calendarEvent({ title: 'Agenda November' })], deadlines: [] } } });
+    });
+    const older = calendar.loadPeriod();
+    calendar.month = '2026-12';
+    calendar.selected = '2026-12-01';
+    reply = () => ({ json: { data: { events: [calendarEvent({ title: 'Agenda Desember', start_date: '2026-12-01', end_date: null })], deadlines: [] } } });
+    await calendar.loadPeriod();
+    releaseOld();
+    await older;
+    assert.equal(calendar.state, 'ready');
+    assert.deepEqual([...calendar.events].map(({ title }) => title), ['Agenda Desember']);
 });
 
 test('With the default config, the PIC sends a file and a link as evidence and the saved evidence shows again in the detail', async () => {
