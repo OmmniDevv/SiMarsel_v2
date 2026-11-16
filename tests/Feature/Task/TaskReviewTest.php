@@ -68,13 +68,16 @@ class TaskReviewTest extends TestCase
         $this->assertDatabaseCount('task_reviews', 0);
     }
 
-    public function test_manager_cannot_review_a_task_of_another_division(): void
+    public function test_a_supervisor_cannot_review_a_task_of_another_division_but_a_manager_can(): void
     {
         $task = $this->task(TaskStatus::OnReview);
+        $financeSupervisor = $this->account(Role::SUPERVISOR, 'fin.supervisor', $this->finance);
 
-        $this->actingAs($this->financeManager)->postJson($this->url($task), $this->approve())->assertForbidden();
-
+        $this->actingAs($financeSupervisor)->postJson($this->url($task), $this->approve())->assertForbidden();
         $this->assertSame(TaskStatus::OnReview, $task->fresh()->status);
+
+        $this->actingAs($this->financeManager)->postJson($this->url($task), $this->approve())->assertOk();
+        $this->assertSame(TaskStatus::Done, $task->fresh()->status);
     }
 
     public function test_admin_reviews_tasks_of_any_division(): void
@@ -288,12 +291,14 @@ class TaskReviewTest extends TestCase
             ->assertJsonPath('data.0.note', 'Lengkapi data bulan Oktober.');
     }
 
-    public function test_other_staff_and_other_division_managers_cannot_see_the_reviews(): void
+    public function test_other_staff_see_the_reviews_but_cannot_give_a_decision(): void
     {
         $task = $this->task(TaskStatus::OnReview);
 
-        $this->actingAs($this->otherStaff)->getJson($this->url($task))->assertForbidden();
-        $this->actingAs($this->financeManager)->getJson($this->url($task))->assertForbidden();
+        $this->actingAs($this->otherStaff)->getJson($this->url($task))->assertOk();
+        $this->actingAs($this->otherStaff)->postJson($this->url($task), $this->approve())->assertForbidden();
+        $this->actingAs($this->staff)->postJson($this->url($task), $this->approve())->assertForbidden();
+        $this->assertSame(TaskStatus::OnReview, $task->fresh()->status);
     }
 
     public function test_detail_tells_the_reviewer_when_a_decision_is_awaited(): void

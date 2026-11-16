@@ -232,10 +232,22 @@ class TaskUpdateTest extends TestCase
             ->assertOk();
     }
 
-    public function test_manager_cannot_update_a_task_of_another_division(): void
+    public function test_manager_updates_a_task_of_another_division_but_staff_outside_it_cannot(): void
     {
         $this->actingAs($this->financeManager)
             ->patchJson($this->url(), $this->payload(['title' => 'Baru']))
+            ->assertOk()
+            ->assertJsonPath('data.title', 'Baru');
+
+        $outsider = Account::create([
+            'role_id' => Role::where('code_role', Role::EMPLOYEE)->value('id'),
+            'division_id' => $this->finance->id,
+            'fullname' => 'Fin Staff',
+            'username' => 'fin.outsider',
+            'password' => 'Password123!',
+        ]);
+        $this->actingAs($outsider)
+            ->patchJson($this->url(), ['title' => 'Lagi', 'version' => $this->task->fresh()->version])
             ->assertForbidden();
     }
 
@@ -375,16 +387,16 @@ class TaskUpdateTest extends TestCase
         $this->assertSame(0, $this->task->collaboratingDivisions()->count());
     }
 
-    public function test_manager_cannot_move_a_task_to_another_division(): void
+    public function test_manager_moves_a_task_to_another_division(): void
     {
         $this->actingAs($this->manager)
             ->patchJson($this->url(), $this->payload([
                 'division_id' => $this->finance->id,
             ]))
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors(['division_id' => 'Hanya Admin yang dapat memindahkan tugas ke divisi lain.']);
+            ->assertOk()
+            ->assertJsonPath('data.division.code_division', 'FIN');
 
-        $this->assertSame($this->marketing->id, $this->task->fresh()->division_id);
+        $this->assertSame($this->finance->id, $this->task->fresh()->division_id);
     }
 
     public function test_resending_unchanged_values_is_allowed(): void

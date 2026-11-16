@@ -24,6 +24,14 @@ class AuthService
             ]);
         }
 
+        if (! Auth::user()->is_active) {
+            Auth::guard('web')->logout();
+
+            throw ValidationException::withMessages([
+                'username' => 'Akun Anda nonaktif. Hubungi Admin.',
+            ]);
+        }
+
         $request->session()->regenerate();
 
         return Auth::user()->load(['role', 'division']);

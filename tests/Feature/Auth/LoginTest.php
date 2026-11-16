@@ -29,6 +29,18 @@ class LoginTest extends TestCase
         $this->assertTrue(Hash::check('Manager123!', $account->password));
     }
 
+    public function test_an_inactive_account_cannot_log_in(): void
+    {
+        $account = Account::where('username', 'manager')->first();
+        $account->update(['password' => 'Rahasia123!', 'is_active' => false]);
+
+        $this->postJson('/api/login', ['username' => 'manager', 'password' => 'Rahasia123!'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['username' => 'Akun Anda nonaktif. Hubungi Admin.']);
+
+        $this->assertGuest();
+    }
+
     public function test_csrf_cookie_endpoint_sets_xsrf_token(): void
     {
         $this->get('/api/csrf-cookie')

@@ -147,25 +147,23 @@ class TaskDetailTest extends TestCase
         }
     }
 
-    public function test_only_admin_may_move_a_task_to_another_division(): void
+    public function test_admin_and_managers_may_move_a_task_to_another_division(): void
     {
-        $this->actingAs($this->admin)
-            ->getJson("/api/tasks/{$this->task->id}")
-            ->assertJsonPath('data.editable_fields', array_values(array_diff(Task::EDITABLE_FIELDS, ['status'])));
-
-        $this->actingAs($this->manager)
-            ->getJson("/api/tasks/{$this->task->id}")
-            ->assertJsonPath('data.editable_fields', array_values(array_diff(Task::EDITABLE_FIELDS, ['division_id', 'status'])));
+        foreach ([$this->admin, $this->manager] as $account) {
+            $this->actingAs($account)
+                ->getJson("/api/tasks/{$this->task->id}")
+                ->assertJsonPath('data.editable_fields', array_values(array_diff(Task::EDITABLE_FIELDS, ['status'])));
+        }
     }
 
-    public function test_manager_cannot_open_a_task_of_another_division(): void
+    public function test_manager_opens_and_manages_a_task_of_another_division(): void
     {
         $task = Task::factory()->create(['division_id' => $this->finance->id]);
 
         $this->actingAs($this->manager)
             ->getJson("/api/tasks/{$task->id}")
-            ->assertForbidden()
-            ->assertJsonPath('message', 'Anda tidak memiliki akses untuk melakukan aksi ini.');
+            ->assertOk()
+            ->assertJsonPath('data.can_edit', true);
     }
 
     public function test_staff_can_open_their_task_and_only_change_its_status(): void
@@ -306,7 +304,8 @@ class TaskDetailTest extends TestCase
             $this->actingAs($account)->get($url)->assertOk()->assertDownload('banner.png');
         }
 
-        $this->actingAs($this->otherStaff)->getJson($url)->assertForbidden();
+        // Global read: evidence is part of the task detail every active account may open.
+        $this->actingAs($this->otherStaff)->get($url)->assertOk()->assertDownload('banner.png');
     }
 
     public function test_evidence_of_another_task_or_a_link_is_not_downloadable(): void
@@ -323,11 +322,21 @@ class TaskDetailTest extends TestCase
             ->assertNotFound();
     }
 
-    public function test_staff_cannot_open_a_task_assigned_to_someone_else(): void
+    public function test_staff_opens_a_task_assigned_to_someone_else_read_only(): void
     {
         $this->actingAs($this->otherStaff)
             ->getJson("/api/tasks/{$this->task->id}")
+            ->assertOk()
+            ->assertJsonPath('data.can_edit', false)
+            ->assertJsonPath('data.can_assign', false)
+            ->assertJsonPath('data.can_review', false)
+            ->assertJsonPath('data.editable_fields', [])
+            ->assertJsonPath('data.next_statuses', []);
+
+        $this->actingAs($this->otherStaff)
+            ->patchJson("/api/tasks/{$this->task->id}", ['title' => 'Diubah', 'version' => $this->task->version])
             ->assertForbidden();
+        $this->assertNotSame('Diubah', $this->task->fresh()->title);
     }
 
     public function test_unknown_task_returns_not_found(): void

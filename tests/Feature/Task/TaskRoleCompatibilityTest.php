@@ -8,8 +8,10 @@ use App\Models\Division;
 use App\Models\Role;
 use App\Models\Task;
 use App\Models\TaskActivity;
+use App\Models\TaskAssignment;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
@@ -49,9 +51,9 @@ class TaskRoleCompatibilityTest extends TestCase
         ];
     }
 
-    public function test_only_admin_and_manager_may_create_tasks(): void
+    public function test_admin_manager_and_supervisor_may_create_tasks(): void
     {
-        foreach (['admin' => 201, 'manager' => 201, 'supervisor' => 403, 'staff' => 403, 'freelance' => 403] as $role => $expected) {
+        foreach (['admin' => 201, 'manager' => 201, 'supervisor' => 201, 'staff' => 403, 'freelance' => 403] as $role => $expected) {
             $this->actingAs($this->accounts[$role])
                 ->postJson('/api/tasks', ['title' => "Tugas {$role}", 'division_id' => $this->marketing->id])
                 ->assertStatus($expected);
@@ -71,20 +73,120 @@ class TaskRoleCompatibilityTest extends TestCase
         $this->assertNotSoftDeleted($task);
     }
 
-    public function test_only_admin_and_the_division_manager_give_review_decisions(): void
+    public function test_staff_and_freelance_never_give_review_decisions_even_as_pic(): void
     {
-        $task = $this->task(['status' => TaskStatus::OnReview], ['staff', 'supervisor', 'freelance']);
+        $task = $this->task(['status' => TaskStatus::OnReview], ['staff', 'freelance']);
 
-        foreach (['supervisor', 'staff', 'freelance'] as $role) {
+        foreach (['staff', 'freelance'] as $role) {
             $this->actingAs($this->accounts[$role])
                 ->postJson("/api/tasks/{$task->id}/reviews", ['decision' => 'approve', 'version' => 1])
                 ->assertForbidden();
+            $this->actingAs($this->accounts[$role])->getJson("/api/tasks/{$task->id}")->assertJsonPath('data.can_review', false);
         }
 
         $this->actingAs($this->accounts['manager'])
             ->postJson("/api/tasks/{$task->id}/reviews", ['decision' => 'approve', 'version' => 1])
             ->assertOk()
             ->assertJsonPath('data.status', 'done');
+    }
+
+    public function test_a_supervisor_who_is_pic_approves_their_own_work_in_their_division(): void
+    {
+        $task = $this->task(['status' => TaskStatus::ReadyReview], ['supervisor']);
+
+        $this->move($task, 'supervisor', 'on_review')->assertOk();
+        $this->actingAs($this->accounts['supervisor'])->getJson("/api/tasks/{$task->id}")->assertJsonPath('data.can_review', true);
+        $this->actingAs($this->accounts['supervisor'])
+            ->postJson("/api/tasks/{$task->id}/reviews", ['decision' => 'approve', 'version' => $task->fresh()->version])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'done')
+            ->assertJsonPath('data.reviews.0.reviewer.id', $this->accounts['supervisor']->id);
+
+        $this->assertDatabaseHas('task_activities', ['task_id' => $task->id, 'account_id' => $this->accounts['supervisor']->id, 'action' => 'approved']);
+    }
+
+    public function test_a_manager_who_is_pic_approves_their_own_work_in_any_division(): void
+    {
+        $manager = $this->accounts['manager'];
+        $task = $this->task(['status' => TaskStatus::OnReview, 'division_id' => $this->finance->id]);
+        TaskAssignment::create(['task_id' => $task->id, 'account_id' => $manager->id, 'assigned_by' => $manager->id, 'assigned_at' => now()]);
+
+        $this->actingAs($manager)
+            ->postJson("/api/tasks/{$task->id}/reviews", ['decision' => 'approve', 'version' => $task->fresh()->version])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'done');
+    }
+
+    public function test_a_supervisor_manages_only_tasks_of_their_division(): void
+    {
+        $supervisor = $this->accounts['supervisor'];
+        $finance = $this->task(['status' => TaskStatus::OnReview, 'division_id' => $this->finance->id], ['staff']);
+        $own = $this->task(['status' => TaskStatus::Todo], ['staff']);
+
+        $this->actingAs($supervisor)->getJson("/api/tasks/{$finance->id}")->assertOk()
+            ->assertJsonPath('data.can_edit', false)
+            ->assertJsonPath('data.can_assign', false)
+            ->assertJsonPath('data.can_review', false);
+        $this->actingAs($supervisor)->patchJson("/api/tasks/{$finance->id}", ['title' => 'X', 'version' => 1])->assertForbidden();
+        $this->actingAs($supervisor)->patchJson("/api/tasks/{$finance->id}/assignment", ['pic_ids' => [$supervisor->id], 'version' => 1])->assertForbidden();
+        $this->actingAs($supervisor)->postJson("/api/tasks/{$finance->id}/reviews", ['decision' => 'approve', 'version' => 1])->assertForbidden();
+        $this->actingAs($supervisor)->patchJson("/api/tasks/{$finance->id}/status", ['status' => 'done', 'version' => 1])->assertForbidden();
+
+        $this->actingAs($supervisor)->patchJson("/api/tasks/{$own->id}", ['title' => 'Judul baru', 'version' => 1])->assertOk();
+        $this->actingAs($supervisor)
+            ->patchJson("/api/tasks/{$own->id}/assignment", ['pic_ids' => [$this->accounts['freelance']->id], 'version' => 2])
+            ->assertOk();
+    }
+
+    /**
+     * The access matrix of TASK-19/TASK-12 on one task of the marketing division whose PIC is the staff account:
+     * everyone reads it, only the managing roles change it, the PIC only moves its status.
+     */
+    public function test_every_role_reads_every_task_but_only_changes_it_within_its_authority(): void
+    {
+        $financeTask = $this->task(['status' => TaskStatus::Todo, 'division_id' => $this->finance->id], ['staff']);
+        $expected = [
+            //               view, edit,  assign, review
+            'admin' => [true, true, true, true],
+            'manager' => [true, true, true, true],
+            'supervisor' => [true, false, false, false],
+            'staff' => [true, false, false, false],
+            'freelance' => [true, false, false, false],
+        ];
+
+        foreach ($expected as $role => [$view, $edit, $assign, $review]) {
+            $this->actingAs($this->accounts[$role])
+                ->getJson('/api/tasks?scope=all_tasks')
+                ->assertOk()
+                ->assertJsonCount(1, 'data');
+            $detail = $this->actingAs($this->accounts[$role])->getJson("/api/tasks/{$financeTask->id}")->assertOk();
+
+            $this->assertSame($view, $detail->json('data.can_view_detail'), $role);
+            $this->assertSame($edit, $detail->json('data.editable_fields') !== [] && $detail->json('data.editable_fields') !== ['status'], "{$role} edit");
+            $this->assertSame($assign, $detail->json('data.can_assign'), "{$role} assign");
+            $this->assertSame($review, $financeTask->reviewableBy($this->accounts[$role]->fresh()), "{$role} review");
+        }
+
+        // The PIC may only start the work; staff and freelance accounts that are not its PIC get 403.
+        $this->move($financeTask, 'freelance', 'in_progress')->assertForbidden();
+        $this->move($financeTask, 'staff', 'in_progress')->assertOk();
+    }
+
+    public function test_a_role_change_updates_the_permissions_without_touching_history(): void
+    {
+        $staff = $this->accounts['staff'];
+        $task = $this->task(['status' => TaskStatus::Todo], ['staff']);
+        $this->move($task, 'staff', 'in_progress')->assertOk();
+        $history = DB::table('task_activities')->where('task_id', $task->id)->get();
+
+        $this->actingAs($staff)->getJson("/api/tasks/{$task->id}")->assertJsonPath('data.can_assign', false);
+
+        $staff->update(['role_id' => Role::where('code_role', Role::SUPERVISOR)->value('id')]);
+        $staff = $staff->fresh();
+
+        $this->actingAs($staff)->getJson("/api/tasks/{$task->id}")->assertJsonPath('data.can_assign', true);
+        $this->actingAs($staff)->getJson('/api/tasks/meta')->assertJsonPath('data.can_create', true);
+        $this->assertEquals($history, DB::table('task_activities')->where('task_id', $task->id)->get());
     }
 
     public function test_assignment_rights_follow_the_role(): void
@@ -111,7 +213,7 @@ class TaskRoleCompatibilityTest extends TestCase
         $this->move($task, 'staff', 'ready_review')->assertOk();
         $this->move($task, 'freelance', 'on_review')
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['status' => 'Hanya Admin atau Manajer divisi yang dapat mengubah status dari Ready Review ke On Review.']);
+            ->assertJsonValidationErrors(['status' => 'Hanya Admin, Manajer, atau Supervisor divisi yang dapat mengubah status dari Ready Review ke On Review.']);
 
         $this->assertSame(TaskStatus::ReadyReview, $task->fresh()->status);
     }

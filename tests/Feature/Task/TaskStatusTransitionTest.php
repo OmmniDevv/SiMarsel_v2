@@ -68,13 +68,14 @@ class TaskStatusTransitionTest extends TestCase
         $this->assertSame(TaskStatus::Todo, $task->fresh()->status);
     }
 
-    public function test_manager_cannot_change_a_task_of_another_division(): void
+    public function test_manager_changes_the_status_of_a_task_of_another_division(): void
     {
         $task = $this->task(TaskStatus::Backlog);
 
         $this->actingAs($this->financeManager)
             ->patchJson($this->url($task), $this->payload('todo'))
-            ->assertForbidden();
+            ->assertOk()
+            ->assertJsonPath('data.status', 'todo');
     }
 
     public function test_unknown_task_returns_not_found(): void
@@ -121,7 +122,7 @@ class TaskStatusTransitionTest extends TestCase
             ->patchJson($this->url($task), $this->payload('todo'))
             ->assertUnprocessable()
             ->assertJsonValidationErrors([
-                'status' => 'Hanya Admin atau Manajer divisi yang dapat mengubah status dari Back Log ke To Do.',
+                'status' => 'Hanya Admin, Manajer, atau Supervisor divisi yang dapat mengubah status dari Back Log ke To Do.',
             ]);
     }
 
@@ -216,7 +217,7 @@ class TaskStatusTransitionTest extends TestCase
             ->patchJson($this->url($task), $this->payload('on_review'))
             ->assertUnprocessable()
             ->assertJsonValidationErrors([
-                'status' => 'Hanya Admin atau Manajer divisi yang dapat mengubah status dari Ready Review ke On Review.',
+                'status' => 'Hanya Admin, Manajer, atau Supervisor divisi yang dapat mengubah status dari Ready Review ke On Review.',
             ]);
 
         $this->actingAs($this->manager)

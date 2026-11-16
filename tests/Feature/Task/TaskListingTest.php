@@ -91,70 +91,74 @@ class TaskListingTest extends TestCase
             ->assertJsonPath('data.0.id', $this->financeTask->id);
     }
 
-    public function test_manager_only_sees_tasks_of_their_division(): void
+    public function test_every_role_sees_every_task_across_divisions(): void
     {
-        $response = $this->actingAs($this->manager)->getJson('/api/tasks')->assertOk();
+        foreach ([$this->manager, $this->staff, $this->otherStaff] as $account) {
+            $response = $this->actingAs($account)->getJson('/api/tasks')->assertOk();
 
-        $this->assertEqualsCanonicalizing(
-            [$this->staffTask->id, $this->otherStaffTask->id],
-            array_column($response->json('data'), 'id'),
-        );
+            $this->assertEqualsCanonicalizing(
+                [$this->staffTask->id, $this->otherStaffTask->id, $this->financeTask->id],
+                array_column($response->json('data'), 'id'),
+            );
+        }
     }
 
-    public function test_manager_cannot_widen_scope_with_division_filter(): void
+    public function test_division_filter_narrows_the_global_list(): void
     {
-        $this->actingAs($this->manager)
-            ->getJson('/api/tasks?division=FIN')
+        $this->actingAs($this->staff)
+            ->getJson('/api/tasks?division=FIN&search=report&status=backlog')
             ->assertOk()
-            ->assertJsonCount(0, 'data');
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $this->financeTask->id);
     }
 
-    public function test_manager_without_division_sees_no_tasks(): void
+    public function test_manager_without_a_division_still_manages_every_division(): void
     {
         $manager = Account::where('username', 'manager')->first();
 
         $this->actingAs($manager)
             ->getJson('/api/tasks/meta')
-            ->assertJsonPath('data.can_create', false);
+            ->assertJsonPath('data.can_create', true);
 
         $this->actingAs($manager)
             ->getJson('/api/tasks')
             ->assertOk()
-            ->assertJsonCount(0, 'data');
+            ->assertJsonCount(3, 'data')
+            ->assertJsonPath('data.0.can_edit', true);
     }
 
-    public function test_staff_only_sees_tasks_assigned_to_them(): void
+    public function test_my_tasks_only_lists_tasks_the_account_is_an_active_pic_of(): void
     {
         $this->actingAs($this->staff)
-            ->getJson('/api/tasks')
+            ->getJson('/api/tasks?scope=my_tasks')
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $this->staffTask->id);
     }
 
-    public function test_staff_cannot_reach_other_tasks_through_filters(): void
-    {
-        $this->actingAs($this->staff)
-            ->getJson('/api/tasks?division=FIN&search=report&status=backlog')
-            ->assertOk()
-            ->assertJsonCount(0, 'data');
-    }
-
-    public function test_staff_cannot_open_another_users_task_by_id(): void
+    public function test_every_role_opens_any_task_by_id_but_tasks_of_others_stay_read_only(): void
     {
         $this->actingAs($this->staff);
 
-        $this->getJson("/api/tasks/{$this->otherStaffTask->id}")->assertForbidden();
-        $this->getJson("/api/tasks/{$this->financeTask->id}")->assertForbidden();
-        $this->getJson("/api/tasks/{$this->staffTask->id}")->assertOk();
+        $this->getJson("/api/tasks/{$this->otherStaffTask->id}")->assertOk()
+            ->assertJsonPath('data.can_edit', false)
+            ->assertJsonPath('data.can_assign', false)
+            ->assertJsonPath('data.editable_fields', []);
+        $this->getJson("/api/tasks/{$this->financeTask->id}")->assertOk()->assertJsonPath('data.can_edit', false);
+        $this->getJson("/api/tasks/{$this->staffTask->id}")->assertOk()->assertJsonPath('data.can_edit', true);
+
+        $this->actingAs($this->manager)
+            ->getJson("/api/tasks/{$this->financeTask->id}")
+            ->assertOk()
+            ->assertJsonPath('data.can_edit', true);
     }
 
-    public function test_manager_cannot_open_task_of_another_division(): void
+    public function test_an_inactive_account_sees_no_task(): void
     {
-        $this->actingAs($this->manager);
+        $this->staff->update(['is_active' => false]);
 
-        $this->getJson("/api/tasks/{$this->financeTask->id}")->assertForbidden();
-        $this->getJson("/api/tasks/{$this->otherStaffTask->id}")->assertOk();
+        $this->actingAs($this->staff)->getJson('/api/tasks')->assertForbidden();
+        $this->actingAs($this->staff)->getJson("/api/tasks/{$this->staffTask->id}")->assertForbidden();
     }
 
     public function test_unknown_task_returns_not_found(): void
@@ -167,7 +171,7 @@ class TaskListingTest extends TestCase
     public function test_pic_and_managers_can_edit_tasks_from_the_list(): void
     {
         $this->actingAs($this->staff)
-            ->getJson('/api/tasks')
+            ->getJson('/api/tasks?scope=my_tasks')
             ->assertJsonPath('data.0.can_view_detail', true)
             ->assertJsonPath('data.0.can_edit', true);
 
@@ -185,7 +189,7 @@ class TaskListingTest extends TestCase
     public function test_list_returns_task_fields_for_board_and_table(): void
     {
         $this->actingAs($this->staff)
-            ->getJson('/api/tasks')
+            ->getJson('/api/tasks?scope=my_tasks')
             ->assertOk()
             ->assertJsonPath('data.0', [
                 'id' => $this->staffTask->id,
@@ -390,7 +394,7 @@ class TaskListingTest extends TestCase
         }
     }
 
-    public function test_meta_for_manager_is_limited_to_their_division(): void
+    public function test_meta_for_manager_lists_every_division_and_starts_on_their_own(): void
     {
         $this->actingAs($this->manager)
             ->getJson('/api/tasks/meta')
@@ -398,13 +402,14 @@ class TaskListingTest extends TestCase
             ->assertJsonPath('data.can_create', true)
             ->assertJsonPath('data.division', 'MKT')
             ->assertJsonPath('data.default_division', 'MKT')
-            ->assertJsonPath('data.divisions', [['code_division' => 'MKT', 'name' => 'Marketing']]);
+            ->assertJsonPath('data.divisions', [
+                ['code_division' => 'FIN', 'name' => 'Finance'],
+                ['code_division' => 'MKT', 'name' => 'Marketing'],
+            ]);
     }
 
-    public function test_meta_for_staff_lists_divisions_of_their_tasks(): void
+    public function test_meta_for_staff_lists_every_division(): void
     {
-        $this->task('Cross division task', $this->finance, $this->staff);
-
         $this->actingAs($this->staff)
             ->getJson('/api/tasks/meta')
             ->assertJsonPath('data.role', 'staff')

@@ -221,14 +221,16 @@ class TaskEvidenceTest extends TestCase
         }
     }
 
-    public function test_accounts_outside_the_task_cannot_see_its_evidence(): void
+    public function test_accounts_outside_the_task_see_its_evidence_but_cannot_submit_any(): void
     {
         $task = $this->task(TaskStatus::InProgress);
         $evidence = $this->evidence($task);
 
         foreach ([$this->financeManager, $this->otherStaff] as $account) {
-            $this->actingAs($account)->getJson($this->url($task))->assertForbidden();
-            $this->actingAs($account)->get($this->downloadUrl($task, $evidence))->assertForbidden();
+            $this->actingAs($account)->getJson($this->url($task))->assertOk()->assertJsonPath('data.0.id', $evidence->id);
+            $this->actingAs($account)
+                ->postJson($this->url($task), ['type' => 'link', 'url' => 'https://example.com/hasil', 'version' => $task->fresh()->version])
+                ->assertForbidden();
         }
     }
 

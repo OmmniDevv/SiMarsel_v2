@@ -278,9 +278,7 @@ class TaskService
             $divisionId = (int) ($data['division_id'] ?? $locked->division_id);
             $forwarded = $divisionId !== $locked->division_id;
 
-            if ($forwarded && ! $actor->isAdmin()) {
-                throw ValidationException::withMessages(['division_id' => 'Anda tidak dapat meneruskan tugas ke divisi di luar kewenangan Anda.']);
-            }
+            // The policy already checked the actor manages the task; forwarding needs no extra scope at the destination.
 
             if (! $forwarded && $added->isEmpty() && $released->isEmpty()) {
                 throw ValidationException::withMessages(['pic_ids' => 'Tidak ada perubahan PIC.']);
@@ -349,10 +347,10 @@ class TaskService
         return [
             'current_pics' => $task->pics->map(fn (Account $pic) => $pic->only(['id', 'fullname']))->values()->all(),
             'current_division' => $task->division->only(['id', 'code_division', 'name']),
-            'can_change_division' => $actor->isAdmin(),
+            'can_change_division' => $task->assignableBy($actor),
             'locked_reason' => $task->assignmentLockFor($actor),
             'divisions' => Division::query()
-                ->unless($actor->isAdmin(), fn (Builder $query) => $query->whereKey($task->division_id))
+                ->unless($task->assignableBy($actor), fn (Builder $query) => $query->whereKey($task->division_id))
                 ->orderBy('name')
                 ->get(['id', 'code_division', 'name'])
                 ->map(fn (Division $division) => $division->only(['id', 'code_division', 'name']))
@@ -652,7 +650,7 @@ class TaskService
             // Supervisor and Freelance apart from Staff. role above keeps its three values for existing callers.
             'role_code' => $account->role?->code_role,
             'permissions' => $account->permissionCodes(),
-            'can_create' => $account->isAdmin() || ($account->isManager() && $account->division_id !== null),
+            'can_create' => $account->can('create', Task::class),
             'division' => $account->division?->code_division,
             // Admin starts on "Semua Divisi" (null); a Manager starts on the division they manage.
             'default_division' => $account->isManager() ? $account->division?->code_division : null,
@@ -667,18 +665,15 @@ class TaskService
     }
 
     /**
-     * Divisions the account may filter by: every division for Admin, otherwise only the division
-     * a Manager manages and divisions the account has visible tasks in.
+     * Divisions the account may filter by: every division, since every active account sees the tasks of every
+     * division.
      *
      * @return array<int, array{code_division: string, name: string}>
      */
     private function divisionOptions(Account $account): array
     {
         return Division::query()
-            ->unless($account->isAdmin(), fn (Builder $query) => $query->where(fn (Builder $query) => $query
-                ->whereIn('id', Task::query()->visibleTo($account)->select('division_id'))
-                ->when($account->isManager() && $account->division_id, fn (Builder $query) => $query
-                    ->orWhere('id', $account->division_id))))
+            ->unless($account->is_active, fn (Builder $query) => $query->whereKey(0))
             ->orderBy('name')
             ->get(['code_division', 'name'])
             ->map(fn (Division $division) => $division->only(['code_division', 'name']))

@@ -22,6 +22,15 @@ class Account extends Authenticatable
     protected $rememberTokenName = '';
 
     /**
+     * Same default as the column, so a new account is active before it is reloaded.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'is_active' => true,
+    ];
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>

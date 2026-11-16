@@ -107,7 +107,7 @@ class StoreTaskRequest extends FormRequest
     }
 
     /**
-     * A Manager may only create tasks for the division they manage.
+     * A Supervisor may only create tasks for the division they manage; Admin and Managers for every division.
      */
     protected function creatableDivision(): Closure
     {

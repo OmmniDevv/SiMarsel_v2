@@ -35,14 +35,21 @@ class Division extends Model
     }
 
     /**
-     * Divisions the account may create tasks for: every division for Admin, only the managed one for a Manager.
+     * Divisions the account may create tasks for: every division for Admin and Managers, the managed one for a
+     * Supervisor, none for an account without task.create.
      */
     public function scopeTaskCreatableBy(Builder $query, Account $account): void
     {
-        if ($account->isAdmin()) {
+        if (! $account->is_active || ! $account->hasPermission(Permission::TASK_CREATE)) {
+            $query->whereKey(0);
+
             return;
         }
 
-        $query->whereKey($account->isManager() ? ($account->division_id ?? 0) : 0);
+        if ($account->isAdmin() || $account->isManager()) {
+            return;
+        }
+
+        $query->whereKey($account->isSupervisor() ? ($account->division_id ?? 0) : 0);
     }
 }

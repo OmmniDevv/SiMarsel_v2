@@ -3,20 +3,22 @@
 namespace App\Policies;
 
 use App\Models\Account;
+use App\Models\Division;
+use App\Models\Permission;
 use App\Models\Task;
 
 class TaskPolicy
 {
     /**
-     * Every logged-in role can open the task list; its rows are scoped by Task::scopeVisibleTo().
+     * Every active account can open the task list; its rows are scoped by Task::scopeVisibleTo().
      */
     public function viewAny(Account $user): bool
     {
-        return true;
+        return $user->is_active;
     }
 
     /**
-     * Admin sees every task, a Manager the tasks of their division, Staff only tasks they are PIC of.
+     * Every active account sees the tasks of every division (global read); seeing grants no change.
      */
     public function view(Account $user, Task $task): bool
     {
@@ -24,15 +26,18 @@ class TaskPolicy
     }
 
     /**
-     * Admin creates tasks for every division and a Manager for the division they manage; Staff cannot create tasks.
+     * Admin and Managers create tasks for every division, a Supervisor for the division they manage; Staff and
+     * Freelance cannot create tasks. Which division is checked by StoreTaskRequest.
      */
     public function create(Account $user): bool
     {
-        return $user->isAdmin() || ($user->isManager() && $user->division_id !== null);
+        return $user->is_active
+            && $user->hasPermission(Permission::TASK_CREATE)
+            && Division::query()->taskCreatableBy($user)->exists();
     }
 
     /**
-     * Admin and the Manager of its division may edit the task; its PIC may only update its status.
+     * Admin, Managers, and the division's Supervisor may edit the task; its active PICs may only update its status.
      */
     public function update(Account $user, Task $task): bool
     {
@@ -40,8 +45,8 @@ class TaskPolicy
     }
 
     /**
-     * Admin and Managers may add or release PICs on tasks of every division, a Supervisor on tasks of their own
-     * division; Staff and Freelance never. Forwarding to another division stays Admin-only (TaskService).
+     * Admin and Managers may add or release PICs and forward tasks of every division, a Supervisor tasks of their
+     * own division; Staff and Freelance never.
      */
     public function assign(Account $user, Task $task): bool
     {
@@ -49,18 +54,21 @@ class TaskPolicy
     }
 
     /**
-     * Anyone who sees the task may request a status change; whether this account may make this particular
-     * move (PIC vs. Admin/Manager) is checked by TaskService so the rejection carries its reason.
+     * Only accounts that take part in the workflow may request a status change: an active PIC, or an account that
+     * manages the task. Seeing the task is not enough (403). Whether this account may make this particular move
+     * (PIC vs. Admin/Manager/Supervisor) is checked by TaskService so the rejection carries its reason (422).
      */
     public function changeStatus(Account $user, Task $task): bool
     {
-        return $task->isVisibleTo($user);
+        return $user->hasPermission(Permission::TASK_CHANGE_STATUS)
+            && ($task->assignedTo($user) || $task->managedBy($user));
     }
 
     /**
-     * Only Admin, or the Manager of the task's division, may approve a task that requires QA or request its
-     * revision; Staff only sees the result. Whether the task is in On Review is checked by TaskReviewService so the
-     * rejection carries its reason.
+     * Admin and Managers for every division, and the Supervisor of the task's division, may approve a task that
+     * requires review or request its revision, also when they are its PIC (self-approval); Staff and Freelance only
+     * see the result. Whether the task is in On Review is checked by TaskReviewService so the rejection carries its
+     * reason.
      */
     public function review(Account $user, Task $task): bool
     {
@@ -68,7 +76,7 @@ class TaskPolicy
     }
 
     /**
-     * Only the task's PIC sends evidence for it; Admin and Managers see it through view(). Whether the task's
+     * Only the task's active PICs send evidence for it; everyone else sees it through view(). Whether the task's
      * status still accepts evidence is checked by TaskEvidenceService so the rejection carries its reason.
      */
     public function submitEvidence(Account $user, Task $task): bool

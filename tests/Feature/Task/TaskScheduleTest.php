@@ -5,12 +5,12 @@ namespace Tests\Feature\Task;
 use App\Enums\TaskPriority;
 use App\Enums\TaskStatus;
 use App\Models\Account;
+use App\Models\CalendarEvent;
 use App\Models\Division;
 use App\Models\Role;
-use App\Models\ScheduleEvent;
 use App\Models\Task;
+use Database\Seeders\CalendarEventSeeder;
 use Database\Seeders\DatabaseSeeder;
-use Database\Seeders\ScheduleEventSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Testing\TestResponse;
@@ -70,13 +70,13 @@ class TaskScheduleTest extends TestCase
         }
     }
 
-    public function test_an_item_only_opens_its_detail_for_whoever_may_view_the_task(): void
+    public function test_every_item_opens_its_detail_for_every_active_account(): void
     {
         $this->assertSame([true, true], $this->detailAccess($this->admin));
-        $this->assertSame([false, true], $this->detailAccess($this->manager));
-        $this->assertSame([false, true], $this->detailAccess($this->staff));
+        $this->assertSame([true, true], $this->detailAccess($this->manager));
+        $this->assertSame([true, true], $this->detailAccess($this->staff));
 
-        $this->actingAs($this->staff)->getJson("/api/tasks/{$this->financeTask->id}")->assertForbidden();
+        $this->actingAs($this->staff)->getJson("/api/tasks/{$this->financeTask->id}")->assertOk()->assertJsonPath('data.can_edit', false);
     }
 
     public function test_an_item_carries_only_its_schedule_and_not_the_task_internals(): void
@@ -139,7 +139,7 @@ class TaskScheduleTest extends TestCase
     public function test_items_are_ordered_by_the_day_they_start(): void
     {
         $deadlineOnly = $this->task('Deadline tanggal 12', $this->marketing, null, null, '2026-10-12');
-        $event = ScheduleEvent::factory()->create(['start_date' => '2026-10-11', 'end_date' => '2026-10-13']);
+        $event = CalendarEvent::factory()->create(['start_at' => '2026-10-11', 'end_at' => '2026-10-13']);
 
         $this->assertSame(
             [['task', $this->financeTask->id], ['event', $event->id], ['task', $deadlineOnly->id], ['task', $this->staffTask->id]],
@@ -151,12 +151,12 @@ class TaskScheduleTest extends TestCase
 
     public function test_a_division_focuses_the_tasks_and_the_agendas_it_owns_or_is_a_target_of(): void
     {
-        $general = ScheduleEvent::factory()->create(['start_date' => '2026-10-14', 'owner_division_id' => null]);
-        $ownedByMarketing = ScheduleEvent::factory()->create(['start_date' => '2026-10-15', 'owner_division_id' => $this->marketing->id]);
-        $forMarketing = ScheduleEvent::factory()->internalFor([$this->marketing])
-            ->create(['start_date' => '2026-10-16', 'owner_division_id' => $this->finance->id]);
-        ScheduleEvent::factory()->create(['start_date' => '2026-10-15', 'owner_division_id' => $this->finance->id]);
-        ScheduleEvent::factory()->internalFor([$this->finance])->create(['start_date' => '2026-10-15']);
+        $general = CalendarEvent::factory()->create(['start_at' => '2026-10-14', 'division_id' => null]);
+        $ownedByMarketing = CalendarEvent::factory()->create(['start_at' => '2026-10-15', 'division_id' => $this->marketing->id]);
+        $forMarketing = CalendarEvent::factory()->internalFor([$this->marketing])
+            ->create(['start_at' => '2026-10-16', 'division_id' => $this->finance->id]);
+        CalendarEvent::factory()->create(['start_at' => '2026-10-15', 'division_id' => $this->finance->id]);
+        CalendarEvent::factory()->internalFor([$this->finance])->create(['start_at' => '2026-10-15']);
 
         $data = $this->actingAs($this->admin)->getJson(self::PERIOD.'&division=MKT')->assertOk()->json('data');
 
@@ -168,8 +168,8 @@ class TaskScheduleTest extends TestCase
 
     public function test_a_division_focus_never_widens_the_agendas_an_account_may_see(): void
     {
-        $forFinance = ScheduleEvent::factory()->internalFor([$this->finance])
-            ->create(['start_date' => '2026-10-15', 'owner_division_id' => $this->marketing->id]);
+        $forFinance = CalendarEvent::factory()->internalFor([$this->finance])
+            ->create(['start_at' => '2026-10-15', 'division_id' => $this->marketing->id]);
 
         $this->assertNotContains($forFinance->id, $this->eventIds($this->staff, '&division=MKT'));
         $this->assertNotContains($forFinance->id, $this->eventIds($this->staff, '&division=FIN'));
@@ -185,7 +185,7 @@ class TaskScheduleTest extends TestCase
 
     public function test_a_shared_agenda_is_visible_to_every_role(): void
     {
-        $shared = ScheduleEvent::factory()->create(['start_date' => '2026-10-14', 'owner_division_id' => $this->finance->id, 'is_shared' => true]);
+        $shared = CalendarEvent::factory()->create(['start_at' => '2026-10-14', 'division_id' => $this->finance->id, 'is_shared' => true]);
 
         foreach ([$this->admin, $this->manager, $this->staff, $this->financeStaff()] as $account) {
             $this->assertSame([$shared->id], $this->eventIds($account));
@@ -194,8 +194,8 @@ class TaskScheduleTest extends TestCase
 
     public function test_an_internal_agenda_for_one_division_is_visible_to_that_division_and_admin_only(): void
     {
-        $internal = ScheduleEvent::factory()->internalFor([$this->marketing])
-            ->create(['start_date' => '2026-10-14', 'owner_division_id' => $this->marketing->id]);
+        $internal = CalendarEvent::factory()->internalFor([$this->marketing])
+            ->create(['start_at' => '2026-10-14', 'division_id' => $this->marketing->id]);
 
         $this->assertSame([$internal->id], $this->eventIds($this->admin));
         $this->assertSame([$internal->id], $this->eventIds($this->manager));
@@ -206,8 +206,8 @@ class TaskScheduleTest extends TestCase
     public function test_an_internal_agenda_for_several_divisions_is_visible_to_each_of_them_and_hidden_from_the_others(): void
     {
         $sales = Division::create(['code_division' => 'SLS', 'name' => 'Sales']);
-        $internal = ScheduleEvent::factory()->internalFor([$sales, $this->marketing])
-            ->create(['start_date' => '2026-10-14', 'owner_division_id' => $sales->id]);
+        $internal = CalendarEvent::factory()->internalFor([$sales, $this->marketing])
+            ->create(['start_at' => '2026-10-14', 'division_id' => $sales->id]);
 
         $this->assertSame([$internal->id], $this->eventIds($this->account(Role::EMPLOYEE, 'sls.staff', $sales)));
         $this->assertSame([$internal->id], $this->eventIds($this->staff));
@@ -219,8 +219,8 @@ class TaskScheduleTest extends TestCase
     public function test_the_owner_division_does_not_see_an_internal_agenda_it_is_not_a_target_of(): void
     {
         $sales = Division::create(['code_division' => 'SLS', 'name' => 'Sales']);
-        $internal = ScheduleEvent::factory()->internalFor([$sales, $this->marketing])
-            ->create(['start_date' => '2026-10-14', 'owner_division_id' => $this->finance->id]);
+        $internal = CalendarEvent::factory()->internalFor([$sales, $this->marketing])
+            ->create(['start_at' => '2026-10-14', 'division_id' => $this->finance->id]);
 
         $this->assertSame([], $this->eventIds($this->financeStaff()));
         $this->assertSame([$internal->id], $this->eventIds($this->staff));
@@ -228,8 +228,8 @@ class TaskScheduleTest extends TestCase
 
     public function test_an_internal_agenda_without_a_target_division_is_visible_to_admin_only(): void
     {
-        $adminOnly = ScheduleEvent::factory()->internalFor([])->create(['start_date' => '2026-10-14', 'owner_division_id' => null]);
-        $ownedAdminOnly = ScheduleEvent::factory()->internalFor([])->create(['start_date' => '2026-10-15', 'owner_division_id' => $this->marketing->id]);
+        $adminOnly = CalendarEvent::factory()->internalFor([])->create(['start_at' => '2026-10-14', 'division_id' => null]);
+        $ownedAdminOnly = CalendarEvent::factory()->internalFor([])->create(['start_at' => '2026-10-15', 'division_id' => $this->marketing->id]);
 
         $this->assertSame([$adminOnly->id, $ownedAdminOnly->id], $this->eventIds($this->admin));
         $this->assertSame([], $this->eventIds($this->manager));
@@ -239,9 +239,9 @@ class TaskScheduleTest extends TestCase
     public function test_an_internal_agenda_lists_its_owner_and_target_divisions(): void
     {
         $sales = Division::create(['code_division' => 'SLS', 'name' => 'Sales']);
-        ScheduleEvent::factory()->internalFor([$sales, $this->marketing])
-            ->create(['start_date' => '2026-10-14', 'owner_division_id' => $this->finance->id]);
-        ScheduleEvent::factory()->create(['start_date' => '2026-10-15', 'owner_division_id' => $this->finance->id]);
+        CalendarEvent::factory()->internalFor([$sales, $this->marketing])
+            ->create(['start_at' => '2026-10-14', 'division_id' => $this->finance->id]);
+        CalendarEvent::factory()->create(['start_at' => '2026-10-15', 'division_id' => $this->finance->id]);
 
         $events = collect($this->schedule($this->staff)->json('data'))->where('type', 'event')->values();
 
@@ -253,10 +253,10 @@ class TaskScheduleTest extends TestCase
         $this->assertSame([], $events[1]['target_divisions']);
     }
 
-    public function test_an_agenda_opens_the_detail_of_its_related_task_only_for_whoever_may_view_that_task(): void
+    public function test_an_agenda_opens_the_detail_of_its_related_task_for_every_active_account(): void
     {
-        $standalone = ScheduleEvent::factory()->create(['title' => 'Rapat koordinasi', 'start_date' => '2026-10-14', 'end_date' => null]);
-        $related = ScheduleEvent::factory()->create(['start_date' => '2026-10-15', 'task_id' => $this->financeTask->id]);
+        $standalone = CalendarEvent::factory()->create(['title' => 'Rapat koordinasi', 'start_at' => '2026-10-14', 'end_at' => null]);
+        $related = CalendarEvent::factory()->create(['start_at' => '2026-10-15', 'task_id' => $this->financeTask->id]);
 
         $events = fn (Account $account) => collect($this->schedule($account)->json('data'))->where('type', 'event')->keyBy('id');
 
@@ -274,15 +274,15 @@ class TaskScheduleTest extends TestCase
             'can_view_detail' => false,
         ], $events($this->admin)[$standalone->id]);
         $this->assertTrue($events($this->admin)[$related->id]['can_view_detail']);
-        $this->assertFalse($events($this->staff)[$related->id]['can_view_detail']);
+        $this->assertTrue($events($this->staff)[$related->id]['can_view_detail']);
     }
 
     public function test_agendas_overlapping_the_period_edges_are_included_and_the_rest_left_out(): void
     {
-        $endsOnFirstDay = ScheduleEvent::factory()->create(['start_date' => '2026-10-10', 'end_date' => '2026-10-12']);
-        $oneDayOnLastDay = ScheduleEvent::factory()->create(['start_date' => '2026-10-18', 'end_date' => null]);
-        ScheduleEvent::factory()->create(['start_date' => '2026-10-11', 'end_date' => null]);
-        ScheduleEvent::factory()->create(['start_date' => '2026-10-19', 'end_date' => '2026-10-20']);
+        $endsOnFirstDay = CalendarEvent::factory()->create(['start_at' => '2026-10-10', 'end_at' => '2026-10-12']);
+        $oneDayOnLastDay = CalendarEvent::factory()->create(['start_at' => '2026-10-18', 'end_at' => null]);
+        CalendarEvent::factory()->create(['start_at' => '2026-10-11', 'end_at' => null]);
+        CalendarEvent::factory()->create(['start_at' => '2026-10-19', 'end_at' => '2026-10-20']);
 
         $this->assertEqualsCanonicalizing([$endsOnFirstDay->id, $oneDayOnLastDay->id], $this->eventIds($this->admin));
     }
@@ -290,18 +290,18 @@ class TaskScheduleTest extends TestCase
     public function test_the_seeder_places_demo_agendas_around_the_current_week(): void
     {
         Carbon::setTestNow('2026-10-14 09:00:00');
-        $this->seed(ScheduleEventSeeder::class);
+        $this->seed(CalendarEventSeeder::class);
 
         // Shared agendas, a briefing per division, one for Marketing and Finance together, one for Admin only.
-        $total = count(ScheduleEventSeeder::SHARED_AGENDAS) + 2 + 1 + 1;
+        $total = count(CalendarEventSeeder::SHARED_AGENDAS) + 2 + 1 + 1;
 
-        $this->assertSame($total, ScheduleEvent::count());
+        $this->assertSame($total, CalendarEvent::count());
         $this->assertSame(6, count($this->eventIds($this->admin)));
         $this->assertSame(4, count($this->eventIds($this->staff)));
         $this->assertSame(4, count($this->eventIds($this->financeStaff())));
 
-        $this->seed(ScheduleEventSeeder::class);
-        $this->assertSame($total, ScheduleEvent::count());
+        $this->seed(CalendarEventSeeder::class);
+        $this->assertSame($total, CalendarEvent::count());
     }
 
     // Validasi

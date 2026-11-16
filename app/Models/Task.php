@@ -162,22 +162,20 @@ class Task extends Model
     }
 
     /**
-     * Limit tasks to what the account may see: Admin sees every division, a Manager sees the
-     * division they manage, and everyone else only sees tasks they are an active PIC of.
+     * Limit tasks to what the account may see. Every active account whose role grants task.view_all sees the tasks
+     * of every division (TASK-19/TASK-12); seeing a task never grants changing it. An inactive account sees nothing.
      */
     public function scopeVisibleTo(Builder $query, Account $account): void
     {
-        if ($account->isAdmin()) {
-            return;
-        }
-
-        if ($account->isManager()) {
-            $query->where('division_id', $account->division_id ?? 0);
+        if (! $account->is_active) {
+            $query->whereRaw('1 = 0');
 
             return;
         }
 
-        $query->assignedTo($account);
+        if (! $account->hasPermission(Permission::TASK_VIEW_ALL)) {
+            $query->assignedTo($account);
+        }
     }
 
     /**
@@ -185,31 +183,37 @@ class Task extends Model
      */
     public function isVisibleTo(Account $account): bool
     {
-        return match (true) {
-            $account->isAdmin() => true,
-            $account->isManager() => $this->managedBy($account),
-            default => $this->assignedTo($account),
-        };
+        return $account->is_active && ($account->hasPermission(Permission::TASK_VIEW_ALL) || $this->assignedTo($account));
     }
 
     /**
-     * Who may add or release PICs: Admin and Managers for every division, a Supervisor for tasks of their own
-     * division.
+     * Who may add or release PICs and forward the task: an account with task.assign that manages the task.
      */
     public function assignableBy(Account $account): bool
     {
-        return $account->isAdmin()
-            || $account->isManager()
-            || ($account->isSupervisor() && $account->division_id !== null && $this->division_id === $account->division_id);
+        return $this->managedBy($account, Permission::TASK_ASSIGN);
     }
 
     /**
-     * Whether the account manages this task: Admin for every division, a Manager for their own.
+     * Whether the account manages this task: Admin and Managers for every division, a Supervisor for the division
+     * they manage. With a permission, the account's role must also grant it. Staff and Freelance never manage a
+     * task; they work on it as its PIC.
      */
-    public function managedBy(Account $account): bool
+    public function managedBy(Account $account, ?string $permission = null): bool
+    {
+        return $account->is_active
+            && self::managesDivision($account, $this->division_id)
+            && ($permission === null || $account->hasPermission($permission));
+    }
+
+    /**
+     * The management scope of a role: Admin and Manager cover every division, a Supervisor their own division.
+     */
+    public static function managesDivision(Account $account, ?int $divisionId): bool
     {
         return $account->isAdmin()
-            || ($account->isManager() && $account->division_id !== null && $this->division_id === $account->division_id);
+            || $account->isManager()
+            || ($account->isSupervisor() && $account->division_id !== null && $divisionId === $account->division_id);
     }
 
     /**
@@ -217,6 +221,10 @@ class Task extends Model
      */
     public function assignedTo(Account $account): bool
     {
+        if (! $account->is_active) {
+            return false;
+        }
+
         if ($this->relationLoaded('pics')) {
             return $this->pics->contains('id', $account->id);
         }
@@ -230,17 +238,18 @@ class Task extends Model
     }
 
     /**
-     * Seeing a task is not editing it: Admin and the division's Manager may edit it until it is Done, its PIC
-     * only while there is a status step for them to take. Otherwise the task is read-only.
+     * Seeing a task is not editing it: Admin, Managers, and the division's Supervisor may edit it until it is Done,
+     * its PIC only while there is a status step for them to take. Otherwise the task is read-only.
      */
     public function updatableBy(Account $account): bool
     {
-        return ($this->managedBy($account) && $this->status !== TaskStatus::Done) || $this->nextStatusesFor($account) !== [];
+        return ($this->managedBy($account, Permission::TASK_UPDATE) && $this->status !== TaskStatus::Done)
+            || $this->nextStatusesFor($account) !== [];
     }
 
     /**
-     * Statuses the account may move the task to from its current one: the PIC starts the work and hands it
-     * to QA or finishes it; Admin or the division's Manager makes every other move.
+     * Statuses the account may move the task to from its current one: every active PIC starts the work and hands
+     * it to review or finishes it; Admin, a Manager, or the division's Supervisor makes every other move.
      *
      * @return array<int, TaskStatus>
      */
@@ -252,12 +261,13 @@ class Task extends Model
     }
 
     /**
-     * Whether the account may run this task's QA: Admin for every division, a Manager for their own, and only
-     * for a task that requires QA. Staff never reviews, not even their own work.
+     * Whether the account may review this task: Admin and Managers for every division, a Supervisor for their own,
+     * and only for a task that requires review. Being one of its active PICs does not take that away, so a Manager
+     * or Supervisor may approve their own work (self-approval). Staff and Freelance never review.
      */
     public function reviewableBy(Account $account): bool
     {
-        return $this->requires_review && $this->managedBy($account);
+        return $this->requires_review && $this->managedBy($account, Permission::TASK_REVIEW);
     }
 
     /**
@@ -286,7 +296,7 @@ class Task extends Model
         if (! $this->movesStatusFor($account)) {
             return $from->movedByPic()
                 ? "Hanya PIC tugas yang dapat mengubah status dari {$from->label()} ke {$status->label()}."
-                : "Hanya Admin atau Manajer divisi yang dapat mengubah status dari {$from->label()} ke {$status->label()}.";
+                : "Hanya Admin, Manajer, atau Supervisor divisi yang dapat mengubah status dari {$from->label()} ke {$status->label()}.";
         }
 
         if ($from->decidedByReview()) {
@@ -310,6 +320,10 @@ class Task extends Model
 
     private function movesStatusFor(Account $account): bool
     {
+        if (! $account->hasPermission(Permission::TASK_CHANGE_STATUS)) {
+            return false;
+        }
+
         return $this->status->movedByPic() ? $this->assignedTo($account) : $this->managedBy($account);
     }
 
@@ -320,7 +334,7 @@ class Task extends Model
      */
     public function lockedFieldsFor(Account $account): array
     {
-        if (! $this->managedBy($account)) {
+        if (! $this->managedBy($account, Permission::TASK_UPDATE)) {
             return collect(self::EDITABLE_FIELDS)
                 ->reject(fn (string $field) => $field === 'status')
                 ->mapWithKeys(fn (string $field) => [$field => 'PIC hanya dapat mengubah status tugas.'])
@@ -335,8 +349,8 @@ class Task extends Model
 
         $locked = [];
 
-        if (! $account->isAdmin()) {
-            $locked['division_id'] = 'Hanya Admin yang dapat memindahkan tugas ke divisi lain.';
+        if (! $this->assignableBy($account)) {
+            $locked['division_id'] = 'Anda tidak berwenang memindahkan tugas ke divisi lain.';
         }
 
         if ($this->status->inQa()) {

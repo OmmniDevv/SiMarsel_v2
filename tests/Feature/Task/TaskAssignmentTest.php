@@ -214,13 +214,26 @@ class TaskAssignmentTest extends TestCase
         $this->assertSame(TaskStatus::InProgress, $task->fresh()->status);
     }
 
-    public function test_every_active_pic_sees_the_task_and_a_released_pic_no_longer_does(): void
+    public function test_a_released_pic_still_sees_the_task_but_loses_the_pic_permissions(): void
     {
         $this->actingAs($this->manager)->patchJson($this->url(), $this->payload([$this->otherStaff->id, $this->financeStaff->id]))->assertOk();
 
-        $this->actingAs($this->otherStaff)->getJson("/api/tasks/{$this->task->id}")->assertOk();
-        $this->actingAs($this->financeStaff)->getJson("/api/tasks/{$this->task->id}")->assertOk();
-        $this->actingAs($this->staff)->getJson("/api/tasks/{$this->task->id}")->assertForbidden();
+        foreach ([$this->otherStaff, $this->financeStaff] as $pic) {
+            $this->actingAs($pic)->getJson("/api/tasks/{$this->task->id}")->assertOk()->assertJsonPath('data.can_edit', true);
+        }
+
+        $this->actingAs($this->staff)
+            ->getJson("/api/tasks/{$this->task->id}")
+            ->assertOk()
+            ->assertJsonPath('data.can_edit', false)
+            ->assertJsonPath('data.next_statuses', []);
+        $this->actingAs($this->staff)->getJson('/api/tasks?scope=my_tasks')->assertOk()->assertJsonCount(0, 'data');
+        $this->actingAs($this->staff)
+            ->patchJson("/api/tasks/{$this->task->id}/status", ['status' => 'in_progress', 'version' => $this->task->fresh()->version])
+            ->assertForbidden();
+        $this->actingAs($this->staff)
+            ->postJson("/api/tasks/{$this->task->id}/evidences", ['type' => 'link', 'url' => 'https://example.com/x', 'version' => $this->task->fresh()->version])
+            ->assertForbidden();
     }
 
     public function test_a_task_past_back_log_keeps_at_least_one_pic(): void
@@ -310,17 +323,32 @@ class TaskAssignmentTest extends TestCase
         $this->assertSame(0, $this->task->collaboratingDivisions()->count());
     }
 
-    public function test_only_admin_may_forward_to_another_division(): void
+    public function test_managers_and_the_division_supervisor_may_forward_but_staff_and_other_supervisors_may_not(): void
     {
-        $this->actingAs($this->manager)
+        foreach ([$this->staff, $this->freelancer, $this->financeSupervisor] as $account) {
+            $this->actingAs($account)
+                ->patchJson($this->url(), $this->payload([$this->financeStaff->id], ['division_id' => $this->finance->id]))
+                ->assertForbidden();
+        }
+
+        $this->assertSame($this->marketing->id, $this->task->fresh()->division_id);
+
+        $this->actingAs($this->supervisor)
             ->patchJson($this->url(), $this->payload([$this->financeStaff->id], ['division_id' => $this->finance->id]))
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors(['division_id' => 'Anda tidak dapat meneruskan tugas ke divisi di luar kewenangan Anda.']);
+            ->assertOk()
+            ->assertJsonPath('data.division.code_division', 'FIN');
 
         $task = $this->task->fresh();
-        $this->assertSame($this->marketing->id, $task->division_id);
-        $this->assertSame(1, $task->version);
-        $this->assertActivePics($task, [$this->staff]);
+        $this->assertSame($this->finance->id, $task->division_id);
+        $this->assertActivePics($task, [$this->financeStaff]);
+
+        // The task is now outside the marketing Supervisor's division; a Manager may still forward it back.
+        $back = ['division_id' => $this->marketing->id, 'version' => $task->version];
+        $this->actingAs($this->supervisor)->patchJson($this->url(), $this->payload([$this->staff->id], $back))->assertForbidden();
+        $this->actingAs($this->financeManager)
+            ->patchJson($this->url(), $this->payload([$this->staff->id], $back))
+            ->assertOk();
+        $this->assertSame($this->marketing->id, $this->task->fresh()->division_id);
     }
 
     public function test_manager_may_resend_the_current_division(): void
@@ -394,9 +422,9 @@ class TaskAssignmentTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.current_pics', [['id' => $this->staff->id, 'fullname' => 'mkt.staff']])
             ->assertJsonPath('data.current_division.id', $this->marketing->id)
-            ->assertJsonPath('data.can_change_division', false)
+            ->assertJsonPath('data.can_change_division', true)
             ->assertJsonPath('data.locked_reason', null)
-            ->assertJsonPath('data.divisions', [['id' => $this->marketing->id, 'code_division' => 'MKT', 'name' => 'Marketing']]);
+            ->assertJsonCount(2, 'data.divisions');
 
         $this->assertSame(
             ['fin.spv', 'fin.staff', 'freelancer', 'mkt.other', 'mkt.spv', 'mkt.staff'],

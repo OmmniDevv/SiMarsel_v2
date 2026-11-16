@@ -62,20 +62,20 @@ class TaskActivityTest extends TestCase
         $this->actingAs($this->admin)->getJson($this->url($task))->assertOk();
     }
 
-    public function test_manager_reads_only_the_history_of_their_division(): void
+    public function test_every_role_reads_the_history_of_every_division(): void
     {
         $task = $this->task();
 
         $this->actingAs($this->manager)->getJson($this->url($task))->assertOk();
-        $this->actingAs($this->financeManager)->getJson($this->url($task))->assertForbidden();
+        $this->actingAs($this->financeManager)->getJson($this->url($task))->assertOk();
     }
 
-    public function test_staff_reads_only_the_history_of_tasks_assigned_to_them(): void
+    public function test_staff_reads_the_history_of_tasks_they_are_not_pic_of(): void
     {
         $task = $this->task();
 
         $this->actingAs($this->staff)->getJson($this->url($task))->assertOk();
-        $this->actingAs($this->otherStaff)->getJson($this->url($task))->assertForbidden();
+        $this->actingAs($this->otherStaff)->getJson($this->url($task))->assertOk();
     }
 
     public function test_unknown_task_returns_not_found(): void
