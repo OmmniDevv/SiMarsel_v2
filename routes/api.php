@@ -10,7 +10,6 @@ use App\Http\Controllers\Performance\PerformanceTrendController;
 use App\Http\Controllers\Performance\PlatformContributionController;
 use App\Http\Controllers\Performance\PurchaseTimeDistributionController;
 use App\Http\Controllers\Platform\PlatformController;
-use App\Http\Controllers\Product\ProductOverviewController;
 use App\Http\Controllers\Promo\FunnelController;
 use App\Http\Controllers\Promo\PromoAnalysisController;
 use App\Http\Controllers\Promo\PromoAnalysisExportController;
@@ -159,12 +158,6 @@ Route::middleware('auth')->group(function () {
         ->name('api.performance.purchase-times');
     Route::get('/performance/export', PerformanceExportController::class)
         ->name('api.performance.export');
-    Route::prefix('products')->name('api.products.')->group(function () {
-        Route::get('/filters', [ProductOverviewController::class, 'filters'])->name('filters');
-        Route::get('/top-packages/revenue', [ProductOverviewController::class, 'topByRevenue'])->name('top-packages.revenue');
-        Route::get('/top-packages/volume', [ProductOverviewController::class, 'topByVolume'])->name('top-packages.volume');
-        Route::get('/performance', [ProductOverviewController::class, 'performance'])->name('performance');
-    });
 
     Route::prefix('tasks')->name('api.tasks.')->group(function () {
         Route::get('/meta', [TaskController::class, 'meta'])->name('meta');

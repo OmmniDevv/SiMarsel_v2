@@ -37,7 +37,7 @@ class PageAccessTest extends TestCase
     {
         $this->actingAs($this->manager)->get('/dashboard')
             ->assertOk()
-            ->assertSeeInOrder(['Analitik', 'Analisis Performa', 'Ringkasan', 'Produk', 'Pekerjaan', 'Tasklist', 'Penjualan &amp; Pemasaran', 'Manajemen Promo', 'Sistem', 'Keluar', 'Akun Aktif'], false)
+            ->assertSeeInOrder(['Analitik', 'Analisis Performa', 'Ringkasan', 'Pekerjaan', 'Tasklist', 'Penjualan &amp; Pemasaran', 'Manajemen Promo', 'Sistem', 'Keluar', 'Akun Aktif'], false)
             ->assertSee('x-dialog="open && !desktop"', false)
             ->assertSeeInOrder(['id="sidebar-dialog"', 'x-dialog="open && !desktop"', 'x-show="open"', 'id="sidebar"', '</aside>', '<main'], false)
             ->assertSee(':inert="!desktop && !open"', false)
@@ -207,39 +207,5 @@ class PageAccessTest extends TestCase
         $this->actingAs($this->manager)
             ->get('/divisions')
             ->assertRedirect('/settings?tab=divisions');
-    }
-
-    public function test_guest_cannot_open_product_overview_page(): void
-    {
-        $this->get('/performance/products')->assertRedirect(route('login'));
-    }
-
-    public function test_every_role_can_open_product_overview_page_with_filters_and_cards(): void
-    {
-        foreach ([$this->manager, $this->employee] as $account) {
-            $this->actingAs($account)
-                ->get('/performance/products')
-                ->assertOk()
-                ->assertSee('Ikhtisar Produk')
-                ->assertSeeInOrder(['Aplikasi Sumber / Platform', 'Tahun', 'Bulan'])
-                ->assertSeeInOrder([
-                    'Paket Teratas berdasarkan Revenue',
-                    'Paket Teratas berdasarkan Volume Transaksi',
-                    'Detail Performa Paket',
-                ])
-                ->assertSee('Cari nama paket')
-                ->assertSeeInOrder(['Excel', 'CSV'])
-                ->assertSee('Data belum tersedia');
-        }
-    }
-
-    public function test_sidebar_links_product_overview_inside_performance_folder(): void
-    {
-        $this->actingAs($this->employee)
-            ->get('/performance/products')
-            ->assertOk()
-            ->assertSeeInOrder(['Analisis Performa', 'Produk'])
-            ->assertSee('href="'.route('performance.products').'"', false)
-            ->assertSee('aria-current="page"', false);
     }
 }
