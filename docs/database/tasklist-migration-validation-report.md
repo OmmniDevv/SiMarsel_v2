@@ -122,7 +122,7 @@ Temuan sebelumnya: urutan key di `changes` histori berbeda antara MySQL dan SQLi
 
 | Suite | Hasil |
 |---|---|
-| Seluruh test, SQLite | 733 test: 718 lulus, 12 gagal (sudah gagal sebelum TASK-19), 3 dilewati (`PromoCodeConcurrencyTest`, butuh MySQL) |
+| Seluruh test, SQLite (setelah sinkron dengan `dev` #117) | 720 test: 705 lulus, 12 gagal (sudah gagal sebelum TASK-19), 3 dilewati (`PromoCodeConcurrencyTest`, butuh MySQL) |
 | Task dan Database, MySQL | 354/354 lulus |
 | Account, Auth, Division, Web, MySQL | 116 test: 114 lulus, 2 gagal (`LoginTest`, sudah gagal sebelumnya) |
 | Frontend (`node --test tests/Frontend`) | 141/141 lulus (tidak ada perubahan FE) |
