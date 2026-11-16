@@ -361,6 +361,15 @@ class Task extends Model
     }
 
     /**
+     * Whether the account may delete the task right now: it manages the task with task.delete, and the task is not
+     * Done (a finished task stays as the record of the work).
+     */
+    public function deletableBy(Account $account): bool
+    {
+        return $this->status !== TaskStatus::Done && $this->managedBy($account, Permission::TASK_DELETE);
+    }
+
+    /**
      * Why the account may not add or release PICs right now, or null when it may.
      */
     public function assignmentLockFor(Account $account): ?string

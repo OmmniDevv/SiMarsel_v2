@@ -6,6 +6,7 @@ use App\Enums\TaskReviewDecision;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Task\AssignTaskRequest;
 use App\Http\Requests\Task\ChangeTaskStatusRequest;
+use App\Http\Requests\Task\DeleteTaskRequest;
 use App\Http\Requests\Task\ReviewTaskRequest;
 use App\Http\Requests\Task\StoreTaskEvidenceRequest;
 use App\Http\Requests\Task\StoreTaskRequest;
@@ -19,6 +20,7 @@ use App\Http\Resources\ScheduleItemResource;
 use App\Http\Resources\TaskActivityResource;
 use App\Http\Resources\TaskDetailResource;
 use App\Http\Resources\TaskEvidenceResource;
+use App\Http\Resources\TaskPreviewResource;
 use App\Http\Resources\TaskResource;
 use App\Http\Resources\TaskReviewResource;
 use App\Models\Task;
@@ -93,6 +95,21 @@ class TaskController extends Controller
     public function show(Task $task): TaskDetailResource
     {
         return TaskDetailResource::make($this->taskService->detail($task));
+    }
+
+    /**
+     * Summary of one task for the Calendar pop-up, read fresh from the database.
+     */
+    public function preview(Task $task): TaskPreviewResource
+    {
+        return TaskPreviewResource::make($this->taskService->preview($task));
+    }
+
+    public function destroy(DeleteTaskRequest $request, Task $task): JsonResponse
+    {
+        $this->taskService->delete($request->user(), $task, $request->validated());
+
+        return response()->json(['message' => 'Tugas berhasil dihapus.']);
     }
 
     public function activities(Task $task, TaskActivityService $service): AnonymousResourceCollection

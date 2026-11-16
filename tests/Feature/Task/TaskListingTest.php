@@ -206,6 +206,7 @@ class TaskListingTest extends TestCase
                 'can_view_detail' => true,
                 'can_edit' => true,
                 'can_assign' => false,
+                'can_delete' => false,
                 'version' => 1,
                 'updated_at' => $this->staffTask->updated_at->toIso8601ZuluString(),
             ]);

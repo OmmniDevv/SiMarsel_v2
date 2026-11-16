@@ -62,15 +62,25 @@ class TaskRoleCompatibilityTest extends TestCase
         }
     }
 
-    public function test_task_cards_have_no_delete_endpoint_for_any_role(): void
+    public function test_only_admin_manager_and_the_division_supervisor_delete_task_cards(): void
     {
-        $task = $this->task();
+        foreach (['staff' => 403, 'freelance' => 403, 'supervisor' => 200] as $role => $expected) {
+            $task = $this->task(['status' => TaskStatus::Todo], ['staff', 'freelance']);
 
-        foreach ($this->accounts as $account) {
-            $this->actingAs($account)->deleteJson("/api/tasks/{$task->id}")->assertMethodNotAllowed();
+            $this->actingAs($this->accounts[$role])
+                ->deleteJson("/api/tasks/{$task->id}", ['version' => 1])
+                ->assertStatus($expected);
         }
 
-        $this->assertNotSoftDeleted($task);
+        foreach (['admin', 'manager'] as $role) {
+            $task = $this->task(['division_id' => $this->finance->id]);
+            $this->actingAs($this->accounts[$role])->deleteJson("/api/tasks/{$task->id}", ['version' => 1])->assertOk();
+            $this->assertSoftDeleted($task);
+        }
+
+        $financeTask = $this->task(['division_id' => $this->finance->id]);
+        $this->actingAs($this->accounts['supervisor'])->deleteJson("/api/tasks/{$financeTask->id}", ['version' => 1])->assertForbidden();
+        $this->assertNotSoftDeleted($financeTask);
     }
 
     public function test_staff_and_freelance_never_give_review_decisions_even_as_pic(): void

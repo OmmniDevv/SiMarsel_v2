@@ -45,6 +45,16 @@ class TaskPolicy
     }
 
     /**
+     * Admin and Managers may delete tasks of every division, a Supervisor tasks of their own division; Staff and
+     * Freelance never, not even as its PIC. Whether the task's status still allows it is checked by TaskService so the
+     * rejection carries its reason.
+     */
+    public function delete(Account $user, Task $task): bool
+    {
+        return $task->managedBy($user, Permission::TASK_DELETE);
+    }
+
+    /**
      * Admin and Managers may add or release PICs and forward tasks of every division, a Supervisor tasks of their
      * own division; Staff and Freelance never.
      */
