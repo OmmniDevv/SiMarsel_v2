@@ -10,16 +10,22 @@ Wajib login. Header dan kode error umum mengikuti [authentication.md](authentica
 
 Role dan kewenangan membuat tugas berasal dari `GET /api/tasks/meta`. Jika pemuatan meta gagal, frontend memakai pemetaan role akun `MGR` → `manager`, `EMP` → `staff`, dan `ADM` → `admin`.
 
-| Role | Melihat | Membuat | Edit | Atur PIC | Review |
-|---|---|---|---|---|---|
-| `admin` | Semua tugas, default Semua Divisi | Semua divisi | Semua tugas | Semua divisi (+ meneruskan ke divisi lain) | Semua divisi |
-| `manager` | Tugas divisi yang dikelolanya | Divisinya | Tugas divisinya | Semua divisi | Divisinya |
-| Supervisor (`SPV`) | Tugas yang dia menjadi PIC aktifnya* | Tidak | Hanya status tugasnya (seperti Staff) | Tugas divisinya | Tidak |
-| `staff` (Staff `EMP` dan Freelance `FRL`) | Hanya tugas yang dia menjadi PIC aktifnya, termasuk yang sudah Done | Tidak | Hanya status tugasnya: To Do → On Process → Ready Review (atau → Done bila tanpa QA). Back Log, Ready Review, On Review, dan Done hanya-baca (`can_edit: false`) | Tidak | Tidak |
+Semua akun **aktif** melihat daftar dan detail tugas **seluruh divisi** (Board, Table, Calendar, Timeline, histori, evidence, review, monitoring). Melihat tidak memberi hak mengubah; hak mengubah mengikuti permission role (`meta.permissions`), cakupan divisi, dan assignment PIC aktif.
 
-\* Akses baca global untuk semua akun aktif (TASK-12) belum diterapkan; sampai itu masuk, `meta.role` untuk Supervisor dan Freelance tetap `staff`.
+| Role | Melihat | Membuat | Edit field | Atur PIC / meneruskan | Status | Review (termasuk self-approval) |
+|---|---|---|---|---|---|---|
+| `admin` (`ADM`) | Semua tugas | Semua divisi | Semua divisi | Semua divisi | Semua divisi; langkah PIC bila dia PIC aktif | Semua divisi |
+| `manager` (`MGR`) | Semua tugas | Semua divisi | Semua divisi | Semua divisi | Semua divisi; langkah PIC bila dia PIC aktif | Semua divisi |
+| Supervisor (`SPV`, `meta.role` = `staff`) | Semua tugas | Divisinya | Divisinya | Tugas divisinya | Divisinya; langkah PIC bila dia PIC aktif | Divisinya |
+| Staff (`EMP`) dan Freelance (`FRL`), `meta.role` = `staff` | Semua tugas | Tidak | Tidak | Tidak | Hanya sebagai PIC aktif: To Do → On Process → Ready Review (atau → Done bila tanpa QA) | Tidak |
 
-Backend **wajib** menerapkan cakupan ini di setiap endpoint. Staff yang mengubah parameter atau ID tugas harus mendapat `403` atau `404`. Aturan di frontend hanya untuk tampilan.
+- Tugas di luar kewenangan tampil **read-only**: `can_edit`, `can_assign`, `can_review` `false`, `editable_fields` dan `next_statuses` kosong. FE cukup mengikuti flag ini.
+- Perubahan tanpa hak lewat API ditolak `403`. Perubahan yang diizinkan tetapi tidak sah untuk kondisi tugas (mis. transisi status yang salah) ditolak `422` dengan alasan.
+- PIC yang dilepas tetap melihat tugas lewat `all_tasks`, tetapi hilang dari `my_tasks` dan kehilangan hak sebagai PIC.
+- Akun nonaktif tidak bisa login dan mendapat `403` di semua endpoint Tasklist.
+- `meta.role` tetap tiga nilai (`admin`, `manager`, `staff`) agar kode lama tidak rusak; pakai `meta.role_code` untuk membedakan Supervisor dan Freelance, dan `meta.can_create` untuk tombol Buat Tugas.
+
+Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend hanya untuk tampilan.
 
 ## Objek
 
@@ -111,11 +117,11 @@ Backend **wajib** menerapkan cakupan ini di setiap endpoint. Staff yang mengubah
 
 - **Validasi** (`422`): `from` dan `to` wajib berformat `YYYY-MM-DD`, `to` tidak boleh sebelum `from`, periode maksimal 62 hari, dan `division` harus kode divisi yang ada.
 - **Tugas**: tugas semua divisi yang rentang tanggalnya bersinggungan dengan periode, untuk semua role. `start_date` = tanggal mulai, `end_date` = deadline. Tugas yang hanya punya salah satu tanggal dihitung satu hari pada tanggal itu (tanggal lainnya `null`); tugas tanpa tanggal tidak dikirim.
-- **Detail internal tidak dikirim**: PIC, deskripsi, evidence, dan histori tidak ada di ScheduleItem. `can_view_detail` mengikuti aturan `GET /api/tasks/{id}` (Admin semua, Manajer divisinya, Staff tugas yang PIC-nya dia), sehingga tugas divisi lain tampil di jadwal tetapi detailnya tetap `403`.
-- **Agenda (`event`)** dari tabel `schedule_events`. `division` = divisi pemilik/penyelenggara agenda (`null` bila tanpa pemilik); hanya informasi, tidak menentukan siapa yang melihat. `target_divisions` = divisi tujuan agenda internal (tabel `schedule_event_divisions`, bisa lebih dari satu; `[]` untuk agenda bersama). `is_shared` adalah penentu utama visibilitas: `true` = semua pengguna; `false` dengan divisi tujuan = Admin dan akun divisi tujuan saja; `false` tanpa divisi tujuan = hanya Admin. Divisi pemilik yang bukan divisi tujuan tidak melihat agenda internalnya. `task_id` diisi bila agenda terkait tugas, dan `can_view_detail` agenda mengikuti hak membuka tugas itu (`false` untuk agenda tanpa tugas). Agenda tanpa `end_date` berlangsung satu hari.
+- **Detail internal tidak dikirim**: PIC, deskripsi, evidence, dan histori tidak ada di ScheduleItem. `can_view_detail` mengikuti aturan `GET /api/tasks/{id}`, yang kini `true` untuk semua akun aktif.
+- **Agenda (`event`)** dari tabel `calendar_events` (sumber tunggal sejak TASK-19; agenda lama dipindahkan dari `schedule_events` dengan id yang sama). `division` = divisi pemilik/penyelenggara agenda (`null` bila tanpa pemilik); hanya informasi, tidak menentukan siapa yang melihat. `target_divisions` = divisi tujuan agenda internal (tabel `calendar_event_divisions`, bisa lebih dari satu; `[]` untuk agenda bersama). `is_shared` adalah penentu utama visibilitas: `true` = semua pengguna; `false` dengan divisi tujuan = Admin dan akun divisi tujuan saja; `false` tanpa divisi tujuan = hanya Admin. Divisi pemilik yang bukan divisi tujuan tidak melihat agenda internalnya. `task_id` diisi bila agenda terkait tugas, dan `can_view_detail` agenda mengikuti hak membuka tugas itu (`false` untuk agenda tanpa tugas). Agenda tanpa `end_date` berlangsung satu hari.
 - **Filter `division`**: tugas divisi itu, agenda yang dimiliki divisi itu atau menjadikannya divisi tujuan, ditambah agenda bersama tanpa pemilik. Filter tidak pernah memperluas visibilitas agenda. Tanpa `division` = Semua Divisi (default Admin).
 - **Urutan**: berdasarkan hari mulai (tugas tanpa tanggal mulai memakai deadline), tugas sebelum agenda pada hari yang sama.
-- Agenda belum punya endpoint kelola; data contoh lokal berasal dari `ScheduleEventSeeder`.
+- Agenda belum punya endpoint kelola; data contoh lokal berasal dari `CalendarEventSeeder`.
 - **Frontend**: Timeline memanggil endpoint ini langsung (tanpa `VITE_TASK_API_READY`) untuk periode 1 atau 2 minggu yang tampil. Filter divisi Timeline terpisah dari filter divisi Tasklist dan berisi semua divisi (`GET /api/divisions`), sehingga semua role dapat melihat jadwal lintas divisi: default Admin dan Staff Semua Divisi, Manajer divisinya. Pencarian, prioritas, dan status Tasklist ikut menyaring tugas; agenda selalu tampil. Memilih item membuka detail tugas (`task_id`) hanya bila `can_view_detail`; selain itu hanya informasi jadwal. Respons periode/divisi sebelumnya diabaikan.
 
 ## Calendar (TASK-11)
@@ -123,8 +129,8 @@ Backend **wajib** menerapkan cakupan ini di setiap endpoint. Staff yang mengubah
 **Status: backend tersedia.** `GET /api/tasks/calendar?month=YYYY-MM&division=KODE` mengembalikan `{ data: { events: [Event], deadlines: [Task] } }`, hanya-baca. Kedua daftar dipisah: agenda bersama di `events`, deadline tugas di `deadlines`.
 
 - **Validasi** (`422`): `month` wajib berformat `YYYY-MM`; `division` harus kode divisi yang ada.
-- **`events`**: agenda (`schedule_events`) yang bersinggungan dengan bulan itu, dengan aturan visibilitas yang sama seperti [Timeline](#timeline-task-10): `is_shared = true` untuk semua role, agenda internal hanya untuk Admin dan akun divisi tujuannya (`target_divisions`), agenda internal tanpa divisi tujuan hanya untuk Admin. Hanya informasi umum (nama, divisi pemilik, divisi tujuan, tanggal, keterangan) yang dikirim. `can_view_detail` mengikuti hak membuka tugas terkait.
-- **`deadlines`**: tugas dengan deadline di bulan itu, dalam cakupan user yang sama dengan `GET /api/tasks`: Admin semua divisi, Manajer divisinya, Staff tugas yang PIC-nya dia. Tugas tanpa deadline tidak ikut. Urut berdasarkan deadline.
+- **`events`**: agenda (`calendar_events`) yang bersinggungan dengan bulan itu, dengan aturan visibilitas yang sama seperti [Timeline](#timeline-task-10): `is_shared = true` untuk semua role, agenda internal hanya untuk Admin dan akun divisi tujuannya (`target_divisions`), agenda internal tanpa divisi tujuan hanya untuk Admin. Hanya informasi umum (nama, divisi pemilik, divisi tujuan, tanggal, keterangan) yang dikirim. `can_view_detail` mengikuti hak membuka tugas terkait.
+- **`deadlines`**: tugas dengan deadline di bulan itu, dalam cakupan yang sama dengan `GET /api/tasks` (semua divisi untuk akun aktif). Tugas tanpa deadline tidak ikut. Urut berdasarkan deadline.
 - **`is_overdue`**: `true` bila deadline sudah lewat (sebelum hari ini) dan status bukan `done`.
 - **Filter `division`**: deadline divisi itu (tetap di dalam cakupan user, jadi filter tidak pernah memperluas akses) dan agenda yang dimiliki divisi itu atau menjadikannya divisi tujuan, ditambah agenda bersama tanpa pemilik. Tanpa `division` = Semua Divisi (default Admin).
 
@@ -132,7 +138,7 @@ Backend **wajib** menerapkan cakupan ini di setiap endpoint. Staff yang mengubah
 
 **Pembuatan tugas (TASK-02)**
 - `title` dan `division` wajib.
-- Manajer hanya boleh membuat tugas untuk divisinya.
+- Admin dan Manajer boleh membuat tugas untuk semua divisi, Supervisor hanya untuk divisinya (`422` pada `division_id` bila lain). Staff dan Freelance `403`.
 - Status awal hanya `backlog` atau `todo`. Status `todo` wajib memiliki minimal satu PIC di `pic_ids`.
 - `requires_review` ditentukan dari kategori dan disimpan bersama tugas.
 - Pembuat tugas diambil dari akun yang login.
@@ -143,15 +149,15 @@ Backend **wajib** menerapkan cakupan ini di setiap endpoint. Staff yang mengubah
 
 | Dari | Ke | Oleh |
 |---|---|---|
-| `backlog` | `todo` | Admin/Manajer berwenang (tugas harus punya minimal satu PIC aktif) |
+| `backlog` | `todo` | Admin/Manajer, atau Supervisor divisinya (tugas harus punya minimal satu PIC aktif) |
 | `todo` | `in_progress` | PIC aktif mana pun |
 | `in_progress` | `ready_review` | PIC aktif mana pun, jika `requires_review = true` |
 | `in_progress` | `done` | PIC aktif mana pun, jika `requires_review = false` |
 
 Semua PIC aktif menjalankan workflow bersama; satu PIC dapat memindahkan status tanpa persetujuan PIC lain.
-| `ready_review` | `on_review` | Admin/Manajer berwenang |
-| `on_review` | `done` | Admin/Manajer berwenang (via `reviews`, `decision=approve`) |
-| `on_review` | `in_progress` | Admin/Manajer berwenang (via `reviews`, `decision=revision`, `note` wajib) |
+| `ready_review` | `on_review` | Admin/Manajer, atau Supervisor divisinya |
+| `on_review` | `done` | Admin/Manajer, atau Supervisor divisinya (via `reviews`, `decision=approve`) |
+| `on_review` | `in_progress` | Admin/Manajer, atau Supervisor divisinya (via `reviews`, `decision=revision`, `note` wajib) |
 
 - Keluar dari `on_review` hanya lewat `POST /api/tasks/{id}/reviews`. `PATCH /status` dan `PATCH /api/tasks/{id}` ke `done`/`in_progress` dari `on_review` ditolak `422`, dan `next_statuses` untuk `on_review` selalu `[]` (pakai `can_review`).
 
@@ -161,14 +167,14 @@ Semua PIC aktif menjalankan workflow bersama; satu PIC dapat memindahkan status 
 **PIC (TASK-04, multi-PIC TASK-19)**
 - Satu tugas dapat memiliki banyak PIC aktif, dan satu akun dapat menjadi PIC di banyak tugas. Data disimpan di `task_assignments`; `tasks.pic_id` hanya data lama dan tidak lagi dibaca atau ditulis.
 - PIC harus akun aktif dengan role Staff (`EMP`), Freelance (`FRL`), atau Supervisor (`SPV`), dari divisi mana pun. PIC lintas divisi tidak memerlukan divisi kolaborator.
-- Yang boleh mengatur PIC: Admin dan Manajer untuk semua divisi, Supervisor untuk tugas divisinya. Hanya Admin yang boleh meneruskan tugas ke divisi lain.
+- Yang boleh mengatur PIC dan meneruskan tugas ke divisi lain: Admin dan Manajer untuk semua divisi, Supervisor untuk tugas divisinya. Setelah diteruskan, tugas keluar dari cakupan Supervisor divisi asal.
 - Menambah atau melepas satu PIC tidak mengubah assignment PIC lain dan tidak mengubah status tugas.
 - PIC tidak boleh diubah saat status `ready_review`, `on_review`, atau `done`. Tugas selain `backlog` harus selalu punya minimal satu PIC.
 - Daftar PIC sebelum dan sesudah dicatat di histori; riwayat assignment tidak dihapus.
 - Divisi utama tugas (`division_id`) tidak pernah disimpan sebagai divisi kolaborator (`task_divisions`); saat tugas dipindah ke divisi yang sebelumnya kolaborator, baris kolaborator itu dihapus.
 
 **Evidence (TASK-06)**
-- Hanya PIC aktif (siapa pun di antara PIC tugas itu) yang boleh mengirim evidence, saat status `todo` atau `in_progress`. Admin dan Manajer divisi dapat melihat dan mengunduhnya.
+- Hanya PIC aktif (siapa pun di antara PIC tugas itu) yang boleh mengirim evidence, saat status `todo` atau `in_progress`. Semua akun aktif dapat melihat dan mengunduhnya.
 - Satu evidence berisi `file` **atau** `url`, tidak keduanya. `note` opsional, maks. 2000 karakter.
 - File yang diterima: PDF, JPG, JPEG, PNG, WEBP, DOC, DOCX, XLS, XLSX, PPT, PPTX, ZIP, maks. 10 MB. Backend memvalidasi ulang jenis dan ukuran file. File disimpan privat dan hanya dapat diunduh lewat endpoint download.
 - Tautan wajib URL valid dengan `http://` atau `https://`, maks. 2048 karakter.
@@ -180,8 +186,8 @@ Semua PIC aktif menjalankan workflow bersama; satu PIC dapat memindahkan status 
 - Setiap evidence yang dikirim dicatat di histori dengan action `evidence_submitted`.
 
 **Review & revisi (TASK-07)**
-- Hanya tugas `requires_review = true` yang direview. Mulai pemeriksaan = `PATCH /status` dari `ready_review` ke `on_review` oleh Admin/Manajer berwenang.
-- Keputusan hanya untuk tugas `on_review`. Admin untuk semua divisi, Manajer untuk divisinya; Staff (termasuk PIC) selalu `403`.
+- Hanya tugas `requires_review = true` yang direview. Mulai pemeriksaan = `PATCH /status` dari `ready_review` ke `on_review` oleh Admin/Manajer atau Supervisor divisinya.
+- Keputusan hanya untuk tugas `on_review`. Admin dan Manajer untuk semua divisi, Supervisor untuk divisinya; Manajer/Supervisor yang juga PIC aktif boleh menyetujui pekerjaannya sendiri (self-approval). Staff dan Freelance (termasuk PIC) selalu `403`.
 - `approve` → `done` dan menyimpan `completed_at`. `revision` → `in_progress`, `note` wajib (spasi saja dianggap kosong).
 - Setelah revisi, PIC memperbaiki lalu mengirim ulang ke `ready_review`; histori mencatatnya sebagai `resubmitted`. Siklus dapat berulang sampai disetujui; semua review sebelumnya tetap tersimpan.
 - Keputusan dicatat di histori sebagai `approved` atau `revision_requested` dengan `changes.status` dan `changes.review` (`{ id, cycle, note }`).
@@ -189,7 +195,7 @@ Semua PIC aktif menjalankan workflow bersama; satu PIC dapat memindahkan status 
 **Histori aktivitas (TASK-08)**
 - Histori hanya dibuat setelah aktivitas berhasil; aksi yang ditolak tidak meninggalkan catatan.
 - Urutan: terbaru lebih dulu; aktivitas pada detik yang sama diurutkan berdasarkan `id`. Tanpa aktivitas → `{ data: [] }`.
-- Akses mengikuti detail tugas: Admin semua tugas, Manajer tugas divisinya, Staff hanya tugas yang ditugaskan kepadanya (selain itu `403`).
+- Akses mengikuti detail tugas: semua akun aktif.
 - Histori tidak dapat diedit atau dihapus, dan tetap tersedia setelah status atau PIC berubah.
 - Nama pelaku disimpan saat aktivitas dicatat, sehingga tetap tampil walaupun akunnya dihapus.
 - Frontend: bagian Histori Aktivitas di detail mengambil `GET /api/tasks/{id}/activities` setelah detail tampil, dengan state loading, kosong, dan error (tombol "Coba lagi") sendiri, sehingga kegagalan histori tidak menutup detail. Setelah perubahan berhasil, histori diperbarui dari `history` pada respons TaskDetail; respons histori yang lebih lama diabaikan.
@@ -227,7 +233,7 @@ Tugas tanpa deadline tidak dihitung pada Overdue maupun Due Today.
 
 | Param | Nilai | Keterangan |
 |---|---|---|
-| `scope` | `report` (default) \| `tasklist` | `report` = seluruh divisi, boleh dibaca semua role. `tasklist` = cakupan Tasklist user (Admin semua, Manajer divisinya, Staff tugas PIC-nya), angkanya sama dengan Board/Table untuk filter yang sama. |
+| `scope` | `report` (default) \| `tasklist` | `report` = seluruh divisi, boleh dibaca semua role. `tasklist` = cakupan Tasklist user (semua divisi untuk akun aktif), angkanya sama dengan Board/Table untuk filter yang sama. |
 | `division` | `code_division` | Pada `scope=tasklist` filter ini tidak dapat memperluas cakupan. |
 | `status` | nilai status | |
 | `priority` | `low` \| `medium` \| `high` \| `urgent` | |
@@ -278,7 +284,7 @@ Contoh: hari ini 6 Nov 2026, filter periode 1–30 November 2026.
 }
 ```
 
-- `scope.label` wajib ditampilkan di samping KPI. Untuk `tasklist` labelnya "Tugas divisi Anda" (Manajer) atau "Tugas yang ditugaskan kepada Anda" (Staff).
+- `scope.label` wajib ditampilkan di samping KPI. Kedua cakupan kini berlabel "Seluruh divisi".
 - `period` = dasar tanggal yang dipakai (`basis`, `label`: "Tanggal dibuat" atau "Deadline"), batas periode, dan `active` (`true` bila `date_from`/`date_to` diisi).
 - `as_of` = tanggal hari ini menurut zona waktu aplikasi (`APP_TIMEZONE`), acuan Overdue dan Due Today.
 - Rumus metrik sama dengan bagian Ringkasan di atas. `completion_rate` dibulatkan 2 desimal dan bernilai `0` bila `total_tasks` = 0. Tugas aktif = status selain `done`.

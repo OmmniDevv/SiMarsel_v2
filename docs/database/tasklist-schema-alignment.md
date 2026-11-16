@@ -4,8 +4,9 @@ Jira: STEAM-268 (TASK-19), subtask STEAM-269 — *DB: Existing Schema Alignment 
 Acuan: ERD To-Be SimMarsel Tasklist v1.0 (https://dbdiagram.io/d/TASKLIST-6aebf555f1d298b5736edc37).
 Baseline: migration dan model di `dev` per 13 Nov 2026 (TASK-01 sampai TASK-11).
 
-Seluruh perubahan bersifat **aditif**: tidak ada tabel atau kolom existing yang di-drop atau di-rename. Satu-satunya
-perubahan nilai data adalah penamaan status QA (lihat bagian 3).
+Seluruh perubahan bersifat **aditif**: tidak ada tabel atau kolom existing yang di-drop atau di-rename. Perubahan nilai
+data hanya penamaan status QA (bagian 3) dan penyalinan agenda ke `calendar_events` (bagian 5a). Revisi PR menambahkan
+pemindahan agenda, penerapan aturan akses (bagian 5b), dan pengaman rollback (bagian 8).
 
 ## 1. As-Is vs To-Be
 
@@ -25,7 +26,7 @@ perubahan nilai data adalah penamaan status QA (lihat bagian 3).
 | `task_reviews` | `cycle`, `decision` varchar(20), tanpa `updated_at` | `decision` varchar(30), `updated_at` | Tidak diubah (lihat pemetaan) |
 | `task_comments` | Tidak ada | Komentar + balasan | Tabel baru |
 | `task_activities` | `action` varchar(30), `actor_name_snapshot` | `action` varchar(50) | Kolom `action` dilebarkan |
-| `calendar_events` | Agenda di `schedule_events` (+ `schedule_event_divisions`) | `calendar_events` | Tabel baru sesuai ERD (lihat bagian 5) |
+| `calendar_events` | Agenda di `schedule_events` (+ `schedule_event_divisions`) | `calendar_events` | Tabel baru, menjadi **satu-satunya sumber agenda**; ditambah `is_shared`, `task_id`, `legacy_schedule_event_id`, `creator_id` nullable, dan `calendar_event_divisions` (bagian 5a) |
 
 ## 2. Pemetaan nama field / nilai
 
@@ -60,6 +61,8 @@ perubahan nilai data adalah penamaan status QA (lihat bagian 3).
 | 11 | `2026_11_13_083928_widen_action_on_task_activities_table` | task_activities | Ubah panjang kolom |
 | 12 | `2026_11_13_083929_create_calendar_events_table` | divisions, accounts | Tabel baru |
 | 13 | `2026_11_13_105301_protect_task_history_from_physical_deletes` | #7, #10, #12, task_activities, task_evidences, task_reviews | Ubah foreign key ke RESTRICT + index `calendar_events` |
+| 14 | `2026_11_16_090000_move_schedule_events_to_calendar_events` | #12, schedule_events, schedule_event_divisions | Tambah kolom + tabel `calendar_event_divisions` + **salin agenda** |
+| 15 | `2026_11_16_090100_guard_tasklist_rollback` | #1–#14 | Tidak mengubah apa pun saat migrate; menolak rollback bila sudah ada data baru |
 
 Prasyarat: semua migration sebelumnya sudah jalan, termasuk `2026_11_05_*`, `2026_11_06_*`, dan `2026_11_09_*`.
 
@@ -133,17 +136,66 @@ Prasyarat: semua migration sebelumnya sudah jalan, termasuk `2026_11_05_*`, `202
   Saat tugas dipindah ke divisi lain, divisi tujuan dihapus dari daftar kolaborator. Belum ada endpoint untuk mengelola
   divisi kolaborator.
 
+### 5a. Agenda: `calendar_events` sebagai satu-satunya sumber (revisi PR)
+
+- Migration #14 melengkapi `calendar_events` dengan yang sebelumnya disimpan `schedule_events`:
+
+  | `schedule_events` | `calendar_events` | Catatan |
+  |---|---|---|
+  | `id` | `id` | Dipertahankan bila belum dipakai, sehingga id agenda di API tidak berubah |
+  | `owner_division_id` | `division_id` | Divisi penyelenggara; tidak menentukan siapa yang boleh melihat |
+  | `start_date`, `end_date` (date) | `start_at`, `end_at` (datetime 00:00) | API tetap mengirim `start_date`/`end_date` (YYYY-MM-DD) |
+  | `is_shared` | `is_shared` | Kolom baru, default `true` |
+  | `task_id` | `task_id` | Kolom baru, FK `tasks` SET NULL (sama seperti sebelumnya) |
+  | `creator_id` (nullable) | `creator_id` | Dijadikan nullable karena agenda lama boleh tanpa pembuat |
+  | `schedule_event_divisions` | `calendar_event_divisions` | Divisi tujuan agenda internal |
+  | — | `legacy_schedule_event_id` (unique) | Penanda asal salinan, untuk validasi dan pemulihan |
+  | `created_at`, `updated_at` | sama | Disalin apa adanya |
+
+- **Aturan akses agenda tidak berubah**: agenda bersama (`is_shared = true`) terlihat oleh semua; agenda internal hanya
+  oleh Admin dan akun divisi tujuannya; agenda internal tanpa divisi tujuan hanya oleh Admin. Fokus divisi di Calendar/
+  Timeline tetap mencakup agenda yang diselenggarakan atau ditujukan ke divisi itu, plus agenda bersama tanpa
+  penyelenggara.
+- **Pembaca dan penulis**: `TaskCalendarService`, `TaskScheduleService`, `CalendarEventResource`, `ScheduleItemResource`,
+  `CalendarEventFactory`, dan `CalendarEventSeeder` memakai `CalendarEvent`. Model `ScheduleEvent`, factory, dan seeder
+  lamanya dihapus. Belum ada endpoint tulis agenda (TASK-11/TASK-15).
+- **`schedule_events` tidak dihapus** dan tidak lagi dibaca atau ditulis aplikasi, kecuali oleh prosedur pemulihan
+  (bagian 8). Tabel ini di-drop dengan migration terpisah setelah hasil pemindahan diverifikasi di production
+  (`tasks:validate-migration`: "Agenda lama tersalin" dan "Salinan agenda sama dengan aslinya" PASS).
+- Kontrak API Calendar dan Timeline **tidak berubah**: bentuk `events`/`data` sama, id agenda sama.
+
+### 5b. Aturan akses (revisi PR, acceptance criteria TASK-19/TASK-12)
+
+Diterapkan di `Task` (`scopeVisibleTo`, `isVisibleTo`, `managedBy`, `assignableBy`, `reviewableBy`, `updatableBy`),
+`TaskPolicy`, dan `Division::scopeTaskCreatableBy`. Setiap aksi memeriksa **permission role** (`role_permissions`),
+**cakupan divisi**, dan **assignment aktif** (`task_assignments.unassigned_at IS NULL`). Tidak ada mekanisme permission
+kedua.
+
+| Aksi | Admin | Manajer | Supervisor | Staff | Freelance |
+|---|---|---|---|---|---|
+| Melihat daftar dan detail semua task (Board, Table, Calendar, Timeline, histori, evidence, review) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Membuat task | Semua divisi | Semua divisi | Divisinya | ✗ (403) | ✗ (403) |
+| Mengubah field task | Semua divisi | Semua divisi | Divisinya | ✗ | ✗ |
+| Mengatur PIC dan meneruskan ke divisi lain | Semua divisi | Semua divisi | Task divisinya | ✗ (403) | ✗ (403) |
+| Back Log → To Do, Ready Review → On Review | Semua divisi | Semua divisi | Divisinya | ✗ | ✗ |
+| To Do → On Process → Ready Review, kirim evidence | Bila PIC aktif | Bila PIC aktif | Bila PIC aktif | Bila PIC aktif | Bila PIC aktif |
+| Review (Approve/Request Revision), termasuk self-approval | Semua divisi | Semua divisi | Divisinya | ✗ (403) | ✗ (403) |
+
+- Akun nonaktif (`is_active = false`) tidak bisa login dan tidak melihat apa pun (`403`).
+- Melihat tidak memberi hak mengubah: task di luar kewenangan dikirim dengan `can_edit`, `can_assign`, `can_review`
+  bernilai `false` dan `editable_fields`, `next_statuses` kosong. Perubahan lewat API ditolak `403`.
+- PIC yang dilepas tetap melihat task lewat `all_tasks`, tetapi hilang dari `my_tasks` dan kehilangan hak PIC.
+- Perubahan role berlaku pada request berikutnya (permission dibaca dari database) tanpa mengubah histori task.
+- Hapus Task Card belum punya endpoint; permission `task.delete` sudah tersedia untuk Admin, Manajer, dan Supervisor.
+
 ## 6. Hal yang belum dikerjakan
 
-- **FE** masih memakai kontrak lama (`pic_id`/`pic`) dan perlu disesuaikan ke `pic_ids`/`pics` (dikerjakan tim FE).
-- **Akses baca global (TASK-12)** belum ada di `dev`: Manager masih terbatas pada divisinya dan Supervisor/Freelance
-  hanya melihat tugas yang ia menjadi PIC-nya. Karena itu `scope=all_tasks` masih mengikuti visibilitas tersebut, dan
-  Supervisor yang mengatur PIC tugas divisinya belum bisa melihat tugas tempat ia bukan PIC.
-- **Penerapan permission** di kode: tabel dan seeder sudah ada, tetapi `TaskPolicy`/`Task` masih memakai cek role.
-- **Calendar**: `calendar_events` sudah dibuat, tetapi endpoint Calendar/Timeline masih membaca `schedule_events`.
-  Pemindahan data `schedule_events` → `calendar_events` dilakukan bersama perpindahan kodenya. Perlu diputuskan:
-  `schedule_events.creator_id` boleh NULL sedangkan `calendar_events.creator_id` NOT NULL, dan `calendar_events`
-  tidak punya `is_shared`, `task_id`, maupun target divisi.
+- **FE** masih memakai kontrak lama (`pic_id`/`pic`, status QA lama) dan perlu disesuaikan **sebelum** perubahan ini
+  dipakai pengguna. Lihat [../api/tasklist-fe-integration.md](../api/tasklist-fe-integration.md).
+- **Hapus Task Card, komentar, hapus evidence, endpoint tulis agenda, nonaktifkan akun**: tabel/kolom siap, endpoint di
+  ticket lain.
+- **Audit perubahan role akun**: belum ada mekanisme audit untuk akun.
+- **Drop `schedule_events` dan `tasks.pic_id`**: setelah verifikasi production dan FE tidak lagi memakai kontrak lama.
 - **Catatan kerja PIC (TASK-13)**: masih PENDING di ERD, menunggu keputusan SA.
 - **Divisi yang dikelola Supervisor**: sementara memakai `accounts.division_id`.
 
@@ -163,7 +215,7 @@ dua kali dan migration gagal.
 
 ```bash
 mysqldump -u <user> -p --single-transaction --routines <database> > backup-before-tasklist-foundation.sql
-php artisan migrate:status      # pastikan hanya 13 migration 2026_11_13_* (dan prasyaratnya) yang Pending
+php artisan migrate:status      # pastikan hanya 15 migration 2026_11_13_* dan 2026_11_16_* (dan prasyaratnya) yang Pending
 ```
 
 Catat jumlah baris sebagai pembanding:
@@ -174,6 +226,7 @@ SELECT COUNT(*) FROM tasks WHERE pic_id IS NOT NULL;
 SELECT status, COUNT(*) FROM tasks GROUP BY status;
 SELECT COUNT(*) FROM task_activities;
 SELECT COUNT(*) FROM accounts;
+SELECT COUNT(*) FROM schedule_events;
 ```
 
 ### Migrate dan seed
@@ -186,6 +239,12 @@ php artisan db:seed --class=PermissionSeeder --force
 
 ### Validasi
 
+```bash
+php artisan tasks:validate-migration   # 16 pemeriksaan, exit 0 bila lulus
+```
+
+Atau manual:
+
 ```sql
 -- jumlah assignment aktif = jumlah task yang punya PIC
 SELECT COUNT(*) FROM task_assignments WHERE unassigned_at IS NULL;
@@ -197,20 +256,64 @@ SELECT COUNT(*) FROM task_activities;
 SELECT COUNT(*) FROM accounts;
 -- 5 role, Admin/Manager/Supervisor 7 permission, Staff/Freelance 3
 SELECT r.code_role, COUNT(rp.permission_id) FROM roles r LEFT JOIN role_permissions rp ON rp.role_id = r.id GROUP BY r.code_role;
+-- setiap agenda lama punya salinan
+SELECT COUNT(*) FROM schedule_events s LEFT JOIN calendar_events c ON c.legacy_schedule_event_id = s.id WHERE c.id IS NULL;
 ```
 
-### Rollback
+### Rollback dan pemulihan
+
+Ada dua kondisi yang prosedurnya berbeda. Cek dulu kondisinya:
 
 ```bash
-php artisan migrate:rollback --step=13 --force
+php artisan tasks:recovery           # sama dengan: tasks:recovery status
 ```
 
-Semua migration punya `down()`. Rollback mengembalikan nilai status lama (di `tasks` dan `task_activities`) dan
-menghapus tabel/kolom baru. `tasks.pic_id` tidak pernah diubah, jadi data PIC tetap utuh. Data yang **baru** ditulis ke
-tabel/kolom baru setelah migrate (assignment tambahan, komentar, agenda) ikut hilang saat rollback — gunakan backup
-bila data tersebut perlu dipulihkan.
+**A. Belum ada data baru** (laporan semua 0, biasanya segera setelah deploy): rollback skema aman.
 
-### Hasil uji (13 Nov 2026)
+```bash
+php artisan migrate:rollback --step=15 --force
+```
+
+Semua migration punya `down()`. Status lama kembali di `tasks` dan `task_activities`, tabel/kolom baru dihapus, salinan
+agenda dihapus (aslinya masih di `schedule_events`), dan `tasks.pic_id` utuh karena tidak pernah diubah.
+
+**B. Sudah ada data baru** (PIC tambahan atau dilepas, task baru, komentar, divisi kolaborator, agenda baru/diubah/
+dihapus, task/evidence yang di-soft delete, akun nonaktif): **jangan rollback skema**. Data tersebut tidak ada di
+`tasks.pic_id` maupun di backup sebelum deploy, jadi rollback akan menghilangkannya. Migration
+`2026_11_16_090100_guard_tasklist_rollback` menolak rollback pada kondisi ini (`UnsafeTasklistRollbackException`).
+
+Yang dilakukan adalah mengembalikan **kode aplikasi** ke versi sebelumnya dengan skema tetap, setelah data terbaru
+disalin ke struktur lama:
+
+```bash
+php artisan tasks:recovery to-legacy           # laporan (dry run)
+php artisan tasks:recovery to-legacy --apply   # lalu deploy kode versi sebelumnya
+```
+
+`to-legacy` mengisi `tasks.pic_id` dengan PIC aktif paling awal, mengembalikan nama status lama di `tasks` dan
+`task_activities`, serta menyalin agenda terbaru ke `schedule_events` (baru, diubah, dan dihapus). Tabel baru tidak
+disentuh, jadi PIC tambahan, komentar, dan agenda tetap tersimpan.
+
+Saat kode TASK-19 dipasang lagi:
+
+```bash
+php artisan tasks:recovery from-legacy --apply
+php artisan tasks:validate-migration
+```
+
+`from-legacy` mengembalikan nama status baru, mengambil PIC yang diganti di aplikasi lama (`tasks.pic_id` yang bukan
+PIC aktif: PIC aktif lain dilepas, akun itu menjadi PIC), dan menyalin agenda dari `schedule_events`. Task multi-PIC
+yang tidak diubah di aplikasi lama tetap memiliki semua PIC-nya. Keduanya aman dijalankan ulang.
+
+Keterbatasan selama aplikasi lama berjalan: task yang di-soft delete akan terlihat lagi (aplikasi lama tidak mengenal
+`deleted_at`), hanya satu PIC per task yang terlihat, dan penghapusan fisik yang menyentuh riwayat ditolak foreign key
+RESTRICT. Membuang data baru dengan sengaja (misalnya di database uji) hanya bisa dengan
+`TASKLIST_ALLOW_DESTRUCTIVE_ROLLBACK=true`.
+
+### Hasil uji
+
+Hasil lengkap per 16 Nov 2026 ada di [tasklist-migration-validation-report.md](tasklist-migration-validation-report.md).
+Uji awal (13 Nov 2026):
 
 - SQLite (test suite): `tests/Feature/Database/TasklistFoundationTest.php` — backfill PIC, unique PIC aktif, riwayat
   assignment, migrasi status + rollback, soft delete, komentar/balasan, divisi kolaborator, seeder role dan permission.
