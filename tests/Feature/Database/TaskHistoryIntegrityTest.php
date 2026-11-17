@@ -87,7 +87,7 @@ class TaskHistoryIntegrityTest extends TestCase
         $this->assertTrue($repository->hasTaskHistory($this->manager), 'creator');
         $this->assertFalse($repository->hasTaskHistory($outsider));
 
-        TaskReview::create(['task_id' => $this->task->id, 'reviewer_id' => $outsider->id, 'cycle' => 1, 'decision' => TaskReviewDecision::Approve]);
+        TaskReview::create(['task_id' => $this->task->id, 'reviewer_id' => $outsider->id, 'decision' => TaskReviewDecision::Approve]);
         $this->assertTrue($repository->hasTaskHistory($outsider), 'reviewer');
     }
 
@@ -123,8 +123,8 @@ class TaskHistoryIntegrityTest extends TestCase
 
     public function test_every_review_decision_is_kept_and_a_pic_may_review_their_own_task(): void
     {
-        TaskReview::create(['task_id' => $this->task->id, 'reviewer_id' => $this->manager->id, 'cycle' => 1, 'decision' => TaskReviewDecision::Revision, 'note' => 'Perbaiki warna.']);
-        TaskReview::create(['task_id' => $this->task->id, 'reviewer_id' => $this->staff->id, 'cycle' => 2, 'decision' => TaskReviewDecision::Approve]);
+        TaskReview::create(['task_id' => $this->task->id, 'reviewer_id' => $this->manager->id, 'decision' => TaskReviewDecision::Revision, 'note' => 'Perbaiki warna.']);
+        TaskReview::create(['task_id' => $this->task->id, 'reviewer_id' => $this->staff->id, 'decision' => TaskReviewDecision::Approve]);
 
         $this->assertSame(
             [['cycle' => 2, 'decision' => 'approve', 'reviewer_id' => $this->staff->id], ['cycle' => 1, 'decision' => 'revision', 'reviewer_id' => $this->manager->id]],
@@ -182,7 +182,7 @@ class TaskHistoryIntegrityTest extends TestCase
     {
         $task->activities()->create(['account_id' => $this->manager->id, 'action' => TaskActivity::CREATED]);
         $task->evidences()->create(['submitter_id' => $this->staff->id, 'type' => TaskEvidence::LINK, 'url' => 'https://example.com']);
-        TaskReview::create(['task_id' => $task->id, 'reviewer_id' => $this->manager->id, 'cycle' => 1, 'decision' => TaskReviewDecision::Approve]);
+        TaskReview::create(['task_id' => $task->id, 'reviewer_id' => $this->manager->id, 'decision' => TaskReviewDecision::Approve]);
         TaskComment::create(['task_id' => $task->id, 'author_id' => $this->manager->id, 'content' => 'Catatan.']);
 
         if (! $task->assignments()->exists()) {

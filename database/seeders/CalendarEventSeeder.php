@@ -2,15 +2,17 @@
 
 namespace Database\Seeders;
 
-use App\Models\Division;
+use App\Models\Account;
 use App\Models\CalendarEvent;
+use App\Models\Division;
+use App\Models\Role;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 
 class CalendarEventSeeder extends Seeder
 {
     /**
-     * Agendas shared with everyone: title => [days from this Monday to the start, length in days].
+     * Company-wide agendas: title => [days from this Monday to the start, length in days].
      */
     public const SHARED_AGENDAS = [
         'Rapat koordinasi bulanan' => [0, 1],
@@ -20,12 +22,14 @@ class CalendarEventSeeder extends Seeder
     ];
 
     /**
-     * Demo agendas around the current week, so the Timeline has something to show locally: the shared ones,
-     * an internal briefing per division, one internal agenda for several divisions, and one for Admin only.
+     * Demo agendas around the current week, so the Timeline has something to show locally: the company-wide ones
+     * and an internal briefing per division. They are credited to the first Admin account.
      */
     public function run(): void
     {
-        if (CalendarEvent::query()->exists()) {
+        $creator = Account::whereHas('role', fn ($query) => $query->where('code_role', Role::ADMIN))->orderBy('id')->first();
+
+        if ($creator === null || CalendarEvent::query()->exists()) {
             return;
         }
 
@@ -33,41 +37,18 @@ class CalendarEventSeeder extends Seeder
 
         foreach (self::SHARED_AGENDAS as $title => [$offset, $days]) {
             CalendarEvent::create([
+                'creator_id' => $creator->id,
                 'title' => $title,
                 'start_at' => $monday->addDays($offset),
                 'end_at' => $days > 1 ? $monday->addDays($offset + $days - 1) : null,
-                'is_shared' => true,
             ]);
         }
 
-        $divisions = Division::query()->orderBy('id')->get();
-
-        $divisions->each(fn (Division $division, int $index) => $this->internal(
-            "Briefing internal {$division->name}",
-            $monday->addDays(1 + $index % 5),
-            $division,
-            [$division->id],
-        ));
-
-        if ($divisions->count() >= 2) {
-            [$owner, $target] = [$divisions[0], $divisions[1]];
-
-            $this->internal("Sinkronisasi {$owner->name} dan {$target->name}", $monday->addDays(2), $owner, [$owner->id, $target->id]);
-        }
-
-        $this->internal('Rapat pimpinan', $monday->addDays(4), null, []);
-    }
-
-    /**
-     * @param  array<int, int>  $targetDivisionIds
-     */
-    private function internal(string $title, CarbonImmutable $date, ?Division $owner, array $targetDivisionIds): void
-    {
-        CalendarEvent::create([
-            'title' => $title,
-            'division_id' => $owner?->id,
-            'start_at' => $date,
-            'is_shared' => false,
-        ])->targetDivisions()->attach($targetDivisionIds);
+        Division::query()->orderBy('id')->get()->each(fn (Division $division, int $index) => CalendarEvent::create([
+            'division_id' => $division->id,
+            'creator_id' => $creator->id,
+            'title' => "Briefing internal {$division->name}",
+            'start_at' => $monday->addDays(1 + $index % 5),
+        ]));
     }
 }

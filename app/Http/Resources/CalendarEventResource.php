@@ -7,9 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * An agenda on the Calendar: its general information only, with its owner division and, for an internal agenda,
- * the divisions it is meant for. A related task is referred to by id, and whether it may be opened follows the
- * task's own access rule.
+ * An agenda on the Calendar: its general information only. division and target_divisions both name the division
+ * of an internal agenda; both are empty for a company-wide agenda.
  */
 class CalendarEventResource extends JsonResource
 {
@@ -24,14 +23,13 @@ class CalendarEventResource extends JsonResource
             'id' => $this->id,
             'title' => $this->title,
             'division' => $this->division ? $this->divisionData($this->division) : null,
-            'target_divisions' => $this->is_shared
-                ? []
-                : $this->targetDivisions->map(fn (Division $division) => $this->divisionData($division))->all(),
+            'target_divisions' => $this->division ? [$this->divisionData($this->division)] : [],
             'start_date' => $this->start_at->toDateString(),
             'end_date' => $this->end_at?->toDateString(),
             'description' => $this->description,
-            'task_id' => $this->task_id,
-            'can_view_detail' => $this->task !== null && $request->user()->can('view', $this->task),
+            // Agendas are not linked to tasks (ERD); the keys stay so the response shape is unchanged.
+            'task_id' => null,
+            'can_view_detail' => false,
         ];
     }
 

@@ -26,7 +26,7 @@ class TaskScheduleService
     public function schedule(Account $account, CarbonInterface $from, CarbonInterface $to, ?string $division): Collection
     {
         $events = CalendarEvent::query()
-            ->with(['division', 'targetDivisions', 'task'])
+            ->with('division')
             ->visibleTo($account)
             ->within($from, $to)
             ->forDivision($division)

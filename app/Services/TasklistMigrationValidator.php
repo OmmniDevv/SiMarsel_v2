@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Enums\TaskStatus;
+use App\Exceptions\UnmappableAgendaException;
 use App\Models\Permission;
 use App\Models\Role;
+use App\Support\LegacyAgendaMapper;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -22,9 +24,10 @@ class TasklistMigrationValidator
     public const SKIP = 'SKIP';
 
     /**
-     * Migration file prefixes of the TASK-19 changes, including the agenda move and rollback guard (PR revision).
+     * Migration file prefixes of the TASK-19 changes, including the ERD alignment, the agenda move, and the rollback
+     * guard (PR revisions).
      */
-    private const MIGRATION_PREFIXES = ['2026_11_13_', '2026_11_16_'];
+    private const MIGRATION_PREFIXES = ['2026_11_13_', '2026_11_16_08', '2026_11_16_090'];
 
     private const LEGACY_STATUSES = ['ready_for_qa', 'on_qa'];
 
@@ -272,40 +275,44 @@ class TasklistMigrationValidator
     }
 
     /**
-     * Every agenda of schedule_events has its copy in calendar_events, which is the only source the application reads.
+     * Every agenda of schedule_events has its copy in calendar_events under the same id, which is the only source
+     * the application reads.
      */
     private function agendasCopied(): array
     {
-        $missing = DB::table('schedule_events')
-            ->whereNotExists(fn ($query) => $query->from('calendar_events')
-                ->whereColumn('calendar_events.legacy_schedule_event_id', 'schedule_events.id'))
+        $copies = DB::table('calendar_events')->get(['id', 'created_at'])->keyBy('id');
+        $missing = DB::table('schedule_events')->get(['id', 'created_at'])
+            ->reject(fn (object $agenda) => $copies->has($agenda->id) && (string) $copies[$agenda->id]->created_at === (string) $agenda->created_at)
             ->count();
 
         return $this->countResult('Agenda lama tersalin ke calendar_events', $missing, 'agenda schedule_events belum punya salinan');
     }
 
     /**
-     * A copy that was not edited since the move still matches its original: dates, shared or internal, target
-     * divisions, organising division, related task, and creator. Edited copies are newer than schedule_events,
-     * which the application no longer writes, so they are counted but not compared.
+     * A copy that was not edited since the move matches its original as LegacyAgendaMapper maps it: title,
+     * description, dates, creator, and the division that decides who sees it. Edited copies are newer than
+     * schedule_events, which the application no longer writes, so they are counted but not compared. Internal
+     * agendas meant for several divisions keep one division; they are reported, not failed.
      */
     private function agendaCopiesMatch(): array
     {
-        $check = 'Salinan agenda sama dengan aslinya (termasuk akses internal)';
-        $targets = fn (string $table, string $key) => DB::table($table)->get([$key, 'division_id'])
-            ->groupBy($key)
-            ->map(fn ($rows) => $rows->pluck('division_id')->map(fn ($id) => (int) $id)->sort()->values()->all());
-        $originalTargets = $targets('schedule_event_divisions', 'schedule_event_id');
-        $copyTargets = $targets('calendar_event_divisions', 'calendar_event_id');
-        $originals = DB::table('schedule_events')->get()->keyBy('id');
+        $check = 'Salinan agenda sesuai pemetaan ERD (division_id, pembuat, tanggal)';
+        $mapper = app(LegacyAgendaMapper::class);
+        $originals = DB::table('schedule_events')->orderBy('id')->get()->keyBy('id');
+
+        try {
+            $expected = $mapper->toCalendarRows($originals);
+        } catch (UnmappableAgendaException $exception) {
+            return $this->result($check, self::FAIL, $exception->getMessage());
+        }
+
         $date = fn ($value) => $value === null ? null : substr((string) $value, 0, 10);
-
-        $copies = DB::table('calendar_events')->whereNotNull('legacy_schedule_event_id')->get();
+        $copies = DB::table('calendar_events')->whereIn('id', $originals->keys())->get();
         $edited = 0;
-        $different = $copies->filter(function (object $copy) use ($originals, $originalTargets, $copyTargets, $date, &$edited) {
-            $original = $originals[$copy->legacy_schedule_event_id] ?? null;
+        $different = $copies->filter(function (object $copy) use ($originals, $expected, $date, &$edited) {
+            $original = $originals[$copy->id];
 
-            if ($original === null) {
+            if ((string) $copy->created_at !== (string) $original->created_at) {
                 return false;
             }
 
@@ -315,15 +322,21 @@ class TasklistMigrationValidator
                 return false;
             }
 
-            return [$copy->title, $copy->description, $copy->division_id, $date($copy->start_at), $date($copy->end_at), (bool) $copy->is_shared, $copy->task_id, $copy->creator_id, $copyTargets[$copy->id] ?? []]
-                != [$original->title, $original->description, $original->owner_division_id, $date($original->start_date), $date($original->end_date), (bool) $original->is_shared, $original->task_id, $original->creator_id, $originalTargets[$original->id] ?? []];
+            $row = $expected[$copy->id];
+
+            return [$copy->title, $copy->description, $copy->division_id === null ? null : (int) $copy->division_id, (int) $copy->creator_id, $date($copy->start_at), $date($copy->end_at)]
+                !== [$row['title'], $row['description'], $row['division_id'], $row['creator_id'], $date($row['start_at']), $date($row['end_at'])];
         })->count();
 
         if ($different > 0) {
             return $this->result($check, self::FAIL, "{$different} salinan berbeda dari agenda aslinya");
         }
 
-        return $this->result($check, self::PASS, ($copies->count() - $edited).' sama'.($edited > 0 ? ", {$edited} sudah diubah setelah dipindah" : ''));
+        $narrowed = $mapper->narrowedAgendaIds()->count();
+
+        return $this->result($check, self::PASS, ($copies->count() - $edited).' sama'
+            .($edited > 0 ? ", {$edited} sudah diubah setelah dipindah" : '')
+            .($narrowed > 0 ? "; {$narrowed} agenda internal multi-divisi kini hanya untuk satu divisi" : ''));
     }
 
     private function countResult(string $check, int $count, string $problem): array

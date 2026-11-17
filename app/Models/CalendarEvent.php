@@ -9,18 +9,16 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * An agenda on the shared schedule (Timeline and Calendar), next to the tasks' own dates. The only source of
  * agendas since TASK-19; schedule_events is kept read-only until the move is verified.
  *
- * Who may see it is decided by is_shared and the target divisions, never by the organising division
- * (division_id): a shared agenda is visible to everyone, an internal one to Admin and the accounts of its
- * target divisions only.
+ * division_id decides who may see it: NULL is a company-wide agenda visible to every active account, a division
+ * makes it internal to that division. Admin and Manager see every agenda.
  */
-#[Fillable(['division_id', 'creator_id', 'title', 'description', 'is_shared', 'task_id', 'start_at', 'end_at'])]
+#[Fillable(['division_id', 'creator_id', 'title', 'description', 'start_at', 'end_at'])]
 class CalendarEvent extends Model
 {
     /** @use HasFactory<CalendarEventFactory> */
@@ -36,34 +34,25 @@ class CalendarEvent extends Model
         return [
             'start_at' => 'datetime',
             'end_at' => 'datetime',
-            'is_shared' => 'boolean',
         ];
     }
 
     /**
-     * The division that organises the agenda, or null for a company-wide agenda.
+     * The division the agenda is for, or null for a company-wide agenda.
      */
     public function division(): BelongsTo
     {
         return $this->belongsTo(Division::class);
     }
 
-    /**
-     * The divisions an internal agenda is meant for.
-     */
-    public function targetDivisions(): BelongsToMany
-    {
-        return $this->belongsToMany(Division::class, 'calendar_event_divisions')->orderBy('divisions.id');
-    }
-
-    public function task(): BelongsTo
-    {
-        return $this->belongsTo(Task::class);
-    }
-
     public function creator(): BelongsTo
     {
         return $this->belongsTo(Account::class, 'creator_id');
+    }
+
+    public function isCompanyWide(): bool
+    {
+        return $this->division_id === null;
     }
 
     /**
@@ -76,29 +65,34 @@ class CalendarEvent extends Model
     }
 
     /**
-     * Focus on a division: the agendas it organises or is a target of, plus the shared agendas without an
-     * organiser. No division keeps every agenda. Visibility is applied separately, so the focus never widens it.
+     * Focus on a division: its own agendas plus the company-wide ones. No division keeps every agenda.
+     * Visibility is applied separately, so the focus never widens it.
      */
     public function scopeForDivision(Builder $query, ?string $division): void
     {
         $query->when($division, fn (Builder $query, string $division) => $query->where(fn (Builder $query) => $query
-            ->whereHas('division', fn (Builder $query) => $query->where('code_division', $division))
-            ->orWhereHas('targetDivisions', fn (Builder $query) => $query->where('code_division', $division))
-            ->orWhere(fn (Builder $query) => $query->where('is_shared', true)->whereNull('division_id'))));
+            ->whereNull('division_id')
+            ->orWhereHas('division', fn (Builder $query) => $query->where('code_division', $division))));
     }
 
     /**
-     * is_shared decides first: a shared agenda is visible to everyone. An internal agenda is visible to Admin
-     * and to the accounts of its target divisions; without a target division only to Admin.
+     * Admin and Manager see every agenda; any other active account sees the company-wide agendas and those of
+     * its own division.
      */
     public function scopeVisibleTo(Builder $query, Account $account): void
     {
-        if ($account->isAdmin()) {
+        if (! $account->is_active) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        if ($account->isAdmin() || $account->isManager()) {
             return;
         }
 
         $query->where(fn (Builder $query) => $query
-            ->where('is_shared', true)
-            ->orWhereHas('targetDivisions', fn (Builder $query) => $query->whereKey($account->division_id ?? 0)));
+            ->whereNull('division_id')
+            ->when($account->division_id, fn (Builder $query, int $divisionId) => $query->orWhere('division_id', $divisionId)));
     }
 }
