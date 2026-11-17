@@ -175,6 +175,9 @@ class TasklistMigrationIntegrationTest extends TestCase
             );
         }
 
+        $this->assertSame(0, DB::table('calendar_events')->whereNull('creator_id')->count());
+        $this->assertSame(0, DB::table('calendar_events')->whereNotIn('creator_id', DB::table('accounts')->select('id'))->count());
+
         // Admin and Manager see every agenda; other accounts the company-wide ones and their division's.
         $visible = [
             'legacy.admin' => array_keys($expected),
@@ -223,6 +226,22 @@ class TasklistMigrationIntegrationTest extends TestCase
 
         $this->assertSame(0, DB::table('calendar_events')->count());
         $this->assertSame(6, DB::table('schedule_events')->count());
+    }
+
+    public function test_an_agenda_without_a_creator_stops_the_move_when_there_is_no_admin_to_credit(): void
+    {
+        $roles = DB::table('roles')->pluck('id', 'code_role');
+        DB::table('accounts')->where('role_id', $roles[Role::ADMIN])->update(['role_id' => $roles[Role::MANAGER]]);
+        $id = DB::table('schedule_events')->where('title', 'Rapat evaluasi bulanan')->whereNull('creator_id')->value('id');
+
+        try {
+            $this->artisan('migrate')->run();
+            $this->fail('The move should have been refused.');
+        } catch (UnmappableAgendaException $exception) {
+            $this->assertStringContainsString("#{$id} \"Rapat evaluasi bulanan\" tanpa pembuat dan tidak ada akun Admin", $exception->getMessage());
+        }
+
+        $this->assertSame(0, DB::table('calendar_events')->count());
     }
 
     public function test_reviews_comments_and_history_follow_the_erd_and_keep_their_data(): void

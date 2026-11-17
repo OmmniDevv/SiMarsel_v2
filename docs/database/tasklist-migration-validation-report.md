@@ -126,6 +126,8 @@ Prosedur sama dengan deploy: rollback 17 migration TASK-19 â†’ seed data lama â†
 | Isi salinan | Judul, deskripsi, tanggal mulai/selesai, `created_at`, `updated_at` sama |
 | Akses agenda | Daftar agenda di Calendar dan Timeline untuk Admin, 2 Manajer, Staff Marketing, Staff Finance sesuai tabel di atas |
 | Agenda internal tanpa divisi | `test_an_internal_agenda_without_any_division_stops_the_move_and_copies_nothing`: migrate berhenti dengan id dan judul agenda, `calendar_events` tetap kosong |
+| Pembuat agenda | Setiap salinan punya `creator_id` yang ada di `accounts`. Agenda lama tanpa pembuat saat tidak ada akun Admin: `test_an_agenda_without_a_creator_stops_the_move_when_there_is_no_admin_to_credit`, migrate berhenti dan tidak ada agenda yang tersalin |
+| `creator_id` wajib | Kolom NOT NULL dari `2026_11_13_083929` sampai migration terakhir; tidak ada migration yang mengubahnya menjadi nullable. `CalendarEventCreatorTest`: agenda tanpa pembuat ditolak (langsung ke database maupun lewat model), pembuat yang tidak ada di `accounts` ditolak FK, akun pembuat agenda tidak dapat dihapus (harus dinonaktifkan) |
 | Aturan akses per role | `TaskCalendarTest`, `TaskScheduleTest` (36 test): agenda umum untuk kelima role, agenda divisi hanya untuk divisinya, Admin dan Manajer semua divisi, akun tanpa divisi hanya agenda umum, akun nonaktif tidak melihat agenda, fokus divisi tidak memperluas visibilitas |
 
 ### 5.3 Hak akses per role
