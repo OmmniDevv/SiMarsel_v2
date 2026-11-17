@@ -17,9 +17,11 @@ return new class extends Migration
             $table->foreignId('author_id')->constrained('accounts')->cascadeOnDelete();
             $table->foreignId('parent_comment_id')->nullable()->constrained('task_comments')->cascadeOnDelete();
             $table->text('content');
-            $table->timestamps();
+            $table->timestamp('created_at');
+            $table->timestamp('updated_at')->nullable();
             $table->softDeletes();
             $table->index(['task_id', 'created_at']);
+            $table->index('parent_comment_id');
         });
     }
 

@@ -26,20 +26,10 @@ return new class extends Migration
     public function up(): void
     {
         $this->replaceForeignKeys('restrict');
-
-        Schema::table('calendar_events', function (Blueprint $table) {
-            $table->dropIndex(['start_at']);
-            $table->index(['start_at', 'end_at']);
-        });
     }
 
     public function down(): void
     {
-        Schema::table('calendar_events', function (Blueprint $table) {
-            $table->dropIndex(['start_at', 'end_at']);
-            $table->index('start_at');
-        });
-
         $this->replaceForeignKeys('cascade');
     }
 

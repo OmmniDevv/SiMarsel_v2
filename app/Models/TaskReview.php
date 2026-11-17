@@ -4,18 +4,17 @@ namespace App\Models;
 
 use App\Enums\TaskReviewDecision;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * One QA decision on a task. cycle counts the reviews of the task, so the first review is 1 and each
- * resubmission after a revision gets the next number. Reviews are never edited once recorded.
+ * One QA decision on a task. Reviews are never edited once recorded. Their cycle (the first review is 1, each
+ * resubmission after a revision the next number) is not stored but counted with withCycle().
  */
-#[Fillable(['task_id', 'reviewer_id', 'cycle', 'decision', 'note'])]
+#[Fillable(['task_id', 'reviewer_id', 'decision', 'note'])]
 class TaskReview extends Model
 {
-    public const UPDATED_AT = null;
-
     /**
      * Get the attributes that should be cast.
      *
@@ -37,5 +36,19 @@ class TaskReview extends Model
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(Account::class, 'reviewer_id');
+    }
+
+    /**
+     * Add cycle: how many reviews of the same task were recorded up to and including this one.
+     */
+    public function scopeWithCycle(Builder $query): void
+    {
+        $query->when($query->getQuery()->columns === null, fn (Builder $query) => $query->select('task_reviews.*'))
+            ->selectSub(fn ($sub) => $sub->from('task_reviews as earlier')
+                ->selectRaw('count(*)')
+                ->whereColumn('earlier.task_id', 'task_reviews.task_id')
+                ->where(fn ($sub) => $sub->whereColumn('earlier.created_at', '<', 'task_reviews.created_at')
+                    ->orWhere(fn ($sub) => $sub->whereColumn('earlier.created_at', 'task_reviews.created_at')
+                        ->whereColumn('earlier.id', '<=', 'task_reviews.id'))), 'cycle');
     }
 }

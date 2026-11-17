@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Support\LegacyAgendaMapper;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -17,10 +19,19 @@ use Illuminate\Support\Facades\DB;
  * - fromLegacy(): before running the TASK-19 application again. Takes back what the old application changed:
  *   status names, a PIC changed through tasks.pic_id, and agendas in schedule_events.
  *
- * Both are dry runs unless $apply is true, and both are safe to run again.
+ * Both are dry runs unless $apply is true, and both are safe to run again. Agendas keep the same id in both
+ * tables; LegacyAgendaMapper maps division_id to the old shared and internal agendas.
  */
 class TasklistRecoveryService
 {
+    /**
+     * The agendas toLegacy() last wrote to schedule_events, so fromLegacy() can tell an agenda the old application
+     * deleted from one it never had.
+     */
+    public const LEGACY_AGENDAS_CACHE_KEY = 'tasklist.recovery.legacy_agenda_ids';
+
+    public function __construct(private readonly LegacyAgendaMapper $agendas) {}
+
     public const FIRST_MIGRATION = '2026_11_13_083909_widen_name_columns_on_roles_and_divisions_tables';
 
     public const LEGACY_STATUSES = [
@@ -67,12 +78,18 @@ class TasklistRecoveryService
      */
     public function toLegacy(bool $apply): array
     {
-        return $this->run($apply, fn () => [
+        $result = $this->run($apply, fn () => [
             'tasks.pic_id diisi PIC aktif terbaru' => $this->writeLegacyPicIds(),
             'Status task ke nama lama' => $this->renameStatuses(self::LEGACY_STATUSES),
             'Agenda disalin ke schedule_events' => $this->agendasToLegacy(),
             'Task terhapus yang akan terlihat lagi di aplikasi lama' => DB::table('tasks')->whereNotNull('deleted_at')->count(),
         ]);
+
+        if ($apply) {
+            Cache::forever(self::LEGACY_AGENDAS_CACHE_KEY, DB::table('calendar_events')->whereNull('deleted_at')->pluck('id')->map(fn ($id) => (int) $id)->all());
+        }
+
+        return $result;
     }
 
     /**
@@ -82,11 +99,17 @@ class TasklistRecoveryService
      */
     public function fromLegacy(bool $apply): array
     {
-        return $this->run($apply, fn () => [
+        $result = $this->run($apply, fn () => [
             'Status task ke nama baru' => $this->renameStatuses(array_flip(self::LEGACY_STATUSES)),
             'PIC diambil dari tasks.pic_id' => $this->readLegacyPicIds(),
             'Agenda disalin dari schedule_events' => $this->agendasFromLegacy(),
         ]);
+
+        if ($apply) {
+            Cache::forget(self::LEGACY_AGENDAS_CACHE_KEY);
+        }
+
+        return $result;
     }
 
     /**
@@ -125,13 +148,13 @@ class TasklistRecoveryService
 
     private function agendasChangedSinceMove(): int
     {
-        $originals = DB::table('schedule_events')->pluck('updated_at', 'id');
+        $originals = DB::table('schedule_events')->get(['id', 'created_at', 'updated_at'])->keyBy('id');
 
-        return DB::table('calendar_events')->get(['legacy_schedule_event_id', 'updated_at', 'deleted_at'])
-            ->filter(fn (object $event) => $event->legacy_schedule_event_id === null
-                || $event->deleted_at !== null
-                || ! $originals->has($event->legacy_schedule_event_id)
-                || (string) $originals[$event->legacy_schedule_event_id] !== (string) $event->updated_at)
+        return DB::table('calendar_events')->get(['id', 'created_at', 'updated_at', 'deleted_at'])
+            ->filter(fn (object $event) => $event->deleted_at !== null
+                || ! $originals->has($event->id)
+                || (string) $originals[$event->id]->created_at !== (string) $event->created_at
+                || (string) $originals[$event->id]->updated_at !== (string) $event->updated_at)
             ->count();
     }
 
@@ -246,16 +269,16 @@ class TasklistRecoveryService
     }
 
     /**
-     * Write the latest agendas into schedule_events: new ones are added and linked, edited ones updated, and deleted
-     * ones removed, since the old table has no soft delete.
+     * Write the latest agendas into schedule_events under the same id: new ones are added, edited ones updated, and
+     * deleted ones removed, since the old table has no soft delete. An unchanged agenda keeps its original row,
+     * including its related task and target divisions.
      */
     private function agendasToLegacy(): int
     {
         $synced = 0;
 
         foreach (DB::table('calendar_events')->orderBy('id')->get() as $event) {
-            $legacy = $event->legacy_schedule_event_id === null ? null
-                : DB::table('schedule_events')->where('id', $event->legacy_schedule_event_id)->first();
+            $legacy = DB::table('schedule_events')->where('id', $event->id)->first();
 
             if ($event->deleted_at !== null) {
                 if ($legacy !== null) {
@@ -270,28 +293,16 @@ class TasklistRecoveryService
                 continue;
             }
 
-            $row = [
-                'title' => $event->title,
-                'description' => $event->description,
-                'owner_division_id' => $event->division_id,
-                'start_date' => substr((string) $event->start_at, 0, 10),
-                'end_date' => $event->end_at === null ? null : substr((string) $event->end_at, 0, 10),
-                'is_shared' => (bool) $event->is_shared,
-                'task_id' => $event->task_id,
-                'creator_id' => $event->creator_id,
-                'created_at' => $event->created_at,
-                'updated_at' => $event->updated_at,
-            ];
+            $row = $this->agendas->toLegacyRow($event);
+            $legacy !== null
+                ? DB::table('schedule_events')->where('id', $event->id)->update($row)
+                : DB::table('schedule_events')->insert(['id' => $event->id, ...$row]);
 
-            if ($legacy !== null) {
-                DB::table('schedule_events')->where('id', $legacy->id)->update($row);
-                $legacyId = $legacy->id;
-            } else {
-                $legacyId = DB::table('schedule_events')->insertGetId($row);
-                DB::table('calendar_events')->where('id', $event->id)->update(['legacy_schedule_event_id' => $legacyId]);
-            }
-
-            $this->copyTargets('calendar_event_divisions', 'calendar_event_id', $event->id, 'schedule_event_divisions', 'schedule_event_id', $legacyId);
+            DB::table('schedule_event_divisions')->where('schedule_event_id', $event->id)->delete();
+            DB::table('schedule_event_divisions')->insert(array_map(
+                fn (int $divisionId) => ['schedule_event_id' => $event->id, 'division_id' => $divisionId],
+                $this->agendas->legacyTargetsFor($event),
+            ));
             $synced++;
         }
 
@@ -299,60 +310,45 @@ class TasklistRecoveryService
     }
 
     /**
-     * Take back agendas from schedule_events: missing copies are added, copies older than their original are
-     * updated, and copies whose original was deleted are soft-deleted.
+     * Take back agendas from schedule_events: missing ones are added, ones older than their original updated, and
+     * those the old application deleted after toLegacy() soft-deleted. An old agenda whose id already belongs to a
+     * different agenda (another created_at) is added under a new id.
      */
     private function agendasFromLegacy(): int
     {
         $synced = 0;
+        $legacyAgendas = DB::table('schedule_events')->orderBy('id')->get();
+        $rows = $this->agendas->toCalendarRows($legacyAgendas);
 
-        foreach (DB::table('schedule_events')->orderBy('id')->get() as $legacy) {
-            $event = DB::table('calendar_events')->where('legacy_schedule_event_id', $legacy->id)->first();
+        foreach ($legacyAgendas as $legacy) {
+            $event = DB::table('calendar_events')->where('id', $legacy->id)->first();
+            $row = $rows[$legacy->id];
 
-            if ($event !== null && (string) $event->updated_at >= (string) $legacy->updated_at) {
+            if ($event === null) {
+                DB::table('calendar_events')->insert($row);
+            } elseif ((string) $event->created_at !== (string) $legacy->created_at) {
+                $copy = array_diff_key($row, ['id' => true]);
+
+                if (DB::table('calendar_events')->where('title', $copy['title'])->where('created_at', $copy['created_at'])->exists()) {
+                    continue;
+                }
+
+                DB::table('calendar_events')->insert($copy);
+            } elseif ((string) $event->updated_at < (string) $legacy->updated_at) {
+                DB::table('calendar_events')->where('id', $event->id)->update([...$row, 'deleted_at' => null]);
+            } else {
                 continue;
             }
 
-            $row = [
-                'division_id' => $legacy->owner_division_id,
-                'creator_id' => $legacy->creator_id,
-                'title' => $legacy->title,
-                'description' => $legacy->description,
-                'is_shared' => (bool) $legacy->is_shared,
-                'task_id' => $legacy->task_id,
-                'start_at' => substr((string) $legacy->start_date, 0, 10).' 00:00:00',
-                'end_at' => $legacy->end_date === null ? null : substr((string) $legacy->end_date, 0, 10).' 00:00:00',
-                'created_at' => $legacy->created_at,
-                'updated_at' => $legacy->updated_at,
-            ];
-
-            if ($event !== null) {
-                DB::table('calendar_events')->where('id', $event->id)->update([...$row, 'deleted_at' => null]);
-                $eventId = $event->id;
-            } else {
-                $eventId = DB::table('calendar_events')->insertGetId([...$row, 'legacy_schedule_event_id' => $legacy->id]);
-            }
-
-            $this->copyTargets('schedule_event_divisions', 'schedule_event_id', $legacy->id, 'calendar_event_divisions', 'calendar_event_id', $eventId);
             $synced++;
         }
 
         $synced += DB::table('calendar_events')
             ->whereNull('deleted_at')
-            ->whereNotNull('legacy_schedule_event_id')
-            ->whereNotExists(fn ($query) => $query->from('schedule_events')->whereColumn('schedule_events.id', 'calendar_events.legacy_schedule_event_id'))
+            ->whereIn('id', Cache::get(self::LEGACY_AGENDAS_CACHE_KEY, []))
+            ->whereNotIn('id', $legacyAgendas->pluck('id'))
             ->update(['deleted_at' => Carbon::now()]);
 
         return $synced;
-    }
-
-    private function copyTargets(string $fromTable, string $fromKey, int $fromId, string $toTable, string $toKey, int $toId): void
-    {
-        DB::table($toTable)->where($toKey, $toId)->delete();
-        DB::table($toTable)->insert(
-            DB::table($fromTable)->where($fromKey, $fromId)->pluck('division_id')
-                ->map(fn ($divisionId) => [$toKey => $toId, 'division_id' => $divisionId])
-                ->all(),
-        );
     }
 }

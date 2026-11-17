@@ -80,7 +80,7 @@ class Task extends Model
      */
     public function reviews(): HasMany
     {
-        return $this->hasMany(TaskReview::class)->orderByDesc('created_at')->orderByDesc('id');
+        return $this->hasMany(TaskReview::class)->withCycle()->orderByDesc('created_at')->orderByDesc('id');
     }
 
     public function division(): BelongsTo

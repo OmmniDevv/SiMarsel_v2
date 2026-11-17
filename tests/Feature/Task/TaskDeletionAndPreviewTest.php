@@ -136,7 +136,7 @@ class TaskDeletionAndPreviewTest extends TestCase
     {
         $kept = $this->task(['title' => 'Tetap', 'deadline' => '2026-11-20', 'start_date' => '2026-11-18'], ['staff']);
         $deleted = $this->task(['title' => 'Dihapus', 'deadline' => '2026-11-21', 'start_date' => '2026-11-18'], ['staff']);
-        $agenda = CalendarEvent::factory()->create(['start_at' => '2026-11-19', 'end_at' => null, 'task_id' => $deleted->id]);
+        $agenda = CalendarEvent::factory()->create(['start_at' => '2026-11-19', 'end_at' => null, 'division_id' => null]);
 
         $this->actingAs($this->accounts['admin'])->deleteJson("/api/tasks/{$deleted->id}", ['version' => 1])->assertOk();
         $staff = $this->accounts['staff'];

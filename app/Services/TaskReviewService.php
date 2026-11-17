@@ -59,9 +59,9 @@ class TaskReviewService
             }
 
             $note = $data['note'] ?? null;
+            $cycle = $locked->reviews()->count() + 1;
             $review = $locked->reviews()->create([
                 'reviewer_id' => $reviewer->id,
-                'cycle' => $locked->reviews()->count() + 1,
                 'decision' => $decision,
                 'note' => $note,
             ]);
@@ -79,7 +79,7 @@ class TaskReviewService
                 'action' => $decision->activityAction(),
                 'changes' => [
                     ...$changes,
-                    'review' => ['old' => null, 'new' => ['id' => $review->id, 'cycle' => $review->cycle, 'note' => $note]],
+                    'review' => ['old' => null, 'new' => ['id' => $review->id, 'cycle' => $cycle, 'note' => $note]],
                 ],
             ]);
         });

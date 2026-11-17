@@ -1,9 +1,10 @@
 # Laporan Validasi Migration & Uji Integrasi Tasklist (TASK-19)
 
-Jira: STEAM-272, bagian dari STEAM-268 (TASK-19). Tanggal uji: 16 Nov 2026, diperbarui setelah revisi PR.
-Cakupan: 15 migration TASK-19 (`2026_11_13_*` dan `2026_11_16_*`), pemindahan agenda ke `calendar_events`, aturan
-akses per role, dan prosedur pemulihan. Rancangan dan prosedur deploy ada di
-[tasklist-schema-alignment.md](tasklist-schema-alignment.md); kontrak untuk FE di
+Jira: STEAM-272, bagian dari STEAM-268 (TASK-19). Tanggal uji: 17 Nov 2026, setelah revisi PR kedua (skema disamakan
+dengan ERD). Cakupan: 17 migration TASK-19 (`2026_11_13_*` dan `2026_11_16_*`), kecocokan skema dengan ERD, pemindahan
+agenda ke `calendar_events`, aturan akses per role, dan prosedur pemulihan. Rancangan dan prosedur deploy ada di
+[tasklist-schema-alignment.md](tasklist-schema-alignment.md); ERD acuan di
+[tasklist-erd-to-be-v1.dbml](tasklist-erd-to-be-v1.dbml); kontrak untuk FE di
 [../api/tasklist-fe-integration.md](../api/tasklist-fe-integration.md).
 
 ## 1. Lingkungan
@@ -12,12 +13,55 @@ akses per role, dan prosedur pemulihan. Rancangan dan prosedur deploy ada di
 |---|---|
 | SQLite in-memory (`phpunit.xml`) | Seluruh test suite |
 | MySQL 8.4.3 (Laragon), database sementara `simarsel_test_tmp` | Test Task, Database, Account, Auth, Division, dan Web dijalankan ulang di MySQL |
-| MySQL 8.4.3, database sementara `simarsel_migration_check` | Prosedur deploy manual dengan data dummy format lama, pengaman rollback |
+| MySQL 8.4.3, database sementara `simarsel_migration_check` | Prosedur deploy manual dengan data dummy format lama, pengaman rollback, introspeksi skema fisik |
 
 Staging tidak tersedia; sebagai gantinya dipakai **data dummy format lama** (`Database\Seeders\LegacyTasklistSeeder`) yang
 meniru isi database sebelum TASK-19.
 
-## 2. Data dummy format lama
+## 2. Kecocokan skema dengan ERD
+
+ERD To-Be v1.0 dibandingkan dengan skema **fisik** hasil migration (bukan dengan file migration):
+`migrate:fresh` di MySQL lalu `information_schema` (kolom, tipe, nullable, index, foreign key). Pemeriksaan yang sama
+dijalankan otomatis oleh `tests/Feature/Database/TasklistErdConformanceTest.php` (4 test; tipe kolom hanya dicek di
+MySQL), lulus di SQLite dan MySQL.
+
+| Tabel | Kolom ERD (nama, tipe, nullable) | Index / unique ERD | Relasi ERD | Kolom di luar ERD |
+|---|---|---|---|---|
+| `roles` | ✅ | ✅ `code_role` unique | — | — |
+| `permissions` | ✅ | ✅ `code` unique | — | — |
+| `role_permissions` | ✅ | ✅ PK `(role_id, permission_id)` | ✅ 2 | — |
+| `divisions` | ✅ | ✅ `code_division` unique | — | — (`name` juga unique, sudah ada sebelum TASK-19) |
+| `accounts` | ✅ | ✅ `username` unique | ✅ 2 | `password` (kolom autentikasi; ERD: "tidak ditampilkan") |
+| `platforms` | ✅ | ✅ `slug` unique | — | — |
+| `task_categories` | ✅ | ✅ `name` unique | — | — |
+| `tasks` | ✅ | ✅ `(division_id, status)`, `(status, deadline)`, `start_date`, `deleted_at` | ✅ 5 | `pic_id` (ERD: dihentikan setelah semua pembaca kompatibel) |
+| `task_divisions` | ✅ | ✅ PK `(task_id, division_id)` | ✅ 3 | — |
+| `task_assignments` | ✅ | ✅ `(task_id, unassigned_at)`, `(account_id, unassigned_at)` | ✅ 4 | `active_flag` (mekanisme unik PIC aktif khusus MySQL yang diminta ERD) |
+| `task_evidences` | ✅ | ✅ `(task_id, created_at)` | ✅ 3 | — |
+| `task_reviews` | ✅ `decision` varchar(30), `updated_at` | ✅ `(task_id, created_at)` | ✅ 2 | — (`cycle` di-drop; API menghitungnya) |
+| `task_comments` | ✅ `created_at` NOT NULL | ✅ `(task_id, created_at)`, `parent_comment_id` | ✅ 3 | — |
+| `task_activities` | ✅ `created_at` NOT NULL | ✅ `(task_id, created_at)` | ✅ 2 | `actor_name_snapshot` (sudah ada sebelum TASK-19, nama pelaku yang akunnya terhapus) |
+| `calendar_events` | ✅ `division_id` nullable, `creator_id` NOT NULL | ✅ `start_at` | ✅ 2 | — (tidak ada tabel pivot) |
+
+Perbedaan dengan ERD yang **disengaja** (4 kolom di atas) dicatat juga di `TasklistErdConformanceTest::DEVIATIONS`;
+kolom lain di luar ERD membuat test gagal. Tabel di luar ERD: `account_role_changes` (audit role, TASK-12; perlu
+ditambahkan ke ERD), serta `schedule_events` dan
+`schedule_event_divisions` (read-only, untuk rollback dan pemulihan; tidak dibaca aplikasi).
+
+Nilai yang ERD minta dicocokkan dengan existing: `task_reviews.decision` tetap `approve`/`revision` (enum
+`TaskReviewDecision`), status memakai kode internal ERD (`ready_review`, `on_review`). Tipe `bigint unsigned` dan
+`int unsigned` dianggap sama dengan `bigint`/`int` di ERD; `boolean` = `tinyint(1)`.
+
+### Perubahan pada revisi ini
+
+| Sebelum | Sekarang (sesuai ERD) | Migration |
+|---|---|---|
+| `calendar_events` + `is_shared`, `task_id`, `legacy_schedule_event_id`, `creator_id` nullable, tabel `calendar_event_divisions`, index `(start_at, end_at)` | Kolom, FK, dan index persis ERD | `2026_11_16_090000` (hanya menyalin data), `2026_11_13_105301` (index tidak diubah lagi) |
+| `task_reviews.decision` varchar(20), `cycle`, tanpa `updated_at` | varchar(30), `updated_at`, tanpa `cycle` | `2026_11_16_085800_align_task_reviews_with_erd` |
+| `task_activities.created_at` nullable | NOT NULL | `2026_11_16_085900_require_created_at_on_task_activities` |
+| `task_comments.created_at` nullable, tanpa index `parent_comment_id` eksplisit | NOT NULL, index `parent_comment_id` | `2026_11_13_083926_create_task_comments_table` |
+
+## 3. Data dummy format lama
 
 `LegacyTasklistSeeder` hanya mengisi kolom yang sudah ada sebelum TASK-19, jadi bisa di-seed pada schema lama:
 
@@ -27,54 +71,64 @@ meniru isi database sebelum TASK-19.
 - 20 aktivitas: created, assigned, reassigned, status_changed dengan status lama, evidence_submitted,
   revision_requested, resubmitted, approved, entri dari akun yang sudah terhapus (hanya `actor_name_snapshot`), dan
   judul yang kebetulan berisi `on_qa`.
-- 3 evidence (file dan link), 2 review (revisi siklus 1, approve).
-- 5 agenda dengan 4 baris divisi tujuan: agenda bersama (dengan divisi tujuan yang tidak berpengaruh), internal satu
-  divisi, internal dua divisi dan beberapa hari, internal khusus Admin tanpa pembuat, dan agenda bersama yang terkait task.
+- 3 evidence (file dan link), 2 review dengan `cycle`.
+- 5 agenda yang mencakup setiap aturan pemetaan: bersama tanpa pembuat (dengan divisi tujuan yang tidak berpengaruh),
+  internal satu divisi, internal dua divisi beberapa hari, internal tanpa divisi penyelenggara/tujuan (memakai divisi
+  pembuat), dan bersama yang terkait task.
 
-## 3. Hasil migration pada data lama (MySQL)
+## 4. Hasil migration pada data lama (MySQL)
 
-Prosedur sama dengan deploy: rollback 15 migration TASK-19 → seed data lama → `migrate` → `RoleSeeder` →
+Prosedur sama dengan deploy: rollback 17 migration TASK-19 → seed data lama → `migrate` → `RoleSeeder` →
 `PermissionSeeder` → `tasks:validate-migration` → `tasks:recovery` → rollback → migrate ulang.
 
 | Langkah | Hasil |
 |---|---|
-| Data sebelum migrate | tasks=6, activities=20, evidences=3, reviews=2, schedule_events=5, schedule_event_divisions=4, accounts=6 |
-| `migrate` (15 migration) | Berhasil, 3,9 detik, tanpa konflik nama tabel/kolom/foreign key |
-| Data setelah migrate | Semua jumlah di atas sama; assignment aktif=5, status lama=0, calendar_events=5, calendar_event_divisions=4 |
-| `tasks:validate-migration` | 16/16 PASS, exit 0 (termasuk "Agenda lama tersalin" dan "Salinan agenda sama dengan aslinya: 5 sama") |
-| `tasks:recovery` (status) | Semua 0: "Belum ada data baru. Rollback aman" |
-| Tambah 1 komentar, lalu `migrate:rollback --step=15` | **Ditolak**: "Rollback TASK-19 dibatalkan karena akan menghapus data baru (Komentar tugas: 1)"; tabel dan komentar tetap ada |
-| Hapus komentar uji, lalu `migrate:rollback --step=15` | Berhasil; status lama kembali (`ready_for_qa`, `on_qa`), `calendar_events` hilang, 5 agenda tetap di `schedule_events` |
-| `migrate` ulang + seed + validasi | Berhasil, exit 0 |
+| Data sebelum migrate | accounts=6, roles=3, divisions=2, tasks=6, activities=20, evidences=3, reviews=2, schedule_events=5 |
+| `migrate` (17 migration) | Berhasil, 3,4 detik, tanpa konflik nama tabel/kolom/foreign key |
+| Data setelah migrate | Semua jumlah di atas sama (roles=5 setelah `RoleSeeder`); assignment aktif=5, status lama=0, calendar_events=5 |
+| `tasks:validate-migration` | 16/16 PASS, exit 0; "Salinan agenda sesuai pemetaan ERD": 5 sama, 1 agenda internal multi-divisi kini hanya untuk satu divisi |
+| `tasks:recovery` (status) | Semua 0: "Belum ada data baru. Rollback aman: php artisan migrate:rollback --step=17 --force" |
+| Tambah 1 komentar, lalu `migrate:rollback --step=17` | **Ditolak**: "Rollback TASK-19 dibatalkan karena akan menghapus data baru (Komentar tugas: 1)"; komentar dan 5 agenda tetap ada |
+| Hapus komentar uji, lalu `migrate:rollback --step=17` | Berhasil; status lama kembali (2 task `ready_for_qa`/`on_qa`), `calendar_events` hilang, 5 agenda tetap di `schedule_events`, `task_reviews.cycle` kembali sama (1, 1) |
+| `migrate` ulang + seed + validasi | Berhasil, "Validasi lulus" |
 
-## 4. Validasi per poin
+## 5. Validasi per poin
 
-### 4.1 Migration & data
+### 5.1 Migration & data
 
 | Poin | Bukti |
 |---|---|
-| Migration jalan tanpa konflik | Bagian 3; `TasklistMigrationIntegrationTest` |
+| Skema sama dengan ERD | Bagian 2; `TasklistErdConformanceTest` |
+| Migration jalan tanpa konflik | Bagian 4; `TasklistMigrationIntegrationTest` |
 | Backfill `pic_id` → `task_assignments` tanpa kehilangan relasi | `TasklistMigrationIntegrationTest::test_every_legacy_pic_becomes_one_active_assignment_with_its_origin` |
 | Migrate ulang tidak membuat assignment ganda | `TaskMultiPicTest::test_backfill_adds_missing_assignments_once_and_never_restores_a_released_pic` |
 | Kompatibilitas task, akun, role, evidence, review, histori | Jumlah baris sama sebelum dan sesudah; `test_existing_accounts_keep_their_role_and_legacy_data_works_through_the_api` |
+| Review, komentar, histori sesuai ERD tanpa kehilangan data | `test_reviews_comments_and_history_follow_the_erd_and_keep_their_data`: `cycle` di API sama dengan nilai lama, `updated_at` terisi, `created_at` kosong diisi waktu pembuatan task, rollback mengisi ulang `cycle` yang sama |
 | Enam status dan histori QA lama terbaca | `test_statuses_and_their_history_are_renamed_and_read_with_the_new_labels` |
 | Soft delete, foreign key, unique, optimistic locking | `TaskHistoryIntegrityTest`, `TasklistFoundationTest`, test `409` di `TaskAssignmentTest` |
 | Rollback sebelum ada data baru | `test_rolling_back_restores_the_legacy_data_and_migrating_again_succeeds`, `TasklistRecoveryTest::test_right_after_the_deploy_there_is_no_new_data_and_rolling_back_is_allowed` |
 
-### 4.2 Agenda (`calendar_events`)
+### 5.2 Agenda (`calendar_events`)
 
-`TasklistMigrationIntegrationTest::test_every_agenda_moves_to_calendar_events_and_each_account_still_sees_the_same_agendas`:
+`TasklistMigrationIntegrationTest::test_every_agenda_moves_to_calendar_events_with_its_id_and_the_erd_division_rule`:
+
+| Agenda lama | `division_id` | `creator_id` | Terlihat oleh |
+|---|---|---|---|
+| Rapat evaluasi bulanan (bersama, tanpa pembuat) | NULL | Admin pertama | Semua |
+| Briefing internal Marketing | Marketing | Pembuat asli | Admin, Manajer, akun Marketing |
+| Sinkronisasi Marketing dan Finance (internal, 2 divisi) | Finance (penyelenggara) | Pembuat asli | Admin, Manajer, akun Finance; **Marketing tidak lagi** |
+| Rapat pimpinan (internal tanpa divisi) | Finance (divisi pembuat) | Pembuat asli | Admin, Manajer, akun Finance |
+| Shooting video teaser (bersama, terkait task) | NULL | Pembuat asli | Semua; `task_id` di API `null` |
 
 | Poin | Hasil |
 |---|---|
 | Setiap agenda lama punya tepat satu salinan | 5 dari 5, id sama |
-| Isi salinan | Judul, deskripsi, divisi penyelenggara, tanggal mulai/selesai, `is_shared`, `task_id`, pembuat, `created_at` sama |
-| Divisi tujuan agenda internal | Sama per agenda |
-| Akses agenda tidak berubah | Untuk Admin, Manager Marketing, Manager Finance, Staff Marketing, dan Staff Finance, daftar agenda di Calendar dan Timeline sama dengan hasil aturan lama yang dihitung langsung dari `schedule_events` |
-| Agenda terkait task dan agenda beberapa hari | `task_id`, `start_date` 2026-11-20, `end_date` 2026-11-22 terbaca di Calendar |
-| Regression Calendar/Timeline | `TaskCalendarTest`, `TaskScheduleTest` (38 test) lulus dengan sumber `calendar_events` |
+| Isi salinan | Judul, deskripsi, tanggal mulai/selesai, `created_at`, `updated_at` sama |
+| Akses agenda | Daftar agenda di Calendar dan Timeline untuk Admin, 2 Manajer, Staff Marketing, Staff Finance sesuai tabel di atas |
+| Agenda internal tanpa divisi | `test_an_internal_agenda_without_any_division_stops_the_move_and_copies_nothing`: migrate berhenti dengan id dan judul agenda, `calendar_events` tetap kosong |
+| Aturan akses per role | `TaskCalendarTest`, `TaskScheduleTest` (36 test): agenda umum untuk kelima role, agenda divisi hanya untuk divisinya, Admin dan Manajer semua divisi, akun tanpa divisi hanya agenda umum, akun nonaktif tidak melihat agenda, fokus divisi tidak memperluas visibilitas |
 
-### 4.3 Hak akses per role
+### 5.3 Hak akses per role
 
 Diuji di `TaskRoleCompatibilityTest`, `TaskListingTest`, `TaskAssignmentTest`, `TaskCreationTest`, `TaskReviewTest`,
 `TaskUpdateTest`, `TaskStatusTransitionTest`, `TaskDetailTest`, `TaskEvidenceTest`, `TaskCalendarTest`,
@@ -97,7 +151,7 @@ Diuji di `TaskRoleCompatibilityTest`, `TaskListingTest`, `TaskAssignmentTest`, `
 | Hapus Task Card (TASK-12) | Admin dan Manajer semua divisi, Supervisor divisinya `200`; Staff/Freelance (termasuk PIC) dan Supervisor divisi lain `403`; tugas Done `422`; task terhapus hilang dari semua tampilan dan `404` (`TaskDeletionAndPreviewTest`) |
 | Audit role (TASK-12) | Pembuatan akun dan setiap perubahan role tercatat di `account_role_changes`; histori task tidak berubah (`AccountRoleAuditTest`) |
 
-### 4.4 Pemulihan setelah fitur dipakai
+### 5.4 Pemulihan setelah fitur dipakai
 
 `TasklistRecoveryTest` (data lama → migrate → pengguna menambah PIC kedua, membuat task multi-PIC, memindahkan status,
 menambah komentar, serta menambah, mengubah, dan menghapus agenda):
@@ -106,27 +160,30 @@ menambah komentar, serta menambah, mengubah, dan menghapus agenda):
 |---|---|
 | Rollback setelah ada data baru | Ditolak `UnsafeTasklistRollbackException`; komentar, 2 PIC aktif, dan 6 agenda tetap ada |
 | `tasks:recovery to-legacy` tanpa `--apply` | Tidak ada perubahan (dry run) |
-| `tasks:recovery to-legacy --apply` | `tasks.pic_id` = PIC aktif paling awal; status kembali `ready_for_qa`/`on_qa`; `schedule_events` berisi agenda baru, agenda yang diubah, tanpa agenda yang dihapus, beserta divisi tujuannya; komentar dan assignment tetap ada |
-| Aplikasi lama mengganti PIC, status, dan menambah agenda | Disimulasikan langsung di tabel lama |
-| `tasks:recovery from-legacy --apply` | Status kembali ke nama baru; PIC yang diganti di aplikasi lama menjadi satu-satunya PIC aktif; task multi-PIC yang tidak diubah tetap punya 2 PIC; agenda dari aplikasi lama masuk `calendar_events`; validasi lulus; API detail benar |
+| `tasks:recovery to-legacy --apply` | `tasks.pic_id` = PIC aktif paling awal; status kembali `ready_for_qa`/`on_qa`; `schedule_events` berisi agenda baru (id sama, agenda divisi menjadi internal untuk divisi itu), agenda yang diubah, tanpa agenda yang dihapus; agenda yang tidak diubah tetap dengan `task_id` aslinya; komentar dan assignment tetap ada |
+| Aplikasi lama mengganti PIC dan status, menambah agenda bersama dan internal, menghapus agenda | Disimulasikan langsung di tabel lama |
+| `tasks:recovery from-legacy --apply` | Status kembali ke nama baru; PIC yang diganti di aplikasi lama menjadi satu-satunya PIC aktif; task multi-PIC yang tidak diubah tetap punya 2 PIC; agenda baru dari aplikasi lama masuk `calendar_events` dengan pemetaan ERD; agenda yang dihapus di aplikasi lama di-soft delete; validasi lulus; API detail benar |
 | Menjalankan `from-legacy` lagi | 0 perubahan |
+| `from-legacy` tanpa `to-legacy` sebelumnya | Agenda yang hanya ada di `calendar_events` tidak dihapus |
 
-### 4.5 Kontrak API
+### 5.5 Kontrak API
 
 Kontrak backend dibandingkan dengan kode FE di `dev`. Selisih, dependensi, dan urutan penerapan ada di
-[tasklist-fe-integration.md](../api/tasklist-fe-integration.md). Calendar dan Timeline tidak berubah bentuk.
+[tasklist-fe-integration.md](../api/tasklist-fe-integration.md). Bentuk response Calendar, Timeline, dan review tidak
+berubah: `cycle` tetap dikirim, agenda tetap mengirim `division`, `target_divisions`, `task_id`, `can_view_detail`.
+Satu-satunya dampak yang terlihat di FE: agenda tidak lagi menautkan tugas, sehingga tombol "Lihat Detail Tugas
+Terkait" di pop-up agenda tidak muncul.
 
 Temuan sebelumnya: urutan key di `changes` histori berbeda antara MySQL dan SQLite; diperbaiki dengan
 `TaskActivity::orderedChanges()`.
 
-## 5. Regression
+## 6. Regression
 
 | Suite | Hasil |
 |---|---|
-| Seluruh test, SQLite (setelah sinkron dengan `dev` #117) | 720 test: 705 lulus, 12 gagal (sudah gagal sebelum TASK-19), 3 dilewati (`PromoCodeConcurrencyTest`, butuh MySQL) |
-| Task dan Database, MySQL | 354/354 lulus |
-| Account, Auth, Division, Web, MySQL | 116 test: 114 lulus, 2 gagal (`LoginTest`, sudah gagal sebelumnya) |
-| Frontend (`node --test tests/Frontend`) | 141/141 lulus (tidak ada perubahan FE) |
+| Seluruh test, SQLite | 725 test: 710 lulus, 12 gagal (sudah gagal sebelum TASK-19), 3 dilewati (`PromoCodeConcurrencyTest`, butuh MySQL) |
+| Task, Database, Account, Auth, Division, Web, MySQL | 477 test: 475 lulus, 2 gagal (`LoginTest`, sudah gagal sebelumnya) |
+| Frontend (`npm run test:frontend`) | 141/141 lulus (tidak ada perubahan FE) |
 
 12 kegagalan yang sudah ada sebelumnya, tidak terkait TASK-19:
 
@@ -134,7 +191,7 @@ Temuan sebelumnya: urutan key di `changes` histori berbeda antara MySQL dan SQLi
 - `PerformanceExportTest` (2) dan `PromoAnalysisExportTest` (8): ekstensi PHP `zip` belum aktif di mesin uji
   (`Class "ZipArchive" not found`).
 
-## 6. Validasi setelah deploy
+## 7. Validasi setelah deploy
 
 ```bash
 php artisan tasks:validate-migration
@@ -145,7 +202,7 @@ Keduanya read-only. `tasks:validate-migration` keluar dengan exit code `0` bila 
 
 | Pemeriksaan | Gagal bila |
 |---|---|
-| Migration TASK-19 sudah dijalankan | Ada migration `2026_11_13_*`/`2026_11_16_*` yang belum jalan |
+| Migration TASK-19 sudah dijalankan | Ada migration `2026_11_13_*`/`2026_11_16_08*`/`2026_11_16_090*` yang belum jalan |
 | Lima role tersedia | Salah satu dari ADM, MGR, SPV, EMP, FRL tidak ada |
 | Permission Tasklist tersedia | Ada permission `task.*` hilang atau role tanpa permission |
 | Tidak ada status QA lama di tasks | Masih ada `ready_for_qa`/`on_qa` |
@@ -159,26 +216,27 @@ Keduanya read-only. `tasks:validate-migration` keluar dengan exit code `0` bila 
 | Balasan komentar di task yang sama | Ada balasan ke komentar task lain |
 | Divisi utama bukan kolaborator | Divisi utama tercatat di `task_divisions` |
 | Foreign key riwayat RESTRICT | MySQL saja: kolom riwayat bukan RESTRICT |
-| Agenda lama tersalin ke `calendar_events` | Ada agenda `schedule_events` tanpa salinan |
-| Salinan agenda sama dengan aslinya | Salinan yang belum diubah berbeda isi, tanggal, `is_shared`, atau divisi tujuan dari aslinya |
+| Agenda lama tersalin ke `calendar_events` | Ada agenda `schedule_events` tanpa salinan dengan id dan `created_at` sama |
+| Salinan agenda sesuai pemetaan ERD | Salinan yang belum diubah berbeda judul, deskripsi, tanggal, pembuat, atau `division_id` hasil pemetaan; atau ada agenda yang tidak bisa dipetakan. Agenda multi-divisi yang dipersempit hanya dilaporkan |
 
-## 7. Prosedur pemulihan
+## 8. Prosedur pemulihan
 
 Selalu ambil backup sebelum deploy (`mysqldump --single-transaction --routines <database>`), lalu tentukan kondisinya
 dengan `php artisan tasks:recovery`.
 
-### 7.1 Sebelum ada data baru
+### 8.1 Sebelum ada data baru
 
 | Kegagalan | Tindakan |
 |---|---|
-| `migrate` gagal di tengah | `php artisan migrate:status`, lalu `migrate:rollback --step=N` (N = jumlah migration TASK-19 yang sudah jalan). Bila rollback gagal, pulihkan dari backup. |
+| `migrate` berhenti di `2026_11_16_090000` (`UnmappableAgendaException`) | Pesan menyebut id dan judul agenda. Lengkapi divisi penyelenggara/tujuan agenda itu di `schedule_events` (atau buat akun Admin bila pesannya tentang pembuat), lalu `php artisan migrate` lagi. Tidak ada agenda yang tersalin sebagian. |
+| `migrate` gagal di tengah karena hal lain | `php artisan migrate:status`, lalu `migrate:rollback --step=N` (N = jumlah migration TASK-19 yang sudah jalan). Bila rollback gagal, pulihkan dari backup. |
 | Validasi: role/permission | `php artisan db:seed --class=RoleSeeder --force` lalu `--class=PermissionSeeder --force` (aman diulang). |
 | Validasi: PIC lama belum di-backfill | `php artisan tasks:backfill-assignments`, lalu `--apply`. |
 | Validasi: status QA lama tersisa | Rollback lalu jalankan ulang migration `2026_11_13_083919_rename_qa_statuses_to_review_statuses`, atau rollback penuh dan migrate ulang. |
-| Validasi: agenda belum tersalin atau berbeda | Rollback migration `2026_11_16_090000_*` lalu migrate ulang; penyalinan memakai `legacy_schedule_event_id` sehingga tidak menggandakan agenda. |
-| Aplikasi bermasalah setelah deploy | `php artisan migrate:rollback --step=15 --force`, lalu deploy kode versi sebelumnya. |
+| Validasi: agenda belum tersalin atau berbeda | Rollback migration `2026_11_16_090000_*` lalu migrate ulang; agenda yang id-nya sudah ada dilewati sehingga tidak tergandakan. |
+| Aplikasi bermasalah setelah deploy | `php artisan migrate:rollback --step=17 --force` (angka pastinya ditampilkan `tasks:recovery`), lalu deploy kode versi sebelumnya. |
 
-### 7.2 Setelah fitur dipakai
+### 8.2 Setelah fitur dipakai
 
 Rollback skema akan menghapus data yang tidak ada di `tasks.pic_id` maupun di backup sebelum deploy, sehingga ditolak
 oleh `2026_11_16_090100_guard_tasklist_rollback`. Pulihkan dengan mempertahankan skema dan data terbaru:
@@ -187,6 +245,10 @@ oleh `2026_11_16_090100_guard_tasklist_rollback`. Pulihkan dengan mempertahankan
 2. Deploy kode versi sebelumnya. Tabel baru tetap ada dan tidak dibaca aplikasi lama.
 3. Saat kode TASK-19 dipasang lagi: `php artisan tasks:recovery from-legacy --apply`, lalu
    `php artisan tasks:validate-migration`.
+
+`to-legacy --apply` menyimpan daftar agenda yang ditulisnya di cache aplikasi; jangan jalankan `cache:clear` sebelum
+`from-legacy`. Bila cache terhapus, agenda yang dihapus di aplikasi lama tidak ikut dihapus (tidak ada data yang hilang)
+dan bisa dihapus manual.
 
 | Masalah lain | Tindakan |
 |---|---|

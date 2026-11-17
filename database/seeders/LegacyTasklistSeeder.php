@@ -105,8 +105,9 @@ class LegacyTasklistSeeder extends Seeder
             ['task_id' => $done, 'reviewer_id' => $financeManager, 'cycle' => 1, 'decision' => 'approve', 'note' => null, 'created_at' => '2026-11-08 16:00:00'],
         ]);
 
-        // Agendas in every shape the Calendar and Timeline read: shared (one with a stray target division), internal
-        // for one or several divisions, internal for Admin only, related to a task, several days, and without creator.
+        // Agendas in every shape the move maps: shared without a creator (credited to Admin) and with a stray target
+        // division, internal for one or several divisions, internal without any division (takes its creator's), and
+        // shared, related to a task, over several days.
         $agenda = fn (string $title, ?int $owner, string $start, ?string $end, bool $shared, array $targets, ?int $taskId = null, ?int $creator = null) => tap(
             DB::table('schedule_events')->insertGetId([
                 'title' => $title, 'description' => "Agenda lama: {$title}", 'owner_division_id' => $owner,
@@ -118,10 +119,10 @@ class LegacyTasklistSeeder extends Seeder
             ),
         );
 
-        $agenda('Rapat evaluasi bulanan', $marketing, '2026-11-15', null, true, [$finance], creator: $admin);
+        $agenda('Rapat evaluasi bulanan', $marketing, '2026-11-15', null, true, [$finance]);
         $agenda('Briefing internal Marketing', $marketing, '2026-11-16', null, false, [$marketing], creator: $manager);
         $agenda('Sinkronisasi Marketing dan Finance', $finance, '2026-11-17', '2026-11-18', false, [$marketing, $finance], creator: $financeManager);
-        $agenda('Rapat pimpinan', null, '2026-11-19', null, false, []);
+        $agenda('Rapat pimpinan', null, '2026-11-19', null, false, [], creator: $financeManager);
         $agenda('Shooting video teaser', $marketing, '2026-11-20', '2026-11-22', true, [], $readyForQa, $manager);
     }
 
