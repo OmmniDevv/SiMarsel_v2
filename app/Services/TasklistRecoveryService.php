@@ -19,8 +19,8 @@ use Illuminate\Support\Facades\DB;
  * - fromLegacy(): before running the TASK-19 application again. Takes back what the old application changed:
  *   status names, a PIC changed through tasks.pic_id, and agendas in schedule_events.
  *
- * Both are dry runs unless $apply is true, and both are safe to run again. Agendas keep the same id in both
- * tables; LegacyAgendaMapper maps division_id to the old shared and internal agendas.
+ * Both are dry runs unless $apply is true, and both are safe to run again. Agendas keep the same id, is_shared,
+ * organising division, and target divisions in both tables (LegacyAgendaMapper).
  */
 class TasklistRecoveryService
 {
@@ -154,7 +154,8 @@ class TasklistRecoveryService
             ->filter(fn (object $event) => $event->deleted_at !== null
                 || ! $originals->has($event->id)
                 || (string) $originals[$event->id]->created_at !== (string) $event->created_at
-                || (string) $originals[$event->id]->updated_at !== (string) $event->updated_at)
+                || (string) $originals[$event->id]->updated_at !== (string) $event->updated_at
+                || $this->agendas->targets($event->id) !== $this->agendas->legacyTargets($event->id))
             ->count();
     }
 
@@ -270,8 +271,8 @@ class TasklistRecoveryService
 
     /**
      * Write the latest agendas into schedule_events under the same id: new ones are added, edited ones updated, and
-     * deleted ones removed, since the old table has no soft delete. An unchanged agenda keeps its original row,
-     * including its related task and target divisions.
+     * deleted ones removed, since the old table has no soft delete. is_shared and every target division go with
+     * them. An unchanged agenda keeps its original row, including its related task.
      */
     private function agendasToLegacy(): int
     {
@@ -289,7 +290,10 @@ class TasklistRecoveryService
                 continue;
             }
 
-            if ($legacy !== null && (string) $legacy->updated_at === (string) $event->updated_at) {
+            $targets = $this->agendas->targets($event->id);
+
+            if ($legacy !== null && (string) $legacy->updated_at === (string) $event->updated_at
+                && $this->agendas->legacyTargets($event->id) === $targets) {
                 continue;
             }
 
@@ -298,11 +302,7 @@ class TasklistRecoveryService
                 ? DB::table('schedule_events')->where('id', $event->id)->update($row)
                 : DB::table('schedule_events')->insert(['id' => $event->id, ...$row]);
 
-            DB::table('schedule_event_divisions')->where('schedule_event_id', $event->id)->delete();
-            DB::table('schedule_event_divisions')->insert(array_map(
-                fn (int $divisionId) => ['schedule_event_id' => $event->id, 'division_id' => $divisionId],
-                $this->agendas->legacyTargetsFor($event),
-            ));
+            $this->agendas->syncLegacyTargets($event->id, $targets);
             $synced++;
         }
 
@@ -324,8 +324,11 @@ class TasklistRecoveryService
             $event = DB::table('calendar_events')->where('id', $legacy->id)->first();
             $row = $rows[$legacy->id];
 
+            $targets = $this->agendas->legacyTargets($legacy->id);
+
             if ($event === null) {
                 DB::table('calendar_events')->insert($row);
+                $this->agendas->syncTargets($legacy->id, $targets);
             } elseif ((string) $event->created_at !== (string) $legacy->created_at) {
                 $copy = array_diff_key($row, ['id' => true]);
 
@@ -333,9 +336,10 @@ class TasklistRecoveryService
                     continue;
                 }
 
-                DB::table('calendar_events')->insert($copy);
+                $this->agendas->syncTargets(DB::table('calendar_events')->insertGetId($copy), $targets);
             } elseif ((string) $event->updated_at < (string) $legacy->updated_at) {
                 DB::table('calendar_events')->where('id', $event->id)->update([...$row, 'deleted_at' => null]);
+                $this->agendas->syncTargets($event->id, $targets);
             } else {
                 continue;
             }

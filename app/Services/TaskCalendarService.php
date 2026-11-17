@@ -26,7 +26,7 @@ class TaskCalendarService
 
         return [
             'events' => CalendarEvent::query()
-                ->with('division')
+                ->with(['division', 'targetDivisions'])
                 ->visibleTo($account)
                 ->within($from, $to)
                 ->forDivision($division)

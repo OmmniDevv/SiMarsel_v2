@@ -289,14 +289,14 @@ class TasklistMigrationValidator
     }
 
     /**
-     * A copy that was not edited since the move matches its original as LegacyAgendaMapper maps it: title,
-     * description, dates, creator, and the division that decides who sees it. Edited copies are newer than
-     * schedule_events, which the application no longer writes, so they are counted but not compared. Internal
-     * agendas meant for several divisions keep one division; they are reported, not failed.
+     * A copy that was not edited since the move matches its original: title, description, dates, creator,
+     * organising division, is_shared, and every target division, since those decide who sees it. A copy missing
+     * any target division fails. Edited copies are newer than schedule_events, which the application no longer
+     * writes, so they are counted but not compared.
      */
     private function agendaCopiesMatch(): array
     {
-        $check = 'Salinan agenda sesuai pemetaan ERD (division_id, pembuat, tanggal)';
+        $check = 'Salinan agenda sama dengan aslinya (is_shared, divisi tujuan, divisi penyelenggara, pembuat, tanggal)';
         $mapper = app(LegacyAgendaMapper::class);
         $originals = DB::table('schedule_events')->orderBy('id')->get()->keyBy('id');
 
@@ -309,7 +309,8 @@ class TasklistMigrationValidator
         $date = fn ($value) => $value === null ? null : substr((string) $value, 0, 10);
         $copies = DB::table('calendar_events')->whereIn('id', $originals->keys())->get();
         $edited = 0;
-        $different = $copies->filter(function (object $copy) use ($originals, $expected, $date, &$edited) {
+        $lostTargets = 0;
+        $different = $copies->filter(function (object $copy) use ($originals, $expected, $date, $mapper, &$edited, &$lostTargets) {
             $original = $originals[$copy->id];
 
             if ((string) $copy->created_at !== (string) $original->created_at) {
@@ -323,20 +324,24 @@ class TasklistMigrationValidator
             }
 
             $row = $expected[$copy->id];
+            $targets = $mapper->targets($copy->id);
+            $legacyTargets = $mapper->legacyTargets($copy->id);
 
-            return [$copy->title, $copy->description, $copy->division_id === null ? null : (int) $copy->division_id, (int) $copy->creator_id, $date($copy->start_at), $date($copy->end_at)]
-                !== [$row['title'], $row['description'], $row['division_id'], $row['creator_id'], $date($row['start_at']), $date($row['end_at'])];
+            if (array_diff($legacyTargets, $targets) !== []) {
+                $lostTargets++;
+            }
+
+            return [$copy->title, $copy->description, $copy->division_id === null ? null : (int) $copy->division_id, (int) $copy->creator_id, (bool) $copy->is_shared, $targets, $date($copy->start_at), $date($copy->end_at)]
+                !== [$row['title'], $row['description'], $row['division_id'], $row['creator_id'], $row['is_shared'], $legacyTargets, $date($row['start_at']), $date($row['end_at'])];
         })->count();
 
         if ($different > 0) {
-            return $this->result($check, self::FAIL, "{$different} salinan berbeda dari agenda aslinya");
+            return $this->result($check, self::FAIL, "{$different} salinan berbeda dari agenda aslinya"
+                .($lostTargets > 0 ? ", {$lostTargets} di antaranya kehilangan divisi tujuan" : ''));
         }
 
-        $narrowed = $mapper->narrowedAgendaIds()->count();
-
         return $this->result($check, self::PASS, ($copies->count() - $edited).' sama'
-            .($edited > 0 ? ", {$edited} sudah diubah setelah dipindah" : '')
-            .($narrowed > 0 ? "; {$narrowed} agenda internal multi-divisi kini hanya untuk satu divisi" : ''));
+            .($edited > 0 ? ", {$edited} sudah diubah setelah dipindah" : ''));
     }
 
     private function countResult(string $check, int $count, string $problem): array

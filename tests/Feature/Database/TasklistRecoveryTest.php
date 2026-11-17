@@ -103,7 +103,11 @@ class TasklistRecoveryTest extends TestCase
         $workshop = DB::table('schedule_events')->where('title', 'Workshop konten')->sole();
         $this->assertSame((int) DB::table('calendar_events')->where('title', 'Workshop konten')->value('id'), (int) $workshop->id);
         $this->assertFalse((bool) $workshop->is_shared);
-        $this->assertSame([$banner->division_id], DB::table('schedule_event_divisions')->where('schedule_event_id', $workshop->id)->pluck('division_id')->map(fn ($id) => (int) $id)->all());
+        $this->assertEqualsCanonicalizing(
+            [$banner->division_id, (int) DB::table('divisions')->where('code_division', 'FIN')->value('id')],
+            DB::table('schedule_event_divisions')->where('schedule_event_id', $workshop->id)->pluck('division_id')->map(fn ($id) => (int) $id)->all(),
+            'Every target division goes to the old application',
+        );
         // An agenda that was not changed keeps its original row, including its related task.
         $this->assertNotNull(DB::table('schedule_events')->where('title', 'Shooting video teaser')->value('task_id'));
         // Nothing written by the new application is dropped.
@@ -114,16 +118,21 @@ class TasklistRecoveryTest extends TestCase
         $this->travelTo('2026-11-15 10:00:00');
         $inProgress = $this->task('Copywriting landing page');
         DB::table('tasks')->where('id', $inProgress->id)->update(['pic_id' => $budi->id, 'status' => 'ready_for_qa']);
+        $creator = $this->account('legacy.finmanager')->id;
         DB::table('schedule_events')->insert([
             'title' => 'Agenda dari aplikasi lama', 'owner_division_id' => null, 'start_date' => '2026-11-25', 'end_date' => null,
-            'is_shared' => true, 'created_at' => now(), 'updated_at' => now(),
+            'is_shared' => true, 'creator_id' => $creator, 'created_at' => now(), 'updated_at' => now(),
         ]);
         $finance = (int) DB::table('divisions')->where('code_division', 'FIN')->value('id');
+        $marketing = (int) DB::table('divisions')->where('code_division', 'MKT')->value('id');
         $forFinance = DB::table('schedule_events')->insertGetId([
-            'title' => 'Agenda internal Finance', 'owner_division_id' => null, 'start_date' => '2026-11-26', 'end_date' => null,
-            'is_shared' => false, 'created_at' => now(), 'updated_at' => now(),
+            'title' => 'Agenda internal Finance', 'owner_division_id' => $finance, 'start_date' => '2026-11-26', 'end_date' => null,
+            'is_shared' => false, 'creator_id' => $creator, 'created_at' => now(), 'updated_at' => now(),
         ]);
-        DB::table('schedule_event_divisions')->insert(['schedule_event_id' => $forFinance, 'division_id' => $finance]);
+        DB::table('schedule_event_divisions')->insert([
+            ['schedule_event_id' => $forFinance, 'division_id' => $finance],
+            ['schedule_event_id' => $forFinance, 'division_id' => $marketing],
+        ]);
         DB::table('schedule_events')->where('title', 'Briefing internal Marketing')->delete();
 
         $this->artisan('tasks:recovery', ['action' => 'from-legacy', '--apply' => true])->assertSuccessful();
@@ -131,8 +140,13 @@ class TasklistRecoveryTest extends TestCase
         $this->assertSame(0, DB::table('tasks')->whereIn('status', ['ready_for_qa', 'on_qa'])->count());
         $this->assertSame([$budi->id], $this->activePics($inProgress));
         $this->assertSame([$budi->id, $sari->id], $this->activePics($banner), 'Both PICs of the multi-PIC task are kept');
-        $this->assertTrue(DB::table('calendar_events')->where('title', 'Agenda dari aplikasi lama')->whereNull('deleted_at')->whereNull('division_id')->exists());
-        $this->assertSame($finance, (int) DB::table('calendar_events')->where('id', $forFinance)->whereNull('deleted_at')->value('division_id'));
+        $this->assertTrue(DB::table('calendar_events')->where('title', 'Agenda dari aplikasi lama')->whereNull('deleted_at')->where('is_shared', true)->where('creator_id', $creator)->exists());
+        $this->assertTrue(DB::table('calendar_events')->where('id', $forFinance)->whereNull('deleted_at')->where('is_shared', false)->where('division_id', $finance)->exists());
+        $this->assertEqualsCanonicalizing(
+            [$finance, $marketing],
+            DB::table('calendar_event_divisions')->where('calendar_event_id', $forFinance)->pluck('division_id')->map(fn ($id) => (int) $id)->all(),
+            'Every target division comes back from the old application',
+        );
         $this->assertTrue(DB::table('calendar_events')->where('title', 'Workshop konten')->whereNull('deleted_at')->exists());
         $this->assertNotNull(DB::table('calendar_events')->where('title', 'Briefing internal Marketing')->value('deleted_at'), 'Deleted by the old application');
         $this->assertNotNull(DB::table('calendar_events')->where('title', 'Rapat pimpinan')->value('deleted_at'), 'Deleted by the new application');
@@ -184,9 +198,13 @@ class TasklistRecoveryTest extends TestCase
             'task_id' => $banner->id, 'author_id' => $sari->id, 'content' => 'Draft pertama sudah diunggah.', 'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        DB::table('calendar_events')->insert([
-            'title' => 'Workshop konten', 'division_id' => $banner->division_id, 'creator_id' => $manager->id,
+        $workshop = DB::table('calendar_events')->insertGetId([
+            'title' => 'Workshop konten', 'division_id' => $banner->division_id, 'creator_id' => $manager->id, 'is_shared' => false,
             'start_at' => '2026-11-26 00:00:00', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('calendar_event_divisions')->insert([
+            ['calendar_event_id' => $workshop, 'division_id' => $banner->division_id],
+            ['calendar_event_id' => $workshop, 'division_id' => DB::table('divisions')->where('code_division', 'FIN')->value('id')],
         ]);
         DB::table('calendar_events')->where('title', 'Rapat evaluasi bulanan')->update(['title' => 'Rapat evaluasi bulanan (dimajukan)', 'start_at' => '2026-11-14 00:00:00', 'updated_at' => now()]);
         DB::table('calendar_events')->where('title', 'Rapat pimpinan')->update(['deleted_at' => now(), 'updated_at' => now()]);

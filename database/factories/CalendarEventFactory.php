@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 class CalendarEventFactory extends Factory
 {
     /**
-     * Define the model's default state: a company-wide agenda covering whole days.
+     * Define the model's default state: a shared agenda without an organiser, covering whole days.
      *
      * @return array<string, mixed>
      */
@@ -27,17 +27,20 @@ class CalendarEventFactory extends Factory
             'creator_id' => fn () => $this->defaultCreatorId(),
             'title' => fake()->sentence(3),
             'description' => fake()->optional()->sentence(),
+            'is_shared' => true,
             'start_at' => $start,
             'end_at' => fake()->optional()->dateTimeBetween($start, (clone $start)->modify('+5 days'))?->setTime(0, 0),
         ];
     }
 
     /**
-     * An agenda internal to the division: only its accounts, Admin, and Manager see it.
+     * An internal agenda for the given divisions, organised by the first: only Admin and their accounts see it.
+     * Without a division only Admin sees it.
      */
-    public function internalTo(Division $division): static
+    public function internalTo(Division ...$targets): static
     {
-        return $this->state(['division_id' => $division->id]);
+        return $this->state(['is_shared' => false, 'division_id' => $targets[0]->id ?? null])
+            ->afterCreating(fn (CalendarEvent $event) => $event->targetDivisions()->attach(array_map(fn (Division $division) => $division->id, $targets)));
     }
 
     /**

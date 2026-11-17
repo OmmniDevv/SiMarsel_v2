@@ -33,6 +33,8 @@ class TasklistMigrationIntegrationTest extends TestCase
     /**
      * Rows that existed before TASK-19 and must all still be there afterwards.
      */
+    private const AGENDA_CHECK = 'Salinan agenda sama dengan aslinya (is_shared, divisi tujuan, divisi penyelenggara, pembuat, tanggal)';
+
     private const LEGACY_TABLES = ['accounts', 'roles', 'divisions', 'tasks', 'task_activities', 'task_evidences', 'task_reviews', 'schedule_events'];
 
     /**
@@ -144,7 +146,7 @@ class TasklistMigrationIntegrationTest extends TestCase
             ->assertJsonCount(6, 'data.deadlines');
     }
 
-    public function test_every_agenda_moves_to_calendar_events_with_its_id_and_the_erd_division_rule(): void
+    public function test_every_agenda_moves_to_calendar_events_with_its_id_access_and_target_divisions(): void
     {
         $legacy = DB::table('schedule_events')->orderBy('id')->get()->keyBy('title');
 
@@ -153,38 +155,48 @@ class TasklistMigrationIntegrationTest extends TestCase
         $marketing = (int) DB::table('divisions')->where('code_division', 'MKT')->value('id');
         $finance = (int) DB::table('divisions')->where('code_division', 'FIN')->value('id');
         $admin = $this->account('legacy.admin');
+        $manager = $this->account('legacy.manager')->id;
+        $financeManager = $this->account('legacy.finmanager')->id;
         $expected = [
-            // title => [division_id, creator]
-            'Rapat evaluasi bulanan' => [null, $admin->id],                                 // shared, no creator: Admin
-            'Briefing internal Marketing' => [$marketing, $this->account('legacy.manager')->id],
-            'Sinkronisasi Marketing dan Finance' => [$finance, $this->account('legacy.finmanager')->id], // organiser
-            'Rapat pimpinan' => [$finance, $this->account('legacy.finmanager')->id],         // creator's division
-            'Shooting video teaser' => [null, $this->account('legacy.manager')->id],         // shared, task link dropped
+            // title => [division_id (organiser), is_shared, target divisions, creator]
+            'Rapat evaluasi bulanan' => [$marketing, true, [$finance], $manager],
+            'Briefing internal Marketing' => [$marketing, false, [$marketing], $manager],
+            'Sinkronisasi Marketing dan Finance' => [$finance, false, [$marketing, $finance], $financeManager],
+            'Rapat pimpinan' => [null, false, [], $financeManager],
+            'Shooting video teaser' => [$marketing, true, [], $manager],     // task link dropped
         ];
 
         $this->assertSame($legacy->count(), DB::table('calendar_events')->count());
 
-        foreach ($expected as $title => [$divisionId, $creatorId]) {
+        foreach ($expected as $title => [$divisionId, $isShared, $targets, $creatorId]) {
             $agenda = $legacy[$title];
             $copy = DB::table('calendar_events')->where('id', $agenda->id)->sole();
 
             $this->assertEquals(
-                [$agenda->title, $agenda->description, $divisionId, $creatorId, $agenda->start_date, $agenda->end_date, $agenda->created_at, $agenda->updated_at],
-                [$copy->title, $copy->description, $copy->division_id, $copy->creator_id, substr($copy->start_at, 0, 10), $copy->end_at === null ? null : substr($copy->end_at, 0, 10), $copy->created_at, $copy->updated_at],
+                [$agenda->title, $agenda->description, $divisionId, $isShared, $targets, $creatorId, $agenda->start_date, $agenda->end_date, $agenda->created_at, $agenda->updated_at],
+                [
+                    $copy->title, $copy->description, $copy->division_id, (bool) $copy->is_shared,
+                    DB::table('calendar_event_divisions')->where('calendar_event_id', $copy->id)->orderBy('division_id')->pluck('division_id')->map(fn ($id) => (int) $id)->all(),
+                    $copy->creator_id, substr($copy->start_at, 0, 10), $copy->end_at === null ? null : substr($copy->end_at, 0, 10), $copy->created_at, $copy->updated_at,
+                ],
                 $title,
+            );
+            $this->assertEquals(
+                DB::table('schedule_event_divisions')->where('schedule_event_id', $agenda->id)->orderBy('division_id')->pluck('division_id')->all(),
+                $targets,
+                "{$title}: every target division is kept",
             );
         }
 
-        $this->assertSame(0, DB::table('calendar_events')->whereNull('creator_id')->count());
         $this->assertSame(0, DB::table('calendar_events')->whereNotIn('creator_id', DB::table('accounts')->select('id'))->count());
 
-        // Admin and Manager see every agenda; other accounts the company-wide ones and their division's.
+        // As in the old application: shared agendas for everyone, internal ones for Admin and their target divisions.
         $visible = [
             'legacy.admin' => array_keys($expected),
-            'legacy.manager' => array_keys($expected),
-            'legacy.finmanager' => array_keys($expected),
-            'legacy.budi' => ['Briefing internal Marketing', 'Rapat evaluasi bulanan', 'Shooting video teaser'],
-            'legacy.dewi' => ['Rapat evaluasi bulanan', 'Rapat pimpinan', 'Shooting video teaser', 'Sinkronisasi Marketing dan Finance'],
+            'legacy.manager' => ['Briefing internal Marketing', 'Rapat evaluasi bulanan', 'Shooting video teaser', 'Sinkronisasi Marketing dan Finance'],
+            'legacy.finmanager' => ['Rapat evaluasi bulanan', 'Shooting video teaser', 'Sinkronisasi Marketing dan Finance'],
+            'legacy.budi' => ['Briefing internal Marketing', 'Rapat evaluasi bulanan', 'Shooting video teaser', 'Sinkronisasi Marketing dan Finance'],
+            'legacy.dewi' => ['Rapat evaluasi bulanan', 'Shooting video teaser', 'Sinkronisasi Marketing dan Finance'],
         ];
 
         foreach ($visible as $username => $titles) {
@@ -199,49 +211,59 @@ class TasklistMigrationIntegrationTest extends TestCase
 
         $this->actingAs($admin)
             ->getJson('/api/tasks/calendar?month=2026-11')
+            ->assertJsonPath('data.events.2.title', 'Sinkronisasi Marketing dan Finance')
+            ->assertJsonPath('data.events.2.is_shared', false)
+            ->assertJsonPath('data.events.2.target_divisions', [['code_division' => 'MKT', 'name' => 'Marketing'], ['code_division' => 'FIN', 'name' => 'Finance']])
             ->assertJsonPath('data.events.4.title', 'Shooting video teaser')
             ->assertJsonPath('data.events.4.task_id', null)
             ->assertJsonPath('data.events.4.start_date', '2026-11-20')
             ->assertJsonPath('data.events.4.end_date', '2026-11-22');
 
-        // The Marketing and Finance agenda now only reaches Finance; the validator reports it.
-        $match = collect(app(TasklistMigrationValidator::class)->validate())->firstWhere('check', 'Salinan agenda sesuai pemetaan ERD (division_id, pembuat, tanggal)');
-        $this->assertSame(TasklistMigrationValidator::PASS, $match['status']);
-        $this->assertStringContainsString('1 agenda internal multi-divisi kini hanya untuk satu divisi', $match['detail']);
+        $match = collect(app(TasklistMigrationValidator::class)->validate())->firstWhere('check', self::AGENDA_CHECK);
+        $this->assertSame([TasklistMigrationValidator::PASS, '5 sama'], [$match['status'], $match['detail']]);
     }
 
-    public function test_an_internal_agenda_without_any_division_stops_the_move_and_copies_nothing(): void
+    public function test_an_agenda_without_a_creator_stops_the_move_and_copies_nothing(): void
     {
         $id = DB::table('schedule_events')->insertGetId([
-            'title' => 'Agenda tanpa divisi', 'owner_division_id' => null, 'start_date' => '2026-11-21', 'is_shared' => false,
-            'creator_id' => $this->account('legacy.admin')->id, 'created_at' => now(), 'updated_at' => now(),
+            'title' => 'Agenda tanpa pembuat', 'owner_division_id' => null, 'start_date' => '2026-11-21', 'is_shared' => true,
+            'creator_id' => null, 'created_at' => now(), 'updated_at' => now(),
         ]);
 
         try {
             $this->artisan('migrate')->run();
             $this->fail('The move should have been refused.');
         } catch (UnmappableAgendaException $exception) {
-            $this->assertStringContainsString("#{$id} \"Agenda tanpa divisi\" agenda internal tanpa divisi", $exception->getMessage());
+            $this->assertStringContainsString("#{$id} \"Agenda tanpa pembuat\" tanpa pembuat", $exception->getMessage());
         }
 
+        // Nobody is credited instead, even with Admin accounts around.
+        $this->assertTrue(DB::table('accounts')->join('roles', 'roles.id', '=', 'accounts.role_id')->where('roles.code_role', Role::ADMIN)->exists());
         $this->assertSame(0, DB::table('calendar_events')->count());
         $this->assertSame(6, DB::table('schedule_events')->count());
     }
 
-    public function test_an_agenda_without_a_creator_stops_the_move_when_there_is_no_admin_to_credit(): void
+    public function test_the_validator_fails_when_an_agenda_loses_a_target_division_or_its_sharing(): void
     {
-        $roles = DB::table('roles')->pluck('id', 'code_role');
-        DB::table('accounts')->where('role_id', $roles[Role::ADMIN])->update(['role_id' => $roles[Role::MANAGER]]);
-        $id = DB::table('schedule_events')->where('title', 'Rapat evaluasi bulanan')->whereNull('creator_id')->value('id');
+        $this->migrateAndSeed();
+        $crossDivision = DB::table('schedule_events')->where('title', 'Sinkronisasi Marketing dan Finance')->value('id');
+        $shared = DB::table('schedule_events')->where('title', 'Rapat evaluasi bulanan')->value('id');
+        $validate = fn () => collect(app(TasklistMigrationValidator::class)->validate())->firstWhere('check', self::AGENDA_CHECK);
 
-        try {
-            $this->artisan('migrate')->run();
-            $this->fail('The move should have been refused.');
-        } catch (UnmappableAgendaException $exception) {
-            $this->assertStringContainsString("#{$id} \"Rapat evaluasi bulanan\" tanpa pembuat dan tidak ada akun Admin", $exception->getMessage());
-        }
+        DB::table('calendar_event_divisions')->where('calendar_event_id', $crossDivision)
+            ->where('division_id', DB::table('divisions')->where('code_division', 'MKT')->value('id'))->delete();
 
-        $this->assertSame(0, DB::table('calendar_events')->count());
+        $this->assertSame([TasklistMigrationValidator::FAIL, '1 salinan berbeda dari agenda aslinya, 1 di antaranya kehilangan divisi tujuan'], array_values(array_slice($validate(), 1)));
+
+        DB::table('calendar_events')->where('id', $shared)->update(['is_shared' => false]);
+
+        $this->assertSame([TasklistMigrationValidator::FAIL, '2 salinan berbeda dari agenda aslinya, 1 di antaranya kehilangan divisi tujuan'], array_values(array_slice($validate(), 1)));
+        $this->artisan('tasks:validate-migration')->assertFailed();
+
+        // Put the copies back, so the rollback after the test is not refused as new data.
+        DB::table('calendar_events')->where('id', $shared)->update(['is_shared' => true]);
+        DB::table('calendar_event_divisions')->insert(['calendar_event_id' => $crossDivision, 'division_id' => DB::table('divisions')->where('code_division', 'MKT')->value('id')]);
+        $this->assertSame(TasklistMigrationValidator::PASS, $validate()['status']);
     }
 
     public function test_reviews_comments_and_history_follow_the_erd_and_keep_their_data(): void
