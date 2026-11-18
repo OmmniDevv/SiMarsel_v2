@@ -1,0 +1,286 @@
+{
+    "contract": "transaction-dates-coverage",
+    "version": 1,
+    "timezone": "Asia/Jakarta",
+    "money_unit": "IDR",
+    "fields": {
+        "transactions": {
+            "platform_id": { "type": "integer", "nullable": false, "meaning": "Platform pemilik transaksi. Bagian dari key transaksi." },
+            "markaz_transaction_id": { "type": "string", "nullable": false, "meaning": "ID transaksi dari Markaz. Key transaksi adalah (platform_id, markaz_transaction_id)." },
+            "markaz_ref_id": { "type": "string", "nullable": true, "meaning": "ref_id dari API. Terisi berarti baris anggota grup; nilainya markaz_transaction_id baris pembeli pada platform_id yang sama." },
+            "markaz_customer_id": { "type": "integer", "nullable": false, "meaning": "ID akun pembayar di Markaz. Identitas Pembeli Unik adalah (platform_id, markaz_customer_id)." },
+            "markaz_created_at": { "type": "datetime", "nullable": false, "meaning": "Waktu transaksi dibuat di Markaz. Dasar tanggal untuk Total, Konversi, dan rincian status." },
+            "markaz_paid_at": { "type": "datetime", "nullable": true, "meaning": "Nilai paid_date terbaru dari API apa adanya. Kosong jika Markaz belum mengirim tanggal bayar." },
+            "paid_date": { "type": "date", "nullable": true, "meaning": "Tanggal bayar valid terakhir untuk laporan. Dasar tanggal untuk metrik pembayaran." },
+            "paid_time": { "type": "time", "nullable": true, "meaning": "Jam bayar valid terakhir untuk laporan, pasangan paid_date." },
+            "synced_at": { "type": "datetime", "nullable": false, "meaning": "Waktu SiMarsel terakhir mengambil transaksi ini. Tidak pernah dipakai sebagai tanggal kejadian." },
+            "source_status": { "type": "status", "nullable": true, "meaning": "Field status dari API Markaz." },
+            "effective_status": { "type": "status", "nullable": true, "meaning": "Status yang menggantikan source_status untuk laporan jika terisi, termasuk nilai 0." },
+            "is_claim_coupon": { "type": "boolean", "nullable": false, "meaning": "Checkout klaim kupon. Masuk Total, keluar dari pembilang dan penyebut Konversi." },
+            "product_price": { "type": "money", "nullable": false, "meaning": "Harga paket setelah diskon paket." },
+            "voucher_discount": { "type": "money", "nullable": false, "meaning": "Potongan voucher." },
+            "admin_fee": { "type": "money", "nullable": false, "meaning": "Biaya admin." },
+            "nominal": { "type": "money", "nullable": false, "meaning": "Tagihan. Dipakai kolom Nominal daftar dan rincian nominal status." },
+            "net_nominal": { "type": "money", "nullable": false, "meaning": "Dasar kontribusi omzet." }
+        },
+        "coverage": {
+            "platform_id": { "type": "integer", "nullable": false, "meaning": "Platform yang dicakup." },
+            "dataset": { "type": "dataset", "nullable": false, "meaning": "transactions atau downloaders." },
+            "date_from": { "type": "date", "nullable": false, "meaning": "Awal periode yang dihitung." },
+            "date_to": { "type": "date", "nullable": false, "meaning": "Akhir periode yang dihitung (inklusif)." },
+            "complete_until": { "type": "datetime", "nullable": true, "meaning": "Batas atas eksklusif data lengkap. Kosong berarti kelengkapan belum diketahui." },
+            "availability": { "type": "availability", "nullable": false, "meaning": "complete, partial, atau unavailable, diturunkan dari complete_until terhadap periode." },
+            "sync_finished_at": { "type": "datetime", "nullable": true, "meaning": "Jam job penarikan selesai. Informasi saja, bukan bukti kelengkapan." }
+        },
+        "dashboard_snapshots": {
+            "platform_id": { "type": "integer", "nullable": false, "meaning": "Platform pemilik catatan." },
+            "dataset": { "type": "dataset", "nullable": false, "meaning": "Dataset yang direkap." },
+            "date_from": { "type": "date", "nullable": false, "meaning": "Awal periode rekap." },
+            "date_to": { "type": "date", "nullable": false, "meaning": "Akhir periode rekap (inklusif)." },
+            "cutoff_at": { "type": "datetime", "nullable": false, "meaning": "Jam rekap. Data yang direkap adalah kejadian sebelum jam ini." },
+            "is_complete": { "type": "boolean", "nullable": false, "meaning": "true jika data platform dan dataset ini lengkap sampai cutoff_at saat direkam." },
+            "payload": { "type": "object", "nullable": false, "meaning": "Angka hasil rekap pada cutoff_at." },
+            "recorded_at": { "type": "datetime", "nullable": false, "meaning": "Waktu catatan disimpan. Bukan jam rekap." }
+        }
+    },
+    "transactions": [
+        {
+            "platform_id": 1, "markaz_transaction_id": "TRX-1001", "markaz_ref_id": null, "markaz_customer_id": 501,
+            "markaz_created_at": "2026-11-10T09:15:00+07:00", "markaz_paid_at": null, "paid_date": null, "paid_time": null,
+            "synced_at": "2026-11-10T09:30:00+07:00", "source_status": 0, "effective_status": null, "is_claim_coupon": false,
+            "product_price": 200000, "voucher_discount": 0, "admin_fee": 2000, "nominal": 202000, "net_nominal": 200000,
+            "expected": { "report_status": 0, "report_status_label": "Pending", "created_group_date": "2026-11-10", "paid_group_date": null, "is_group_member": false }
+        },
+        {
+            "platform_id": 1, "markaz_transaction_id": "TRX-1002", "markaz_ref_id": null, "markaz_customer_id": 502,
+            "markaz_created_at": "2026-11-10T23:50:00+07:00", "markaz_paid_at": "2026-11-11T00:10:00+07:00", "paid_date": "2026-11-11", "paid_time": "00:10:00",
+            "synced_at": "2026-11-11T00:25:00+07:00", "source_status": 1, "effective_status": null, "is_claim_coupon": false,
+            "product_price": 200000, "voucher_discount": 20000, "admin_fee": 2000, "nominal": 182000, "net_nominal": 180000,
+            "expected": { "report_status": 1, "report_status_label": "Success", "created_group_date": "2026-11-10", "paid_group_date": "2026-11-11", "is_group_member": false }
+        },
+        {
+            "platform_id": 1, "markaz_transaction_id": "TRX-1003", "markaz_ref_id": null, "markaz_customer_id": 503,
+            "markaz_created_at": "2026-11-11T08:00:00+07:00", "markaz_paid_at": null, "paid_date": null, "paid_time": null,
+            "synced_at": "2026-11-11T08:05:00+07:00", "source_status": null, "effective_status": null, "is_claim_coupon": false,
+            "product_price": 150000, "voucher_discount": 0, "admin_fee": 2000, "nominal": 152000, "net_nominal": 150000,
+            "expected": { "report_status": null, "report_status_label": "Status belum tersedia", "created_group_date": "2026-11-11", "paid_group_date": null, "is_group_member": false }
+        },
+        {
+            "platform_id": 1, "markaz_transaction_id": "TRX-1004", "markaz_ref_id": null, "markaz_customer_id": 504,
+            "markaz_created_at": "2026-11-11T09:00:00+07:00", "markaz_paid_at": null, "paid_date": null, "paid_time": null,
+            "synced_at": "2026-11-12T09:05:00+07:00", "source_status": 0, "effective_status": 2, "is_claim_coupon": false,
+            "product_price": 200000, "voucher_discount": 0, "admin_fee": 2000, "nominal": 202000, "net_nominal": 200000,
+            "expected": { "report_status": 2, "report_status_label": "Expired", "created_group_date": "2026-11-11", "paid_group_date": null, "is_group_member": false }
+        },
+        {
+            "platform_id": 1, "markaz_transaction_id": "TRX-1005", "markaz_ref_id": null, "markaz_customer_id": 505,
+            "markaz_created_at": "2026-11-11T09:30:00+07:00", "markaz_paid_at": "2026-11-11T10:00:00+07:00", "paid_date": "2026-11-11", "paid_time": "10:00:00",
+            "synced_at": "2026-11-11T10:15:00+07:00", "source_status": 1, "effective_status": null, "is_claim_coupon": false,
+            "product_price": 180000, "voucher_discount": 0, "admin_fee": 5000, "nominal": 185000, "net_nominal": 180000,
+            "expected": { "report_status": 1, "report_status_label": "Success", "created_group_date": "2026-11-11", "paid_group_date": "2026-11-11", "is_group_member": false }
+        },
+        {
+            "platform_id": 2, "markaz_transaction_id": "TRX-1006", "markaz_ref_id": null, "markaz_customer_id": 501,
+            "markaz_created_at": "2026-11-11T11:00:00+07:00", "markaz_paid_at": null, "paid_date": null, "paid_time": null,
+            "synced_at": "2026-11-11T11:10:00+07:00", "source_status": 3, "effective_status": null, "is_claim_coupon": false,
+            "product_price": 250000, "voucher_discount": 0, "admin_fee": 2000, "nominal": 252000, "net_nominal": 250000,
+            "expected": { "report_status": 3, "report_status_label": "Failed", "created_group_date": "2026-11-11", "paid_group_date": null, "is_group_member": false }
+        },
+        {
+            "platform_id": 2, "markaz_transaction_id": "TRX-1007", "markaz_ref_id": null, "markaz_customer_id": 511,
+            "markaz_created_at": "2026-11-11T11:30:00+07:00", "markaz_paid_at": null, "paid_date": null, "paid_time": null,
+            "synced_at": "2026-11-11T11:40:00+07:00", "source_status": 4, "effective_status": null, "is_claim_coupon": false,
+            "product_price": 250000, "voucher_discount": 0, "admin_fee": 2000, "nominal": 252000, "net_nominal": 250000,
+            "expected": { "report_status": 4, "report_status_label": "Canceled", "created_group_date": "2026-11-11", "paid_group_date": null, "is_group_member": false }
+        },
+        {
+            "platform_id": 2, "markaz_transaction_id": "TRX-1008", "markaz_ref_id": null, "markaz_customer_id": 512,
+            "markaz_created_at": "2026-11-11T12:00:00+07:00", "markaz_paid_at": null, "paid_date": null, "paid_time": null,
+            "synced_at": "2026-11-11T12:10:00+07:00", "source_status": 1, "effective_status": 0, "is_claim_coupon": false,
+            "product_price": 250000, "voucher_discount": 0, "admin_fee": 2000, "nominal": 252000, "net_nominal": 250000,
+            "expected": { "report_status": 0, "report_status_label": "Pending", "created_group_date": "2026-11-11", "paid_group_date": null, "is_group_member": false }
+        },
+        {
+            "platform_id": 1, "markaz_transaction_id": "TRX-1009", "markaz_ref_id": null, "markaz_customer_id": 506,
+            "markaz_created_at": "2026-11-12T10:00:00+07:00", "markaz_paid_at": "2026-11-12T10:00:00+07:00", "paid_date": "2026-11-12", "paid_time": "10:00:00",
+            "synced_at": "2026-11-12T10:10:00+07:00", "source_status": 1, "effective_status": null, "is_claim_coupon": true,
+            "product_price": 0, "voucher_discount": 0, "admin_fee": 0, "nominal": 0, "net_nominal": 0,
+            "expected": { "report_status": 1, "report_status_label": "Success", "created_group_date": "2026-11-12", "paid_group_date": "2026-11-12", "is_group_member": false }
+        },
+        {
+            "platform_id": 1, "markaz_transaction_id": "TRX-2001", "markaz_ref_id": null, "markaz_customer_id": 507,
+            "markaz_created_at": "2026-11-12T13:00:00+07:00", "markaz_paid_at": "2026-11-12T13:05:00+07:00", "paid_date": "2026-11-12", "paid_time": "13:05:00",
+            "synced_at": "2026-11-12T13:20:00+07:00", "source_status": 1, "effective_status": null, "is_claim_coupon": false,
+            "product_price": 300000, "voucher_discount": 0, "admin_fee": 0, "nominal": 300000, "net_nominal": 300000,
+            "expected": { "report_status": 1, "report_status_label": "Success", "created_group_date": "2026-11-12", "paid_group_date": "2026-11-12", "is_group_member": false }
+        },
+        {
+            "platform_id": 1, "markaz_transaction_id": "TRX-2001-A", "markaz_ref_id": "TRX-2001", "markaz_customer_id": 508,
+            "markaz_created_at": "2026-11-12T13:00:00+07:00", "markaz_paid_at": "2026-11-12T13:05:00+07:00", "paid_date": "2026-11-12", "paid_time": "13:05:00",
+            "synced_at": "2026-11-12T13:20:00+07:00", "source_status": 1, "effective_status": null, "is_claim_coupon": false,
+            "product_price": 0, "voucher_discount": 0, "admin_fee": 0, "nominal": 0, "net_nominal": 0,
+            "expected": { "report_status": 1, "report_status_label": "Success", "created_group_date": "2026-11-12", "paid_group_date": "2026-11-12", "is_group_member": true }
+        },
+        {
+            "platform_id": 1, "markaz_transaction_id": "TRX-2001-B", "markaz_ref_id": "TRX-2001", "markaz_customer_id": 509,
+            "markaz_created_at": "2026-11-12T13:00:00+07:00", "markaz_paid_at": "2026-11-12T13:05:00+07:00", "paid_date": "2026-11-12", "paid_time": "13:05:00",
+            "synced_at": "2026-11-12T13:20:00+07:00", "source_status": 1, "effective_status": null, "is_claim_coupon": false,
+            "product_price": 0, "voucher_discount": 0, "admin_fee": 0, "nominal": 0, "net_nominal": 0,
+            "expected": { "report_status": 1, "report_status_label": "Success", "created_group_date": "2026-11-12", "paid_group_date": "2026-11-12", "is_group_member": true }
+        },
+        {
+            "platform_id": 1, "markaz_transaction_id": "TRX-2002", "markaz_ref_id": null, "markaz_customer_id": 510,
+            "markaz_created_at": "2026-11-12T14:00:00+07:00", "markaz_paid_at": null, "paid_date": null, "paid_time": null,
+            "synced_at": "2026-11-12T14:10:00+07:00", "source_status": 0, "effective_status": null, "is_claim_coupon": false,
+            "product_price": 300000, "voucher_discount": 0, "admin_fee": 0, "nominal": 300000, "net_nominal": 300000,
+            "expected": { "report_status": 0, "report_status_label": "Pending", "created_group_date": "2026-11-12", "paid_group_date": null, "is_group_member": false }
+        }
+    ],
+    "downloader_total": {
+        "platform_id": 1, "dataset": "downloaders", "date": "2026-11-15", "total": 120, "unit": "downloader",
+        "coverage": { "complete_until": "2026-11-16T00:00:00+07:00", "availability": "complete" }
+    },
+    "checkpoint": {
+        "platform_id": 1, "dataset": "transactions", "date_from": "2026-11-15", "date_to": "2026-11-15",
+        "cutoff_at": "2026-11-15T14:00:00+07:00", "is_complete": true,
+        "payload": { "total_checkouts": 10, "purchase_attempts": 10, "success_purchases": 6, "unknown_status_count": 0, "conversion_percentage": 60.0, "is_provisional": false },
+        "recorded_at": "2026-11-15T14:07:00+07:00",
+        "expected_comparison": { "availability": "complete", "as_of": "2026-11-15T14:00:00+07:00", "conversion_percentage": 60.0 }
+    },
+    "comparison_examples": [
+        {
+            "case": "Catatan 14.00 lengkap",
+            "cutoff_at": "2026-11-15T14:00:00+07:00",
+            "platform_ids": [1],
+            "snapshots": [ { "platform_id": 1, "is_complete": true, "payload": { "success_purchases": 6, "purchase_attempts": 10 } } ],
+            "expected": { "availability": "complete", "as_of": "2026-11-15T14:00:00+07:00", "values": { "success_purchases": 6, "purchase_attempts": 10, "conversion_percentage": 60.0 } }
+        },
+        {
+            "case": "Catatan 14.00 baru memuat sebagian transaksi",
+            "cutoff_at": "2026-11-15T14:00:00+07:00",
+            "platform_ids": [1],
+            "snapshots": [ { "platform_id": 1, "is_complete": false, "payload": { "success_purchases": 4, "purchase_attempts": 6 } } ],
+            "expected": { "availability": "unavailable", "as_of": null, "values": null }
+        },
+        {
+            "case": "Catatan 14.00 tidak tersimpan",
+            "cutoff_at": "2026-11-15T14:00:00+07:00",
+            "platform_ids": [1],
+            "snapshots": [],
+            "expected": { "availability": "unavailable", "as_of": null, "values": null }
+        },
+        {
+            "case": "Gabungan A dan B, keduanya lengkap",
+            "cutoff_at": "2026-11-15T14:00:00+07:00",
+            "platform_ids": [1, 2],
+            "snapshots": [
+                { "platform_id": 1, "is_complete": true, "payload": { "success_purchases": 6, "purchase_attempts": 10 } },
+                { "platform_id": 2, "is_complete": true, "payload": { "success_purchases": 2, "purchase_attempts": 10 } }
+            ],
+            "expected": { "availability": "complete", "as_of": "2026-11-15T14:00:00+07:00", "values": { "success_purchases": 8, "purchase_attempts": 20, "conversion_percentage": 40.0 } }
+        },
+        {
+            "case": "Gabungan A dan B, catatan B belum lengkap",
+            "cutoff_at": "2026-11-15T14:00:00+07:00",
+            "platform_ids": [1, 2],
+            "snapshots": [
+                { "platform_id": 1, "is_complete": true, "payload": { "success_purchases": 6, "purchase_attempts": 10 } },
+                { "platform_id": 2, "is_complete": false, "payload": { "success_purchases": 2, "purchase_attempts": 10 } }
+            ],
+            "expected": { "availability": "unavailable", "as_of": null, "values": null }
+        },
+        {
+            "case": "Gabungan A dan B, catatan B tidak tersimpan",
+            "cutoff_at": "2026-11-15T14:00:00+07:00",
+            "platform_ids": [1, 2],
+            "snapshots": [ { "platform_id": 1, "is_complete": true, "payload": { "success_purchases": 6, "purchase_attempts": 10 } } ],
+            "expected": { "availability": "unavailable", "as_of": null, "values": null }
+        }
+    ],
+    "coverage": [
+        { "platform_id": 1, "dataset": "transactions", "date_from": "2026-11-16", "date_to": "2026-11-16", "complete_until": "2026-11-16T14:00:00+07:00", "availability": "partial", "sync_finished_at": "2026-11-16T14:05:00+07:00" },
+        { "platform_id": 2, "dataset": "transactions", "date_from": "2026-11-16", "date_to": "2026-11-16", "complete_until": "2026-11-16T13:00:00+07:00", "availability": "partial", "sync_finished_at": "2026-11-16T14:20:00+07:00" },
+        { "platform_id": 1, "dataset": "downloaders", "date_from": "2026-11-15", "date_to": "2026-11-15", "complete_until": "2026-11-16T00:00:00+07:00", "availability": "complete", "sync_finished_at": "2026-11-16T00:30:00+07:00" },
+        { "platform_id": 2, "dataset": "downloaders", "date_from": "2026-11-15", "date_to": "2026-11-15", "complete_until": null, "availability": "unavailable", "sync_finished_at": "2026-11-16T00:30:00+07:00" }
+    ],
+    "combined_coverage_examples": [
+        {
+            "case": "A lengkap sampai 14.00, B sampai 13.00",
+            "dataset": "transactions", "date_from": "2026-11-16", "date_to": "2026-11-16",
+            "platforms": [ { "platform_id": 1, "complete_until": "2026-11-16T14:00:00+07:00" }, { "platform_id": 2, "complete_until": "2026-11-16T13:00:00+07:00" } ],
+            "expected": { "complete_until": "2026-11-16T13:00:00+07:00", "availability": "partial" }
+        },
+        {
+            "case": "A lengkap sampai 14.00, B diganti lengkap sampai 15.00",
+            "dataset": "transactions", "date_from": "2026-11-16", "date_to": "2026-11-16",
+            "platforms": [ { "platform_id": 1, "complete_until": "2026-11-16T14:00:00+07:00" }, { "platform_id": 2, "complete_until": "2026-11-16T15:00:00+07:00" } ],
+            "expected": { "complete_until": "2026-11-16T14:00:00+07:00", "availability": "partial" }
+        },
+        {
+            "case": "Hanya A dipilih",
+            "dataset": "transactions", "date_from": "2026-11-16", "date_to": "2026-11-16",
+            "platforms": [ { "platform_id": 1, "complete_until": "2026-11-16T14:00:00+07:00" } ],
+            "expected": { "complete_until": "2026-11-16T14:00:00+07:00", "availability": "partial" }
+        },
+        {
+            "case": "Kemarin lengkap pada A dan B",
+            "dataset": "transactions", "date_from": "2026-11-15", "date_to": "2026-11-15",
+            "platforms": [ { "platform_id": 1, "complete_until": "2026-11-16T14:00:00+07:00" }, { "platform_id": 2, "complete_until": "2026-11-16T13:00:00+07:00" } ],
+            "expected": { "complete_until": "2026-11-16T00:00:00+07:00", "availability": "complete" }
+        },
+        {
+            "case": "B belum punya metadata kelengkapan",
+            "dataset": "downloaders", "date_from": "2026-11-15", "date_to": "2026-11-15",
+            "platforms": [ { "platform_id": 1, "complete_until": "2026-11-16T00:00:00+07:00" }, { "platform_id": 2, "complete_until": null } ],
+            "expected": { "complete_until": null, "availability": "unavailable" }
+        },
+        {
+            "case": "Batas belum melewati awal periode",
+            "dataset": "transactions", "date_from": "2026-11-17", "date_to": "2026-11-17",
+            "platforms": [ { "platform_id": 1, "complete_until": "2026-11-16T14:00:00+07:00" } ],
+            "expected": { "complete_until": null, "availability": "unavailable" }
+        }
+    ],
+    "value_availability_examples": [
+        { "case": "Periode lengkap tanpa transaksi", "availability": "complete", "transaction_ids": [], "expected": { "total_checkouts": 0, "revenue": 0, "conversion_percentage": null } },
+        { "case": "Cakupan belum diketahui", "availability": "unavailable", "transaction_ids": [], "expected": { "total_checkouts": null, "revenue": null, "conversion_percentage": null } },
+        { "case": "Catatan pembanding tidak ada", "availability": "unavailable", "transaction_ids": null, "expected": { "comparison": null, "comparison_availability": "unavailable" } }
+    ],
+    "conversion_examples": [
+        {
+            "case": "6 Success, 3 Pending, 1 tanpa status",
+            "rows": [ { "report_status": 1, "is_claim_coupon": false, "count": 6 }, { "report_status": 0, "is_claim_coupon": false, "count": 3 }, { "report_status": null, "is_claim_coupon": false, "count": 1 } ],
+            "expected": { "total_checkouts": 10, "purchase_attempts": 10, "claim_checkouts": 0, "success_purchases": 6, "unknown_status_count": 1, "conversion_percentage": 60.0, "is_provisional": true }
+        },
+        {
+            "case": "Pembelian tanpa status berubah menjadi Success",
+            "rows": [ { "report_status": 1, "is_claim_coupon": false, "count": 7 }, { "report_status": 0, "is_claim_coupon": false, "count": 3 } ],
+            "expected": { "total_checkouts": 10, "purchase_attempts": 10, "claim_checkouts": 0, "success_purchases": 7, "unknown_status_count": 0, "conversion_percentage": 70.0, "is_provisional": false }
+        },
+        {
+            "case": "1 Success, 1 Pending, 1 klaim Success",
+            "rows": [ { "report_status": 1, "is_claim_coupon": false, "count": 1 }, { "report_status": 0, "is_claim_coupon": false, "count": 1 }, { "report_status": 1, "is_claim_coupon": true, "count": 1 } ],
+            "expected": { "total_checkouts": 3, "purchase_attempts": 2, "claim_checkouts": 1, "success_purchases": 1, "unknown_status_count": 0, "conversion_percentage": 50.0, "is_provisional": false }
+        },
+        {
+            "case": "Hanya klaim",
+            "rows": [ { "report_status": 1, "is_claim_coupon": true, "count": 1 } ],
+            "expected": { "total_checkouts": 1, "purchase_attempts": 0, "claim_checkouts": 1, "success_purchases": 0, "unknown_status_count": 0, "conversion_percentage": null, "is_provisional": false }
+        }
+    ],
+    "financial_example": {
+        "case": "Dua pembayaran Success pada tanggal bayar yang sama",
+        "paid_date": "2026-11-11",
+        "transaction_ids": ["TRX-1002", "TRX-1005"],
+        "expected": { "success_payments": 2, "revenue": 360000, "nominal_total": 367000, "average_order_value": 180000 }
+    },
+    "group_example": {
+        "case": "Satu pembeli grup dengan dua anggota, ditambah satu checkout Pending",
+        "created_date": "2026-11-12",
+        "transaction_ids": ["TRX-2001", "TRX-2001-A", "TRX-2001-B", "TRX-2002"],
+        "expected": {
+            "total_checkouts": 2, "success_purchases": 1, "unique_buyers": 1, "revenue": 300000, "conversion_percentage": 50.0,
+            "members": { "TRX-2001": ["TRX-2001-A", "TRX-2001-B"] }
+        }
+    }
+}
