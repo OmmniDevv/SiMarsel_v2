@@ -44,7 +44,8 @@ class ComparisonSnapshotService
 
     /**
      * Combines the snapshot of every selected platform at exactly the requested cutoff.
-     * Any missing platform makes the comparison unavailable; an incomplete one makes it partial.
+     * Only complete snapshots may be compared: a missing or incomplete snapshot on any selected
+     * platform makes the comparison unavailable, without values.
      *
      * @param  iterable<array<string, mixed>>  $snapshots
      * @param  list<int>  $platformIds
@@ -79,15 +80,15 @@ class ComparisonSnapshotService
             }
         }
 
-        if ($platformIds === [] || count($latest) !== count(array_unique($platformIds))) {
+        $incomplete = array_filter($latest, fn (array $snapshot) => ! $snapshot['is_complete']);
+
+        if ($platformIds === [] || count($latest) !== count(array_unique($platformIds)) || $incomplete !== []) {
             return $this->unavailable($cutoffAt, 'snapshot');
         }
 
-        $complete = array_reduce($latest, fn (bool $carry, array $snapshot) => $carry && (bool) $snapshot['is_complete'], true);
-
         return [
             'source' => 'snapshot',
-            'availability' => ($complete ? DataAvailability::Complete : DataAvailability::Partial)->value,
+            'availability' => DataAvailability::Complete->value,
             'cutoff_at' => $cutoffAt->toIso8601String(),
             'as_of' => $cutoffAt->toIso8601String(),
             'values' => $this->withDerivedValues(array_reduce(

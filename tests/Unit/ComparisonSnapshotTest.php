@@ -114,14 +114,50 @@ class ComparisonSnapshotTest extends TestCase
         $this->assertSame(6, $read['values']['success_purchases']);
     }
 
-    public function test_ac10_an_incomplete_snapshot_is_returned_with_a_partial_marker(): void
+    public function test_ac10_an_incomplete_snapshot_is_unavailable_without_values(): void
     {
+        $rows = $this->purchases(success: 75, pending: 25);
         $snapshots = [$this->snapshot(1, ['success_purchases' => 6], ['is_complete' => false])];
 
         $read = $this->service->read($snapshots, [1], 'transactions', self::YESTERDAY, self::YESTERDAY, self::CUTOFF);
+        $hour = $this->service->compare($rows, $snapshots, $this->filter(self::CUTOFF));
 
-        $this->assertSame('partial', $read['availability']);
-        $this->assertSame(6, $read['values']['success_purchases']);
+        foreach ([$read, $hour] as $comparison) {
+            $this->assertSame('snapshot', $comparison['source']);
+            $this->assertSame('unavailable', $comparison['availability']);
+            $this->assertNull($comparison['values']);
+            $this->assertNull($comparison['as_of']);
+            $this->assertSame(self::CUTOFF, $comparison['cutoff_at']);
+        }
+    }
+
+    public function test_ac10_a_newer_incomplete_snapshot_is_not_replaced_by_an_older_complete_one(): void
+    {
+        $snapshots = [
+            $this->snapshot(1, ['success_purchases' => 6], ['recorded_at' => '2026-11-15T14:05:00+07:00']),
+            $this->snapshot(1, ['success_purchases' => 4], ['is_complete' => false, 'recorded_at' => '2026-11-15T14:09:00+07:00']),
+        ];
+
+        $read = $this->service->read($snapshots, [1], 'transactions', self::YESTERDAY, self::YESTERDAY, self::CUTOFF);
+
+        $this->assertSame('unavailable', $read['availability']);
+        $this->assertNull($read['values']);
+    }
+
+    public function test_ac10_combined_platforms_are_unavailable_when_one_snapshot_is_incomplete(): void
+    {
+        $snapshots = [
+            $this->snapshot(1, ['total_checkouts' => 10, 'purchase_attempts' => 10, 'success_purchases' => 6]),
+            $this->snapshot(2, ['total_checkouts' => 10, 'purchase_attempts' => 10, 'success_purchases' => 2], ['is_complete' => false]),
+        ];
+
+        $both = $this->service->read($snapshots, [1, 2], 'transactions', self::YESTERDAY, self::YESTERDAY, self::CUTOFF);
+        $completeOnly = $this->service->read($snapshots, [1], 'transactions', self::YESTERDAY, self::YESTERDAY, self::CUTOFF);
+
+        $this->assertSame('unavailable', $both['availability']);
+        $this->assertNull($both['values']);
+        $this->assertSame('complete', $completeOnly['availability']);
+        $this->assertSame(6, $completeOnly['values']['success_purchases']);
     }
 
     public function test_unknown_coverage_makes_the_comparison_unavailable(): void
