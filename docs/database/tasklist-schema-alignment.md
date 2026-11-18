@@ -213,7 +213,7 @@ kedua.
 - PIC yang dilepas tetap melihat task lewat `all_tasks`, tetapi hilang dari `my_tasks` dan kehilangan hak PIC.
 - Perubahan role berlaku pada request berikutnya (permission dibaca dari database) tanpa mengubah histori task.
 - Hapus Task Card (TASK-12): `DELETE /api/tasks/{id}`, soft delete oleh Admin/Manajer (semua divisi) dan Supervisor (divisinya), kecuali tugas Done.
-- Perubahan role akun dicatat di `account_role_changes` (TASK-12, migration `2026_11_16_142438_create_account_role_changes_table`). Rollback migration itu ditolak bila audit sudah berisi data, kecuali `TASKLIST_ALLOW_DESTRUCTIVE_ROLLBACK=true`.
+- Perubahan role akun dicatat di `account_role_changes` (TASK-12, migration `2026_11_16_142438_create_account_role_changes_table`). Audit tetap ada setelah akun dihapus (`account_id`/`changed_by` `nullOnDelete`, dengan salinan nama dan username akun yang diubah dan pengubahnya); role lama dibaca dari baris akun yang dikunci di dalam transaksi yang sama dengan penyimpanan audit. Rollback migration itu ditolak bila audit sudah berisi data, kecuali `TASKLIST_ALLOW_DESTRUCTIVE_ROLLBACK=true`.
 
 ## 6. Hal yang belum dikerjakan
 

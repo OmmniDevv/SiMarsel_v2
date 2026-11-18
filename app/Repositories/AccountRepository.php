@@ -60,6 +60,14 @@ class AccountRepository
     }
 
     /**
+     * The account as it is now in the database, locked until the surrounding transaction ends.
+     */
+    public function lockForUpdate(Account $account): Account
+    {
+        return Account::query()->whereKey($account->id)->lockForUpdate()->firstOrFail();
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      */
     public function update(Account $account, array $data): Account

@@ -8,6 +8,7 @@ use App\Models\AccountRoleChange;
 use App\Models\Division;
 use App\Models\Role;
 use App\Models\Task;
+use App\Services\AccountService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -117,7 +118,7 @@ class AccountRoleAuditTest extends TestCase
         $this->assertEquals($history, DB::table('task_activities')->where('task_id', $task->id)->get());
     }
 
-    public function test_deleting_an_account_without_task_history_removes_its_role_audit(): void
+    public function test_the_role_audit_stays_with_both_identities_after_the_changed_account_is_deleted(): void
     {
         $account = $this->staff();
         $this->actingAs($this->manager)
@@ -125,8 +126,96 @@ class AccountRoleAuditTest extends TestCase
             ->assertOk();
 
         $this->actingAs($this->manager)->deleteJson("/api/accounts/{$account->id}")->assertOk();
+        $this->assertModelMissing($account);
 
-        $this->assertSame(0, AccountRoleChange::where('account_id', $account->id)->count());
+        $audit = AccountRoleChange::sole();
+        $this->assertNull($audit->account_id);
+        $this->assertSame(['Staff Audit', 'staff.audit'], [$audit->account_fullname, $audit->account_username]);
+        $this->assertSame([$this->roleId(Role::EMPLOYEE), $this->roleId(Role::FREELANCE)], [$audit->old_role_id, $audit->new_role_id]);
+        $this->assertSame($this->manager->id, $audit->changed_by);
+        $this->assertSame([$this->manager->fullname, 'manager'], [$audit->changed_by_fullname, $audit->changed_by_username]);
+        $this->assertSame('2026-11-16 10:00:00', $audit->changed_at->toDateTimeString());
+    }
+
+    public function test_the_role_audit_still_names_who_changed_it_after_that_account_is_deleted(): void
+    {
+        $changer = Account::create([
+            'role_id' => $this->roleId(Role::MANAGER),
+            'fullname' => 'Manajer Sementara',
+            'username' => 'manajer.sementara',
+            'password' => 'Secret123!',
+        ]);
+        $account = $this->staff();
+
+        $this->actingAs($changer)
+            ->patchJson("/api/accounts/{$account->id}", ['role_id' => $this->roleId(Role::SUPERVISOR)])
+            ->assertOk();
+        $this->actingAs($this->manager)->deleteJson("/api/accounts/{$changer->id}")->assertOk();
+
+        $audit = $account->roleChanges()->sole();
+        $this->assertSame($account->id, $audit->account_id);
+        $this->assertNull($audit->changed_by);
+        $this->assertSame(['Manajer Sementara', 'manajer.sementara'], [$audit->changed_by_fullname, $audit->changed_by_username]);
+    }
+
+    public function test_an_account_whose_only_history_is_the_role_audit_can_still_be_deleted(): void
+    {
+        $this->actingAs($this->manager)->postJson('/api/accounts', [
+            'fullname' => 'Akun Baru',
+            'username' => 'akun.baru',
+            'password' => 'Secret123!',
+            'role_id' => $this->roleId(Role::EMPLOYEE),
+            'division_id' => null,
+        ])->assertCreated();
+        $account = Account::where('username', 'akun.baru')->sole();
+
+        $this->actingAs($this->manager)->deleteJson("/api/accounts/{$account->id}")->assertOk();
+
+        $this->assertSame(1, AccountRoleChange::where('account_username', 'akun.baru')->whereNull('account_id')->count());
+    }
+
+    /**
+     * Two admins change the same account moments apart: the second request was built from the account as it was
+     * before the first change was saved. The audit must still read Staff -> Supervisor, then Supervisor -> Manager.
+     */
+    public function test_role_changes_made_at_nearly_the_same_time_are_audited_in_order(): void
+    {
+        $account = $this->staff();
+        $loadedBySecondAdmin = Account::findOrFail($account->id);
+        $secondAdmin = Account::create([
+            'role_id' => $this->roleId(Role::ADMIN),
+            'fullname' => 'Admin Kedua',
+            'username' => 'admin.kedua',
+            'password' => 'Secret123!',
+        ]);
+
+        $this->actingAs($this->manager)
+            ->patchJson("/api/accounts/{$account->id}", ['role_id' => $this->roleId(Role::SUPERVISOR)])
+            ->assertOk();
+        $this->travelTo('2026-11-16 10:00:01');
+
+        $updated = app(AccountService::class)->update($loadedBySecondAdmin, ['role_id' => $this->roleId(Role::MANAGER)], $secondAdmin);
+
+        $this->assertSame($this->roleId(Role::MANAGER), $updated->role_id);
+        $this->assertSame($this->roleId(Role::MANAGER), $account->fresh()->role_id);
+        $this->assertSame([
+            [$this->roleId(Role::EMPLOYEE), $this->roleId(Role::SUPERVISOR), $this->manager->id, '2026-11-16 10:00:00'],
+            [$this->roleId(Role::SUPERVISOR), $this->roleId(Role::MANAGER), $secondAdmin->id, '2026-11-16 10:00:01'],
+        ], $this->changes($account));
+    }
+
+    public function test_a_change_that_keeps_the_role_saved_moments_earlier_records_nothing(): void
+    {
+        $account = $this->staff();
+        $stale = Account::findOrFail($account->id);
+
+        $this->actingAs($this->manager)
+            ->patchJson("/api/accounts/{$account->id}", ['role_id' => $this->roleId(Role::SUPERVISOR)])
+            ->assertOk();
+
+        app(AccountService::class)->update($stale, ['role_id' => $this->roleId(Role::SUPERVISOR)], $this->manager);
+
+        $this->assertCount(1, $this->changes($account));
     }
 
     private function staff(?Division $division = null): Account
