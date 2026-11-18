@@ -58,6 +58,15 @@ const SUMMARY_FIELDS = [
 const affectsSummary = (before, after) => !before || SUMMARY_FIELDS.some((field) => field(after) !== undefined && field(after) !== field(before));
 const PAGE_SIZE = 10;
 const BACKEND_PENDING = 'Menunggu pengerjaan Back End.';
+const emptyPeriodFilter = () => ({
+    mode: '',
+    basis: 'deadline',
+    date: '',
+    month: '',
+    year: String(new Date().getFullYear()),
+    startDate: '',
+    endDate: '',
+});
 
 const EVIDENCE_MAX_MB = 10;
 const EVIDENCE_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip'];
@@ -128,6 +137,7 @@ Alpine.data('tasklist', () => ({
     summaryQueued: false,
 
     filters: { search: '', division: '', priority: '', status: '' },
+    periodFilter: emptyPeriodFilter(),
     sort: { key: 'deadline', dir: 'asc' },
     page: 1,
 
@@ -221,8 +231,41 @@ Alpine.data('tasklist', () => ({
         return ['search', 'priority', 'status'].some((key) => this.filters[key] !== '') || this.filters.division !== this.defaultDivision();
     },
 
+    get hasPeriodConfiguration() {
+        const { mode, basis, date, month, year, startDate, endDate } = this.periodFilter;
+
+        return mode !== ''
+            || basis !== 'deadline'
+            || Boolean(date || month || startDate || endDate)
+            || year !== String(new Date().getFullYear());
+    },
+
+    get periodYears() {
+        const currentYear = new Date().getFullYear();
+
+        return Array.from({ length: 16 }, (_, index) => currentYear - 10 + index);
+    },
+
+    get canConfirmPeriodFilter() {
+        const { mode, date, month, year, startDate, endDate } = this.periodFilter;
+
+        if (mode === 'date') return Boolean(date);
+        if (mode === 'month') return /^\d{4}-(0[1-9]|1[0-2])$/.test(month);
+        if (mode === 'year') return /^\d{4}$/.test(year);
+        if (mode === 'range') return Boolean(startDate && endDate && startDate <= endDate);
+
+        return false;
+    },
+
+    confirmPeriodFilter() {
+        if (!this.canConfirmPeriodFilter) return;
+
+        alert('backend belum tersedia');
+    },
+
     resetFilters() {
         this.filters = { search: '', division: this.defaultDivision(), priority: '', status: '' };
+        this.periodFilter = emptyPeriodFilter();
         this.sort = { key: 'deadline', dir: 'asc' };
     },
 

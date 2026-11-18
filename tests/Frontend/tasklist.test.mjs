@@ -23,6 +23,7 @@ const ADMIN = { id: 1, role: { code_role: 'ADM' }, division: null };
 async function tasklistPage(routes, sessionUser = PIC, apiReady = 'false') {
     const requests = [];
     const toasts = [];
+    const alerts = [];
     const components = {};
 
     const fetch = async (url, options = {}) => {
@@ -53,6 +54,7 @@ async function tasklistPage(routes, sessionUser = PIC, apiReady = 'false') {
         URLSearchParams,
         setTimeout,
         console,
+        alert: (message) => alerts.push(message),
         document: { querySelector: (selector) => (selector === 'meta[name="csrf-token"]' ? { content: 'csrf-test' } : null) },
         location: { search: '', href: 'http://localhost/tasks' },
         history: { replaceState() {} },
@@ -114,7 +116,7 @@ async function tasklistPage(routes, sessionUser = PIC, apiReady = 'false') {
     const board = instance(components.tasklist);
     const detail = () => instance(components.taskDetail, board);
 
-    return { board, detail, requests, toasts, instance: (name) => instance(components[name], board) };
+    return { board, detail, requests, toasts, alerts, instance: (name) => instance(components[name], board) };
 }
 
 const task = (overrides = {}) => ({
@@ -838,6 +840,34 @@ test('With the default config, the summary comes from the monitoring API with th
     board.resetFilters();
     await board.load();
     assert.equal(monitoringRequests(requests).at(-1).url, '/api/tasks/monitoring?scope=tasklist&division=MKT');
+});
+
+test('Period filter validates its configuration and alerts that the backend is unavailable without sending requests', async () => {
+    const { board, requests, alerts } = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [], meta: { status_counts: {} } } }),
+        'GET /api/tasks/monitoring': () => ({ json: { data: monitoringOf({}) } }),
+    }, ADMIN);
+    await board.load();
+
+    board.periodFilter.mode = 'range';
+    board.periodFilter.basis = 'start_date';
+    board.periodFilter.startDate = '2026-11-20';
+    board.periodFilter.endDate = '2026-11-10';
+    assert.equal(board.canConfirmPeriodFilter, false);
+
+    board.periodFilter.endDate = '2026-11-20';
+    assert.equal(board.canConfirmPeriodFilter, true);
+    const requestCount = requests.length;
+    board.confirmPeriodFilter();
+
+    assert.deepEqual(alerts, ['backend belum tersedia']);
+    assert.equal(requests.length, requestCount, 'period filters are not sent to an unavailable backend');
+
+    board.view = 'table';
+    assert.equal(board.periodFilter.mode, 'range', 'the period selection is shared between views');
+    board.resetFilters();
+    assert.equal(board.periodFilter.mode, '');
+    assert.equal(board.hasPeriodConfiguration, false);
 });
 
 test('Without tasks the summary shows zero, a failed summary shows its own error with a retry, and an older response is ignored', async () => {
