@@ -181,7 +181,7 @@ Implementasi resolver dimiliki FIX-04-BE-01. Tabel ini adalah nilai harapan.
 | `dataset` | string | Tidak | Dataset yang direkap |
 | `date_from`, `date_to` | date | Tidak | Periode rekap (inklusif) |
 | `cutoff_at` | datetime | Tidak | Jam rekap: kejadian sebelum jam ini |
-| `is_complete` | boolean | Tidak | `true` jika data platform dan dataset ini lengkap sampai `cutoff_at` saat direkam |
+| `is_complete` | boolean | Tidak | `true` jika data platform dan dataset ini lengkap sampai `cutoff_at` saat direkam. Catatan `false` tetap tersimpan, tetapi tidak dipakai sebagai pembanding |
 | `payload` | object | Tidak | Angka hasil rekap pada `cutoff_at` |
 | `recorded_at` | datetime | Tidak | Waktu catatan disimpan, bukan jam rekap |
 
@@ -205,9 +205,16 @@ Implementasi resolver dimiliki FIX-04-BE-01. Tabel ini adalah nilai harapan.
 }
 ```
 
-- Pembanding jam setara (misalnya Hari Ini sampai 14.00) membaca `payload` catatan dengan `cutoff_at` yang setara dan mengeluarkan `as_of` = `cutoff_at`. Perubahan status setelah jam itu tidak mengubah angka catatan.
+- Pembanding jam setara (misalnya Hari Ini sampai 14.00) membaca `payload` catatan **lengkap** (`is_complete = true`) dengan `cutoff_at` yang setara dan mengeluarkan `availability = complete` dan `as_of` = `cutoff_at`. Perubahan status setelah jam itu tidak mengubah angka catatan.
 - Periode hari penuh (Kemarin, 7/30/90 Hari Terakhir) memakai status dan tanggal laporan terbaru, bukan catatan.
-- Jika catatan yang diperlukan tidak ada, pembanding bernilai `null` dengan `availability = unavailable`.
+- Jika catatan yang diperlukan tidak ada, atau ada tetapi `is_complete = false`, pembanding belum tersedia: `availability = unavailable`, `as_of = null`, `values = null`. Catatan parsial tetap tersimpan dan dikenali sebagai belum lengkap, tetapi angkanya tidak boleh dipakai sebagai pembanding.
+- Untuk gabungan platform, setiap platform terpilih harus punya catatan lengkap. Satu catatan yang hilang atau belum lengkap membuat seluruh pembanding `unavailable`.
+
+| Catatan jam setara | `availability` | `as_of` | `values` |
+|---|---|---|---|
+| Lengkap pada semua platform terpilih | `complete` | `cutoff_at` | Angka catatan (dijumlahkan antarplatform) |
+| Ada yang `is_complete = false` | `unavailable` | `null` | `null` |
+| Ada yang tidak tersimpan | `unavailable` | `null` | `null` |
 
 ## Rancangan agregasi bersama (dikerjakan di FIX-02-BE-02)
 
@@ -249,11 +256,11 @@ Pembanding yang dirancang memakai filter periode pembanding:
 
 | Ketersediaan filter | Sumber (`source`) | Nilai |
 |---|---|---|
-| `partial` (jam setara, misalnya Kemarin sampai 14.00) | `snapshot` | `payload` catatan dengan `cutoff_at` = cutoff |
+| `partial` (jam setara, misalnya Kemarin sampai 14.00) | `snapshot` | `payload` catatan lengkap dengan `cutoff_at` = cutoff. `unavailable` dan `null` jika catatan tidak ada atau `is_complete = false` |
 | `complete` (Kemarin, 7/30/90 Hari Terakhir) | `latest` | Agregasi dari status dan tanggal laporan terbaru |
 | `unavailable` | `null` | `null` |
 
-Pembacaan catatan memerlukan satu catatan untuk setiap platform terpilih dengan `dataset`, `date_from`, `date_to`, dan `cutoff_at` yang sama persis. Jika ada beberapa catatan, yang dipakai adalah `recorded_at` terbaru. Jumlah dan nominal antarplatform dijumlahkan, sedangkan `conversion_percentage`, `is_provisional`, dan `average_order_value` dihitung ulang. Jika satu platform tidak punya catatan, hasilnya `availability = unavailable` dan `values = null`. Jika ada catatan dengan `is_complete = false`, hasilnya `availability = partial` beserta nilainya; hanya `complete` yang sah sebagai pembanding jam setara. Catatan yang hilang tidak dibentuk ulang dari status terbaru.
+Pembacaan catatan memerlukan satu catatan untuk setiap platform terpilih dengan `dataset`, `date_from`, `date_to`, dan `cutoff_at` yang sama persis. Jika ada beberapa catatan, yang dipakai adalah `recorded_at` terbaru. Jumlah dan nominal antarplatform dijumlahkan, sedangkan `conversion_percentage`, `is_provisional`, dan `average_order_value` dihitung ulang. Hanya catatan lengkap yang boleh dipakai sebagai pembanding jam setara. Jika satu platform terpilih tidak punya catatan, atau catatan terbarunya `is_complete = false`, hasilnya `availability = unavailable`, `as_of = null`, dan `values = null` tanpa angka, termasuk saat platform lain lengkap. Catatan parsial tetap dikenali sebagai catatan yang belum lengkap, tetapi angkanya tidak dipakai. Aturan ini khusus catatan pembanding; agregasi periode berjalan dengan cutoff parsial tetap `partial` beserta angkanya. Catatan yang hilang tidak dibentuk ulang dari status terbaru.
 
 ## Nol, kosong, dan belum tersedia
 
@@ -262,6 +269,7 @@ Pembacaan catatan memerlukan satu catatan untuk setiap platform terpilih dengan 
 | Periode lengkap tanpa transaksi | `0` | `0` | `null` (pembagi 0) |
 | Cakupan belum diketahui | `null` | `null` | `null` |
 | Catatan pembanding tidak ada | Pembanding `null`, `availability = unavailable` | | |
+| Catatan pembanding belum lengkap (`is_complete = false`) | Pembanding `null`, `availability = unavailable` | | |
 
 ## Asumsi yang perlu diverifikasi
 

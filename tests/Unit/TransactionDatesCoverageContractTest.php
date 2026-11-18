@@ -117,6 +117,50 @@ class TransactionDatesCoverageContractTest extends TestCase
         );
     }
 
+    public function test_equivalent_hour_comparison_uses_only_complete_snapshots(): void
+    {
+        foreach (self::$contract['comparison_examples'] as $example) {
+            $snapshots = array_column($example['snapshots'], null, 'platform_id');
+            $usable = array_filter(
+                $example['platform_ids'],
+                fn (int $platformId) => ($snapshots[$platformId]['is_complete'] ?? false) === true,
+            );
+
+            if (count($usable) !== count($example['platform_ids'])) {
+                $this->assertSame(['availability' => 'unavailable', 'as_of' => null, 'values' => null], $example['expected'], $example['case']);
+
+                continue;
+            }
+
+            $success = array_sum(array_map(fn (int $id) => $snapshots[$id]['payload']['success_purchases'], $usable));
+            $attempts = array_sum(array_map(fn (int $id) => $snapshots[$id]['payload']['purchase_attempts'], $usable));
+
+            $this->assertSame([
+                'availability' => 'complete',
+                'as_of' => $example['cutoff_at'],
+                'values' => [
+                    'success_purchases' => $success,
+                    'purchase_attempts' => $attempts,
+                    'conversion_percentage' => $this->conversion($success, $attempts),
+                ],
+            ], $example['expected'], $example['case']);
+        }
+    }
+
+    public function test_incomplete_snapshot_examples_never_expect_numbers(): void
+    {
+        foreach (self::$contract['comparison_examples'] as $example) {
+            $hasIncomplete = in_array(false, array_column($example['snapshots'], 'is_complete'), true);
+
+            if ($hasIncomplete) {
+                $this->assertSame('unavailable', $example['expected']['availability'], $example['case']);
+                $this->assertNull($example['expected']['values'], $example['case']);
+            }
+        }
+
+        $this->assertNotSame('partial', self::$contract['checkpoint']['expected_comparison']['availability']);
+    }
+
     public function test_downloader_total_example_carries_its_coverage(): void
     {
         $total = self::$contract['downloader_total'];

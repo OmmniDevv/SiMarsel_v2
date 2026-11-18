@@ -145,8 +145,58 @@
         "cutoff_at": "2026-11-15T14:00:00+07:00", "is_complete": true,
         "payload": { "total_checkouts": 10, "purchase_attempts": 10, "success_purchases": 6, "unknown_status_count": 0, "conversion_percentage": 60.0, "is_provisional": false },
         "recorded_at": "2026-11-15T14:07:00+07:00",
-        "expected_comparison": { "availability": "available", "as_of": "2026-11-15T14:00:00+07:00", "conversion_percentage": 60.0 }
+        "expected_comparison": { "availability": "complete", "as_of": "2026-11-15T14:00:00+07:00", "conversion_percentage": 60.0 }
     },
+    "comparison_examples": [
+        {
+            "case": "Catatan 14.00 lengkap",
+            "cutoff_at": "2026-11-15T14:00:00+07:00",
+            "platform_ids": [1],
+            "snapshots": [ { "platform_id": 1, "is_complete": true, "payload": { "success_purchases": 6, "purchase_attempts": 10 } } ],
+            "expected": { "availability": "complete", "as_of": "2026-11-15T14:00:00+07:00", "values": { "success_purchases": 6, "purchase_attempts": 10, "conversion_percentage": 60.0 } }
+        },
+        {
+            "case": "Catatan 14.00 baru memuat sebagian transaksi",
+            "cutoff_at": "2026-11-15T14:00:00+07:00",
+            "platform_ids": [1],
+            "snapshots": [ { "platform_id": 1, "is_complete": false, "payload": { "success_purchases": 4, "purchase_attempts": 6 } } ],
+            "expected": { "availability": "unavailable", "as_of": null, "values": null }
+        },
+        {
+            "case": "Catatan 14.00 tidak tersimpan",
+            "cutoff_at": "2026-11-15T14:00:00+07:00",
+            "platform_ids": [1],
+            "snapshots": [],
+            "expected": { "availability": "unavailable", "as_of": null, "values": null }
+        },
+        {
+            "case": "Gabungan A dan B, keduanya lengkap",
+            "cutoff_at": "2026-11-15T14:00:00+07:00",
+            "platform_ids": [1, 2],
+            "snapshots": [
+                { "platform_id": 1, "is_complete": true, "payload": { "success_purchases": 6, "purchase_attempts": 10 } },
+                { "platform_id": 2, "is_complete": true, "payload": { "success_purchases": 2, "purchase_attempts": 10 } }
+            ],
+            "expected": { "availability": "complete", "as_of": "2026-11-15T14:00:00+07:00", "values": { "success_purchases": 8, "purchase_attempts": 20, "conversion_percentage": 40.0 } }
+        },
+        {
+            "case": "Gabungan A dan B, catatan B belum lengkap",
+            "cutoff_at": "2026-11-15T14:00:00+07:00",
+            "platform_ids": [1, 2],
+            "snapshots": [
+                { "platform_id": 1, "is_complete": true, "payload": { "success_purchases": 6, "purchase_attempts": 10 } },
+                { "platform_id": 2, "is_complete": false, "payload": { "success_purchases": 2, "purchase_attempts": 10 } }
+            ],
+            "expected": { "availability": "unavailable", "as_of": null, "values": null }
+        },
+        {
+            "case": "Gabungan A dan B, catatan B tidak tersimpan",
+            "cutoff_at": "2026-11-15T14:00:00+07:00",
+            "platform_ids": [1, 2],
+            "snapshots": [ { "platform_id": 1, "is_complete": true, "payload": { "success_purchases": 6, "purchase_attempts": 10 } } ],
+            "expected": { "availability": "unavailable", "as_of": null, "values": null }
+        }
+    ],
     "coverage": [
         { "platform_id": 1, "dataset": "transactions", "date_from": "2026-11-16", "date_to": "2026-11-16", "complete_until": "2026-11-16T14:00:00+07:00", "availability": "partial", "sync_finished_at": "2026-11-16T14:05:00+07:00" },
         { "platform_id": 2, "dataset": "transactions", "date_from": "2026-11-16", "date_to": "2026-11-16", "complete_until": "2026-11-16T13:00:00+07:00", "availability": "partial", "sync_finished_at": "2026-11-16T14:20:00+07:00" },
