@@ -20,7 +20,7 @@ class PerformanceSummaryService
     public function summarize(PerformanceFilter $filter): array
     {
         $current = $this->metrics($filter);
-        $previous = $this->metrics($filter->previous());
+        $previous = $filter->hasComparison() ? $this->metrics($filter->previous()) : null;
 
         $isEmpty = $current['total_transactions'] === 0 && $current['total_downloaders'] === 0;
 
@@ -30,7 +30,9 @@ class PerformanceSummaryService
             'is_empty' => $isEmpty,
             'message' => $isEmpty ? 'Data tidak tersedia untuk filter yang dipilih.' : null,
             'kpis' => collect($current)
-                ->map(fn (int|float|null $value, string $key) => $this->compare($value, $previous[$key]))
+                ->map(fn (int|float|null $value, string $key) => $previous === null
+                    ? ['value' => $value, 'previous_value' => null, 'change_percentage' => null, 'trend' => self::TREND_SAME]
+                    : $this->compare($value, $previous[$key]))
                 ->all(),
         ];
     }

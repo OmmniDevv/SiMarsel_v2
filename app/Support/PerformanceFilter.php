@@ -2,7 +2,9 @@
 
 namespace App\Support;
 
+use App\Enums\PeriodPreset;
 use App\Enums\TrendPeriod;
+use App\Support\Period\ResolvedPeriod;
 use Carbon\CarbonImmutable;
 
 /**
@@ -35,7 +37,23 @@ final class PerformanceFilter
         public readonly TrendPeriod $defaultPeriod,
         public readonly array $years = [],
         public readonly ?int $month = null,
+        public readonly ?ResolvedPeriod $period = null,
     ) {}
+
+    /**
+     * The dates chosen by the shared period resolver; a period without equivalent dates has no comparison range.
+     */
+    public static function fromResolvedPeriod(ResolvedPeriod $period): self
+    {
+        return new self(
+            $period->preset->value,
+            $period->platforms,
+            [[$period->active->dateFrom, $period->active->dateTo]],
+            $period->comparison === null ? [] : [[$period->comparison->dateFrom, $period->comparison->dateTo]],
+            $period->preset === PeriodPreset::LastYear ? TrendPeriod::Monthly : TrendPeriod::Daily,
+            period: $period,
+        );
+    }
 
     /**
      * From the first day of this month until today; this is the dashboard default when no period is selected.
@@ -135,6 +153,11 @@ final class PerformanceFilter
         return new self($this->mode, $this->platforms, $this->previousRanges, [], $this->defaultPeriod, $this->years, $this->month);
     }
 
+    public function hasComparison(): bool
+    {
+        return $this->previousRanges !== [];
+    }
+
     public function from(): CarbonImmutable
     {
         return $this->ranges[0][0];
@@ -177,14 +200,19 @@ final class PerformanceFilter
             'years' => $this->mode === self::MODE_DATE_RANGE || $this->mode === self::MODE_CURRENT_MONTH ? [] : $this->years,
             'month' => $this->month,
             'ranges' => self::rangesToArray($this->ranges),
+            ...($this->period === null ? [] : ['period' => $this->period->toArray()]),
         ];
     }
 
     /**
-     * @return array{date_from: string, date_to: string, ranges: list<array{date_from: string, date_to: string}>}
+     * @return array{date_from: string|null, date_to: string|null, ranges: list<array{date_from: string, date_to: string}>}
      */
     public function previousToArray(): array
     {
+        if (! $this->hasComparison()) {
+            return ['date_from' => null, 'date_to' => null, 'ranges' => []];
+        }
+
         $previous = $this->previous();
 
         return [
