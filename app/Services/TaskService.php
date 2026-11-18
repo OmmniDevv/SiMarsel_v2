@@ -53,6 +53,14 @@ class TaskService
         ];
     }
 
+    /**
+     * The task as the Calendar pop-up shows it, reloaded so the summary is never older than the database.
+     */
+    public function preview(Task $task): Task
+    {
+        return $task->refresh()->load(['division', 'pics'])->loadCount('evidences');
+    }
+
     public function detail(Task $task): Task
     {
         return $task->load([
@@ -183,6 +191,44 @@ class TaskService
         });
 
         return $this->detail($task->refresh());
+    }
+
+    /**
+     * Delete the task (soft delete): it leaves every list, board, calendar, timeline, and count, while its history,
+     * evidence, reviews, and assignments stay stored. Who deleted it is kept in deleted_by and in the history. A Done
+     * task cannot be deleted.
+     *
+     * @param  array{version: int|string}  $data
+     *
+     * @throws TaskVersionConflictException When the task was saved by someone else after the actor loaded it.
+     * @throws ValidationException When the task is already Done.
+     */
+    public function delete(Account $actor, Task $task, array $data): void
+    {
+        $baseVersion = (int) $data['version'];
+
+        DB::transaction(function () use ($actor, $task, $baseVersion) {
+            $locked = Task::query()->whereKey($task->id)->lockForUpdate()->firstOrFail();
+
+            if ($locked->version !== $baseVersion) {
+                throw new TaskVersionConflictException($locked->version);
+            }
+
+            if ($locked->status === TaskStatus::Done) {
+                throw ValidationException::withMessages(['status' => 'Tugas yang sudah selesai tidak dapat dihapus.']);
+            }
+
+            $locked->deleted_by = $actor->id;
+            $locked->version = $baseVersion + 1;
+            $locked->save();
+            $locked->delete();
+
+            $locked->activities()->create([
+                'account_id' => $actor->id,
+                'action' => TaskActivity::DELETED,
+                'changes' => null,
+            ]);
+        });
     }
 
     /**

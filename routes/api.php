@@ -187,6 +187,14 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('task')
             ->can('update', 'task')
             ->name('update');
+        Route::delete('/{task}', [TaskController::class, 'destroy'])
+            ->whereNumber('task')
+            ->can('delete', 'task')
+            ->name('destroy');
+        Route::get('/{task}/preview', [TaskController::class, 'preview'])
+            ->whereNumber('task')
+            ->can('view', 'task')
+            ->name('preview');
         Route::patch('/{task}/status', [TaskController::class, 'changeStatus'])
             ->whereNumber('task')
             ->can('changeStatus', 'task')

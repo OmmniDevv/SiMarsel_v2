@@ -71,6 +71,14 @@ class Account extends Authenticatable
             ->withPivot(['id', 'assigned_by', 'assigned_at']);
     }
 
+    /**
+     * Role audit, oldest first.
+     */
+    public function roleChanges(): HasMany
+    {
+        return $this->hasMany(AccountRoleChange::class)->orderBy('changed_at')->orderBy('id');
+    }
+
     public function taskComments(): HasMany
     {
         return $this->hasMany(TaskComment::class, 'author_id');

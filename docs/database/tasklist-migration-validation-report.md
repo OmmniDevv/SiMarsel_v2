@@ -51,6 +51,7 @@ kolom lain di luar ERD membuat test gagal. Tabel di luar ERD:
   akses agenda yang sudah berjalan tidak berubah dan agenda lintas divisi tidak kehilangan divisi tujuannya. ERD v1.0
   belum memuat keduanya; **SA perlu menambahkannya ke ERD**. Dicek oleh
   `test_the_agenda_deviations_from_the_erd_are_only_is_shared_and_the_target_divisions`.
+- `account_role_changes` (audit role, TASK-12): **perlu ditambahkan ke ERD**.
 - `schedule_events` dan `schedule_event_divisions` (read-only, untuk rollback dan pemulihan; tidak dibaca aplikasi).
 
 Nilai yang ERD minta dicocokkan dengan existing: `task_reviews.decision` tetap `approve`/`revision` (enum
@@ -156,7 +157,8 @@ Diuji di `TaskRoleCompatibilityTest`, `TaskListingTest`, `TaskAssignmentTest`, `
 | PIC ditambah/dilepas | PIC yang dilepas tetap melihat task, hilang dari `my_tasks`, kehilangan hak status dan evidence (`403`) |
 | Perubahan role | Staff yang diubah menjadi Supervisor langsung bisa mengatur PIC dan membuat task; histori task tidak berubah |
 | Akun nonaktif | Login ditolak ("Akun Anda nonaktif. Hubungi Admin."); request Tasklist `403` |
-| Hapus Task Card | Belum ada endpoint (`405` untuk semua role); permission `task.delete` hanya Admin, Manajer, Supervisor |
+| Hapus Task Card (TASK-12) | Admin dan Manajer semua divisi, Supervisor divisinya `200`; Staff/Freelance (termasuk PIC) dan Supervisor divisi lain `403`; tugas Done `422`; task terhapus hilang dari semua tampilan dan `404` (`TaskDeletionAndPreviewTest`) |
+| Audit role (TASK-12) | Pembuatan akun dan setiap perubahan role tercatat di `account_role_changes`; histori task tidak berubah; audit tetap ada dengan nama/username akun dan pengubahnya setelah salah satunya dihapus; dua perubahan hampir bersamaan tercatat berurutan dari role terbaru (`AccountRoleAuditTest`) |
 
 ### 5.4 Pemulihan setelah fitur dipakai
 

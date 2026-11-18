@@ -33,6 +33,7 @@ class TaskResource extends JsonResource
             'can_view_detail' => $request->user()->can('view', $this->resource),
             'can_edit' => $request->user()->can('update', $this->resource),
             'can_assign' => $this->resource->assignmentLockFor($request->user()) === null,
+            'can_delete' => $this->resource->deletableBy($request->user()),
             'version' => $this->version,
             'updated_at' => $this->updated_at?->toIso8601ZuluString(),
         ];

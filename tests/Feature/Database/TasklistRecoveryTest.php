@@ -23,7 +23,10 @@ class TasklistRecoveryTest extends TestCase
 {
     use DatabaseMigrations;
 
-    private const TASK19_MIGRATIONS = 15;
+    /**
+     * The first TASK-19 migration; rolling back to before it also rolls back every later migration.
+     */
+    private const FIRST_TASK19_MIGRATION = '2026_11_13_083909_widen_name_columns_on_roles_and_divisions_tables';
 
     protected function setUp(): void
     {
@@ -33,7 +36,7 @@ class TasklistRecoveryTest extends TestCase
         config(['tasklist.allow_destructive_rollback' => true]);
 
         $this->travelTo('2026-11-12 09:00:00');
-        $this->artisan('migrate:rollback', ['--step' => self::TASK19_MIGRATIONS])->assertSuccessful();
+        $this->artisan('migrate:rollback', ['--step' => $this->stepsBackToBeforeTask19()])->assertSuccessful();
         $this->seed(LegacyTasklistSeeder::class);
         $this->artisan('migrate')->assertSuccessful();
         $this->seed([RoleSeeder::class, PermissionSeeder::class]);
@@ -53,7 +56,7 @@ class TasklistRecoveryTest extends TestCase
 
         $this->assertSame(0, array_sum(app(TasklistRecoveryService::class)->newDataReport()));
         $this->artisan('tasks:recovery')->expectsOutputToContain('Rollback aman')->assertSuccessful();
-        $this->artisan('migrate:rollback', ['--step' => self::TASK19_MIGRATIONS])->assertSuccessful();
+        $this->artisan('migrate:rollback', ['--step' => $this->stepsBackToBeforeTask19()])->assertSuccessful();
 
         $this->assertFalse(Schema::hasTable('task_assignments'));
         $this->assertSame(5, DB::table('schedule_events')->count());
@@ -67,7 +70,7 @@ class TasklistRecoveryTest extends TestCase
         $this->artisan('tasks:recovery')->expectsOutputToContain('Jangan rollback skema')->assertSuccessful();
 
         try {
-            $this->artisan('migrate:rollback', ['--step' => self::TASK19_MIGRATIONS])->run();
+            $this->artisan('migrate:rollback', ['--step' => $this->stepsBackToBeforeTask19()])->run();
             $this->fail('The rollback should have been refused.');
         } catch (UnsafeTasklistRollbackException $exception) {
             $this->assertStringContainsString('Komentar tugas: 1', $exception->getMessage());
@@ -227,5 +230,10 @@ class TasklistRecoveryTest extends TestCase
     private function account(string $username): Account
     {
         return Account::where('username', $username)->sole();
+    }
+
+    private function stepsBackToBeforeTask19(): int
+    {
+        return DB::table('migrations')->where('migration', '>=', self::FIRST_TASK19_MIGRATION)->count();
     }
 }
