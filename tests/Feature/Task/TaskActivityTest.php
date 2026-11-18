@@ -62,20 +62,20 @@ class TaskActivityTest extends TestCase
         $this->actingAs($this->admin)->getJson($this->url($task))->assertOk();
     }
 
-    public function test_manager_reads_only_the_history_of_their_division(): void
+    public function test_every_role_reads_the_history_of_every_division(): void
     {
         $task = $this->task();
 
         $this->actingAs($this->manager)->getJson($this->url($task))->assertOk();
-        $this->actingAs($this->financeManager)->getJson($this->url($task))->assertForbidden();
+        $this->actingAs($this->financeManager)->getJson($this->url($task))->assertOk();
     }
 
-    public function test_staff_reads_only_the_history_of_tasks_assigned_to_them(): void
+    public function test_staff_reads_the_history_of_tasks_they_are_not_pic_of(): void
     {
         $task = $this->task();
 
         $this->actingAs($this->staff)->getJson($this->url($task))->assertOk();
-        $this->actingAs($this->otherStaff)->getJson($this->url($task))->assertForbidden();
+        $this->actingAs($this->otherStaff)->getJson($this->url($task))->assertOk();
     }
 
     public function test_unknown_task_returns_not_found(): void
@@ -127,21 +127,49 @@ class TaskActivityTest extends TestCase
             ->assertJsonPath('data.*.id', [$latest->id, $second->id, $first->id]);
     }
 
-    public function test_actor_name_is_still_shown_after_the_actor_account_is_deleted(): void
+    public function test_an_account_with_task_history_cannot_be_deleted_and_its_history_stays(): void
     {
         $task = $this->task(['pic_id' => $this->otherStaff->id]);
-        $this->send('patchJson', "/api/tasks/{$task->id}/assignment", $this->manager, $task, ['pic_id' => $this->staff->id]);
+        $this->send('patchJson', "/api/tasks/{$task->id}/assignment", $this->manager, $task, ['pic_ids' => [$this->staff->id]]);
 
-        $this->actingAs($this->financeManager)->deleteJson("/api/accounts/{$this->manager->id}")->assertSuccessful();
-        $this->assertModelMissing($this->manager);
+        foreach ([$this->manager, $this->staff, $this->otherStaff] as $account) {
+            $this->actingAs($this->financeManager)
+                ->deleteJson("/api/accounts/{$account->id}")
+                ->assertUnprocessable()
+                ->assertJsonPath('message', 'Akun ini memiliki riwayat tugas dan tidak dapat dihapus. Nonaktifkan akun ini sebagai gantinya.');
+            $this->assertModelExists($account);
+        }
 
         $this->actingAs($this->admin)
             ->getJson($this->url($task))
             ->assertOk()
-            ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.action', TaskActivity::REASSIGNED)
-            ->assertJsonPath('data.0.actor', ['id' => null, 'fullname' => 'mkt.manager'])
-            ->assertJsonPath('data.0.description', 'PIC: mkt.other → mkt.staff');
+            ->assertJsonPath('data.0.actor', ['id' => $this->manager->id, 'fullname' => 'mkt.manager']);
+    }
+
+    public function test_an_account_without_task_history_can_still_be_deleted(): void
+    {
+        $newcomer = $this->account(Role::EMPLOYEE, 'newcomer', $this->marketing);
+
+        $this->actingAs($this->financeManager)->deleteJson("/api/accounts/{$newcomer->id}")->assertSuccessful();
+
+        $this->assertModelMissing($newcomer);
+    }
+
+    public function test_actor_name_is_still_shown_for_an_account_deleted_before_the_history_rule(): void
+    {
+        $task = $this->task();
+        $leaver = $this->account(Role::EMPLOYEE, 'leaver', $this->marketing);
+        $task->activities()->create(['account_id' => $leaver->id, 'action' => TaskActivity::UPDATED, 'changes' => ['title' => ['old' => 'A', 'new' => 'B']]]);
+
+        // Accounts removed before deletion was blocked: only SET NULL references, so the row could go.
+        $leaver->delete();
+
+        $this->actingAs($this->admin)
+            ->getJson($this->url($task))
+            ->assertOk()
+            ->assertJsonPath('data.0.actor', ['id' => null, 'fullname' => 'leaver'])
+            ->assertJsonPath('data.0.description', 'Judul: A → B');
     }
 
     public function test_actor_name_is_copied_when_the_entry_is_written(): void
@@ -184,22 +212,22 @@ class TaskActivityTest extends TestCase
     public function test_the_whole_workflow_is_recorded_and_earlier_entries_stay_after_status_and_pic_change(): void
     {
         $task = Task::findOrFail($this->actingAs($this->manager)
-            ->postJson('/api/tasks', ['title' => 'Desain banner', 'division_id' => $this->marketing->id, 'pic_id' => $this->otherStaff->id])
+            ->postJson('/api/tasks', ['title' => 'Desain banner', 'division_id' => $this->marketing->id, 'pic_ids' => [$this->otherStaff->id]])
             ->assertCreated()
             ->json('data.id'));
 
         $this->send('putJson', "/api/tasks/{$task->id}", $this->manager, $task, ['title' => 'Desain banner promo', 'priority' => 'high', 'requires_review' => true]);
-        $this->send('patchJson', "/api/tasks/{$task->id}/assignment", $this->manager, $task, ['pic_id' => $this->staff->id]);
+        $this->send('patchJson', "/api/tasks/{$task->id}/assignment", $this->manager, $task, ['pic_ids' => [$this->staff->id]]);
         $this->moveTo($task, $this->manager, 'todo');
         $this->moveTo($task, $this->staff, 'in_progress');
         $this->actingAs($this->staff)
             ->postJson("/api/tasks/{$task->id}/evidences", ['url' => 'https://drive.example.com/banner'])
             ->assertCreated();
-        $this->moveTo($task, $this->staff, 'ready_for_qa');
-        $this->moveTo($task, $this->manager, 'on_qa');
+        $this->moveTo($task, $this->staff, 'ready_review');
+        $this->moveTo($task, $this->manager, 'on_review');
         $this->send('postJson', "/api/tasks/{$task->id}/reviews", $this->manager, $task, ['decision' => 'revision', 'note' => 'Perbaiki warna.']);
-        $this->moveTo($task, $this->staff, 'ready_for_qa');
-        $this->moveTo($task, $this->manager, 'on_qa');
+        $this->moveTo($task, $this->staff, 'ready_review');
+        $this->moveTo($task, $this->manager, 'on_review');
         $this->send('postJson', "/api/tasks/{$task->id}/reviews", $this->manager, $task, ['decision' => 'approve']);
 
         $response = $this->actingAs($this->staff)->getJson($this->url($task))->assertOk();
@@ -226,18 +254,18 @@ class TaskActivityTest extends TestCase
         $this->assertStringContainsString('Prioritas: Medium → High', $history[TaskActivity::UPDATED]['description']);
         $this->assertSame('PIC: mkt.other → mkt.staff', $history[TaskActivity::REASSIGNED]['description']);
         $this->assertSame('Evidence: https://drive.example.com/banner', $history[TaskActivity::EVIDENCE_SUBMITTED]['description']);
-        $this->assertSame('Status: On QA → On Process; Catatan: Perbaiki warna.', $history[TaskActivity::REVISION_REQUESTED]['description']);
-        $this->assertSame('Status: On Process → Ready for QA', $history[TaskActivity::RESUBMITTED]['description']);
-        $this->assertSame('Status: On QA → Done', $history[TaskActivity::APPROVED]['description']);
+        $this->assertSame('Status: On Review → On Process; Catatan: Perbaiki warna.', $history[TaskActivity::REVISION_REQUESTED]['description']);
+        $this->assertSame('Status: On Process → Ready Review', $history[TaskActivity::RESUBMITTED]['description']);
+        $this->assertSame('Status: On Review → Done', $history[TaskActivity::APPROVED]['description']);
         $this->assertSame($this->manager->id, $history[TaskActivity::APPROVED]['actor']['id']);
     }
 
     public function test_resubmission_through_the_edit_form_is_recorded_as_resubmitted(): void
     {
-        $task = $this->task(['status' => TaskStatus::OnQa, 'requires_review' => true]);
+        $task = $this->task(['status' => TaskStatus::OnReview, 'requires_review' => true]);
         $this->send('postJson', "/api/tasks/{$task->id}/reviews", $this->manager, $task, ['decision' => 'revision', 'note' => 'Ulangi.']);
 
-        $this->send('putJson', "/api/tasks/{$task->id}", $this->staff, $task, ['status' => 'ready_for_qa']);
+        $this->send('putJson', "/api/tasks/{$task->id}", $this->staff, $task, ['status' => 'ready_review']);
 
         $this->assertSame(TaskActivity::RESUBMITTED, $task->activities()->value('action'));
     }

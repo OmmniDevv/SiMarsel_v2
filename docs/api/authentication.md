@@ -68,6 +68,8 @@ Gunakan `data.role.code_role` untuk menentukan halaman yang ditampilkan (`MGR` =
 }
 ```
 
+Akun yang dinonaktifkan (`is_active = false`) juga ditolak dengan **422** dan pesan `Akun Anda nonaktif. Hubungi Admin.` di `errors.username`, walaupun password-nya benar.
+
 Jika format input salah, `errors` berisi pesan per field (`username`, `password`).
 
 ### `POST /logout`

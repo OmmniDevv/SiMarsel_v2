@@ -11,8 +11,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * A task or agenda on the shared schedule. Only what places it on the schedule is sent, never a task's PIC,
  * description, evidence, or history: those stay behind the task detail and its access rule.
  *
- * division is the task's division or the agenda's owner; target_divisions are the divisions an internal agenda
- * is meant for (empty for tasks and shared agendas).
+ * division is the task's division or the agenda's organising division; target_divisions are the divisions an
+ * internal agenda is meant for (empty for tasks and shared agendas). Agendas are not linked to tasks.
  */
 class ScheduleItemResource extends JsonResource
 {
@@ -24,19 +24,20 @@ class ScheduleItemResource extends JsonResource
     public function toArray(Request $request): array
     {
         $isTask = $this->resource instanceof Task;
-        $task = $isTask ? $this->resource : $this->task;
-        $division = $isTask ? $this->division : $this->ownerDivision;
+        $task = $isTask ? $this->resource : null;
+        $division = $this->division;
 
         return [
             'id' => $this->id,
             'type' => $isTask ? 'task' : 'event',
             'title' => $this->title,
             'division' => $division ? $this->divisionData($division) : null,
+            'is_shared' => $isTask ? null : $this->is_shared,
             'target_divisions' => $isTask || $this->is_shared
                 ? []
                 : $this->targetDivisions->map(fn (Division $division) => $this->divisionData($division))->all(),
-            'start_date' => $this->start_date?->toDateString(),
-            'end_date' => ($isTask ? $this->deadline : $this->end_date)?->toDateString(),
+            'start_date' => ($isTask ? $this->start_date : $this->start_at)?->toDateString(),
+            'end_date' => ($isTask ? $this->deadline : $this->end_at)?->toDateString(),
             'status' => $isTask ? $this->status->value : null,
             'priority' => $isTask ? $this->priority->value : null,
             'task_id' => $task?->id,

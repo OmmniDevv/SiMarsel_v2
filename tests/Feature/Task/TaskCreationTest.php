@@ -74,11 +74,28 @@ class TaskCreationTest extends TestCase
         $this->assertDatabaseCount('tasks', 0);
     }
 
-    public function test_manager_without_a_division_cannot_create_a_task(): void
+    public function test_manager_without_a_division_creates_tasks_for_every_division(): void
     {
         $manager = $this->account(Role::MANAGER, 'lonely.manager', null);
 
-        $this->actingAs($manager)->postJson('/api/tasks', $this->payload())->assertForbidden();
+        $this->actingAs($manager)->postJson('/api/tasks', $this->payload())->assertCreated();
+    }
+
+    public function test_supervisor_creates_tasks_only_for_their_division_and_freelance_cannot_create(): void
+    {
+        $supervisor = $this->account(Role::SUPERVISOR, 'mkt.supervisor', $this->marketing);
+        $freelancer = $this->account(Role::FREELANCE, 'freelancer', $this->marketing);
+
+        $this->actingAs($supervisor)->postJson('/api/tasks', $this->payload())->assertCreated();
+        $this->actingAs($supervisor)
+            ->postJson('/api/tasks', $this->payload(['division_id' => $this->finance->id, 'pic_ids' => null, 'status' => 'backlog']))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['division_id' => 'Anda hanya dapat membuat tugas untuk divisi yang Anda kelola.']);
+        $this->actingAs($supervisor)->getJson('/api/tasks/meta')->assertJsonPath('data.can_create', true);
+        $this->actingAs($supervisor)->getJson('/api/tasks/create-options')->assertJsonCount(1, 'data.divisions');
+
+        $this->actingAs($freelancer)->postJson('/api/tasks', $this->payload())->assertForbidden();
+        $this->actingAs($freelancer)->getJson('/api/tasks/meta')->assertJsonPath('data.can_create', false);
     }
 
     public function test_admin_can_create_a_task_for_any_division(): void
@@ -86,12 +103,12 @@ class TaskCreationTest extends TestCase
         $this->actingAs($this->admin)
             ->postJson('/api/tasks', $this->payload([
                 'division_id' => $this->finance->id,
-                'pic_id' => $this->financeStaff->id,
+                'pic_ids' => [$this->financeStaff->id],
             ]))
             ->assertCreated()
             ->assertJsonPath('message', 'Tugas berhasil dibuat.')
             ->assertJsonPath('data.division.code_division', 'FIN')
-            ->assertJsonPath('data.pic.id', $this->financeStaff->id);
+            ->assertJsonPath('data.pics.0.id', $this->financeStaff->id);
     }
 
     public function test_manager_can_create_a_task_for_their_own_division(): void
@@ -102,16 +119,12 @@ class TaskCreationTest extends TestCase
             ->assertJsonPath('data.division.code_division', 'MKT');
     }
 
-    public function test_manager_cannot_create_a_task_for_another_division(): void
+    public function test_manager_creates_a_task_for_another_division(): void
     {
         $this->actingAs($this->manager)
-            ->postJson('/api/tasks', $this->payload(['division_id' => $this->finance->id, 'pic_id' => null]))
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors([
-                'division_id' => 'Anda hanya dapat membuat tugas untuk divisi yang Anda kelola.',
-            ]);
-
-        $this->assertDatabaseCount('tasks', 0);
+            ->postJson('/api/tasks', $this->payload(['division_id' => $this->finance->id, 'pic_ids' => [$this->financeStaff->id]]))
+            ->assertCreated()
+            ->assertJsonPath('data.division.code_division', 'FIN');
     }
 
     // Penyimpanan
@@ -145,10 +158,30 @@ class TaskCreationTest extends TestCase
             'category_id' => $this->reviewed->id,
             'division_id' => $this->marketing->id,
             'platform_id' => $platform->id,
-            'pic_id' => $this->staff->id,
+            'pic_id' => null,
             'creator_id' => $this->manager->id,
             'priority' => 'high',
         ]);
+        $this->assertDatabaseHas('task_assignments', [
+            'task_id' => $response->json('data.id'),
+            'account_id' => $this->staff->id,
+            'assigned_by' => $this->manager->id,
+            'assigned_at' => '2026-10-23 09:00:00',
+            'unassigned_at' => null,
+        ]);
+    }
+
+    public function test_task_can_be_created_with_several_pics_from_different_divisions(): void
+    {
+        $this->actingAs($this->manager)
+            ->postJson('/api/tasks', $this->payload(['status' => 'todo', 'pic_ids' => [$this->staff->id, $this->financeStaff->id]]))
+            ->assertCreated()
+            ->assertJsonPath('data.pics', [
+                ['id' => $this->financeStaff->id, 'fullname' => 'fin.staff'],
+                ['id' => $this->staff->id, 'fullname' => 'mkt.staff'],
+            ]);
+
+        $this->assertSame(2, Task::sole()->activeAssignments()->count());
     }
 
     public function test_creator_cannot_be_spoofed_from_the_request(): void
@@ -167,7 +200,7 @@ class TaskCreationTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('data.status', TaskStatus::Backlog->value)
             ->assertJsonPath('data.priority', TaskPriority::Medium->value)
-            ->assertJsonPath('data.pic', null)
+            ->assertJsonPath('data.pics', [])
             ->assertJsonPath('data.requires_review', false);
     }
 
@@ -202,7 +235,7 @@ class TaskCreationTest extends TestCase
                 'division_id' => 999,
                 'category_id' => 999,
                 'platform_id' => 999,
-                'pic_id' => null,
+                'pic_ids' => null,
             ]))
             ->assertUnprocessable()
             ->assertJsonValidationErrors([
@@ -231,9 +264,9 @@ class TaskCreationTest extends TestCase
     public function test_todo_task_requires_a_pic(): void
     {
         $this->actingAs($this->manager)
-            ->postJson('/api/tasks', $this->payload(['status' => 'todo', 'pic_id' => null]))
+            ->postJson('/api/tasks', $this->payload(['status' => 'todo', 'pic_ids' => null]))
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['pic_id' => 'PIC wajib diisi untuk tugas berstatus To Do.']);
+            ->assertJsonValidationErrors(['pic_ids' => 'PIC wajib diisi untuk tugas berstatus To Do.']);
     }
 
     public function test_todo_task_with_a_valid_pic_is_saved_as_todo(): void
@@ -244,18 +277,24 @@ class TaskCreationTest extends TestCase
             ->assertJsonPath('data.status', TaskStatus::Todo->value);
     }
 
-    public function test_pic_must_be_staff_of_the_task_division(): void
+    public function test_pics_must_be_active_accounts_with_a_pic_role(): void
     {
-        foreach ([$this->financeStaff, $this->manager, $this->admin] as $pic) {
+        foreach ([$this->manager, $this->admin] as $pic) {
             $this->actingAs($this->admin)
-                ->postJson('/api/tasks', $this->payload(['pic_id' => $pic->id]))
+                ->postJson('/api/tasks', $this->payload(['pic_ids' => [$pic->id]]))
                 ->assertUnprocessable()
-                ->assertJsonValidationErrors(['pic_id' => 'PIC harus Staff dari divisi yang dipilih.']);
+                ->assertJsonValidationErrors(['pic_ids.0' => 'PIC harus akun aktif dengan role Staff, Freelance, atau Supervisor.']);
         }
 
         $this->actingAs($this->admin)
-            ->postJson('/api/tasks', $this->payload(['pic_id' => 999]))
-            ->assertJsonValidationErrors(['pic_id' => 'PIC harus Staff dari divisi yang dipilih.']);
+            ->postJson('/api/tasks', $this->payload(['pic_ids' => [999]]))
+            ->assertJsonValidationErrors(['pic_ids.0' => 'PIC harus akun aktif dengan role Staff, Freelance, atau Supervisor.']);
+
+        $this->actingAs($this->admin)
+            ->postJson('/api/tasks', $this->payload(['pic_ids' => $this->staff->id]))
+            ->assertJsonValidationErrors(['pic_ids' => 'PIC tidak valid.']);
+
+        $this->assertDatabaseCount('tasks', 0);
     }
 
     public function test_deadline_cannot_be_in_the_past_or_before_the_start_date(): void
@@ -343,7 +382,7 @@ class TaskCreationTest extends TestCase
     public function test_rejected_submission_does_not_block_the_corrected_one(): void
     {
         $this->actingAs($this->manager)
-            ->postJson('/api/tasks', $this->payload(['status' => 'todo', 'pic_id' => null]))
+            ->postJson('/api/tasks', $this->payload(['status' => 'todo', 'pic_ids' => null]))
             ->assertUnprocessable();
 
         $this->actingAs($this->manager)->postJson('/api/tasks', $this->payload(['status' => 'todo']))->assertCreated();
@@ -363,25 +402,25 @@ class TaskCreationTest extends TestCase
             ->postJson('/api/tasks', [
                 'title' => 'Desain banner promo',
                 'division_id' => $this->marketing->id,
-                'pic_id' => $this->staff->id,
+                'pic_ids' => [$this->staff->id],
             ])
             ->assertCreated();
 
         $variants = [
             'urutan key berbeda' => [
-                'pic_id' => $this->staff->id,
+                'pic_ids' => [$this->staff->id],
                 'title' => 'Desain banner promo',
                 'division_id' => $this->marketing->id,
             ],
             'id sebagai string' => [
                 'title' => 'Desain banner promo',
                 'division_id' => (string) $this->marketing->id,
-                'pic_id' => (string) $this->staff->id,
+                'pic_ids' => [(string) $this->staff->id],
             ],
             'default dikirim eksplisit' => [
                 'title' => 'Desain banner promo',
                 'division_id' => $this->marketing->id,
-                'pic_id' => $this->staff->id,
+                'pic_ids' => [$this->staff->id],
                 'priority' => 'medium',
                 'status' => 'backlog',
                 'requires_review' => false,
@@ -389,7 +428,7 @@ class TaskCreationTest extends TestCase
             'field opsional dikirim null' => [
                 'title' => 'Desain banner promo',
                 'division_id' => $this->marketing->id,
-                'pic_id' => $this->staff->id,
+                'pic_ids' => [$this->staff->id],
                 'description' => null,
                 'category_id' => null,
                 'deadline' => null,
@@ -408,7 +447,7 @@ class TaskCreationTest extends TestCase
     public function test_identical_request_arriving_while_the_first_is_saving_is_rejected(): void
     {
         $service = app(TaskService::class);
-        $data = ['title' => 'Desain banner promo', 'division_id' => $this->marketing->id, 'pic_id' => $this->staff->id];
+        $data = ['title' => 'Desain banner promo', 'division_id' => $this->marketing->id, 'pic_ids' => [$this->staff->id]];
         $secondRejected = false;
 
         // The second request arrives after the first took the guard but before its row is stored.
@@ -455,15 +494,19 @@ class TaskCreationTest extends TestCase
 
     // Pilihan form
 
-    public function test_admin_create_options_list_every_division_with_its_staff(): void
+    public function test_admin_create_options_list_every_division_and_every_eligible_pic(): void
     {
         $this->actingAs($this->admin)
             ->getJson('/api/tasks/create-options')
             ->assertOk()
-            ->assertJsonPath('data.divisions.0.code_division', 'FIN')
-            ->assertJsonPath('data.divisions.0.pics', [['id' => $this->financeStaff->id, 'fullname' => 'fin.staff']])
-            ->assertJsonPath('data.divisions.1.code_division', 'MKT')
-            ->assertJsonPath('data.divisions.1.pics', [['id' => $this->staff->id, 'fullname' => 'mkt.staff']])
+            ->assertJsonPath('data.divisions', [
+                ['id' => $this->finance->id, 'code_division' => 'FIN', 'name' => 'Finance'],
+                ['id' => $this->marketing->id, 'code_division' => 'MKT', 'name' => 'Marketing'],
+            ])
+            ->assertJsonPath('data.pics', [
+                ['id' => $this->financeStaff->id, 'fullname' => 'fin.staff', 'role' => Role::EMPLOYEE, 'division' => ['id' => $this->finance->id, 'code_division' => 'FIN', 'name' => 'Finance']],
+                ['id' => $this->staff->id, 'fullname' => 'mkt.staff', 'role' => Role::EMPLOYEE, 'division' => ['id' => $this->marketing->id, 'code_division' => 'MKT', 'name' => 'Marketing']],
+            ])
             ->assertJsonPath('data.statuses', [
                 ['value' => 'backlog', 'label' => 'Back Log'],
                 ['value' => 'todo', 'label' => 'To Do'],
@@ -473,13 +516,13 @@ class TaskCreationTest extends TestCase
             ->assertJsonFragment(['name' => 'Konten', 'requires_review' => true]);
     }
 
-    public function test_manager_create_options_only_list_their_division(): void
+    public function test_manager_create_options_list_every_division_and_pics_of_every_division(): void
     {
         $this->actingAs($this->manager)
             ->getJson('/api/tasks/create-options')
             ->assertOk()
-            ->assertJsonCount(1, 'data.divisions')
-            ->assertJsonPath('data.divisions.0.code_division', 'MKT');
+            ->assertJsonCount(2, 'data.divisions')
+            ->assertJsonCount(2, 'data.pics');
     }
 
     /**
@@ -491,7 +534,7 @@ class TaskCreationTest extends TestCase
         return [
             'title' => 'Desain banner promo',
             'division_id' => $this->marketing->id,
-            'pic_id' => $this->staff->id,
+            'pic_ids' => [$this->staff->id],
             ...$overrides,
         ];
     }

@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\Account;
-use App\Models\ScheduleEvent;
+use App\Models\CalendarEvent;
 use App\Models\Task;
 use App\Repositories\TaskRepository;
 use Carbon\CarbonInterface;
@@ -21,30 +21,30 @@ class TaskScheduleService
      * Focusing on a division keeps its tasks and the agendas it owns or is a target of, plus the shared agendas
      * without an owner.
      *
-     * @return Collection<int, Task|ScheduleEvent>
+     * @return Collection<int, Task|CalendarEvent>
      */
     public function schedule(Account $account, CarbonInterface $from, CarbonInterface $to, ?string $division): Collection
     {
-        $events = ScheduleEvent::query()
-            ->with(['ownerDivision', 'targetDivisions', 'task'])
+        $events = CalendarEvent::query()
+            ->with(['division', 'targetDivisions'])
             ->visibleTo($account)
             ->within($from, $to)
             ->forDivision($division)
-            ->orderBy('start_date')
+            ->orderBy('start_at')
             ->orderBy('id')
             ->get();
 
         return $this->tasks->scheduled($from, $to, $division)
             ->toBase()
             ->merge($events)
-            ->sortBy(fn (Task|ScheduleEvent $item) => [$this->startOf($item), $item instanceof Task ? 0 : 1, $item->id])
+            ->sortBy(fn (Task|CalendarEvent $item) => [$this->startOf($item), $item instanceof Task ? 0 : 1, $item->id])
             ->values();
     }
 
-    private function startOf(Task|ScheduleEvent $item): string
+    private function startOf(Task|CalendarEvent $item): string
     {
         return $item instanceof Task
             ? ($item->start_date ?? $item->deadline)->toDateString()
-            : $item->start_date->toDateString();
+            : $item->start_at->toDateString();
     }
 }

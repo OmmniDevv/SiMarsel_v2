@@ -53,8 +53,8 @@ class TaskMonitoringTest extends TestCase
         $this->task($this->marketing, $this->staff, TaskStatus::Backlog, TaskPriority::Urgent, self::YESTERDAY, 'Overdue urgent backlog');
         $this->task($this->marketing, $otherStaff, TaskStatus::Todo, TaskPriority::Low, self::TODAY, 'Due today');
         $this->task($this->marketing, $this->staff, TaskStatus::InProgress, TaskPriority::High, null, 'No deadline');
-        $this->task($this->marketing, $otherStaff, TaskStatus::ReadyForQa, TaskPriority::Medium, self::TOMORROW, 'Upcoming');
-        $this->task($this->marketing, $otherStaff, TaskStatus::OnQa, TaskPriority::Urgent, self::YESTERDAY, 'Overdue urgent QA');
+        $this->task($this->marketing, $otherStaff, TaskStatus::ReadyReview, TaskPriority::Medium, self::TOMORROW, 'Upcoming');
+        $this->task($this->marketing, $otherStaff, TaskStatus::OnReview, TaskPriority::Urgent, self::YESTERDAY, 'Overdue urgent QA');
         $this->task($this->marketing, $this->staff, TaskStatus::Done, TaskPriority::Urgent, self::YESTERDAY, 'Done late');
         // Finance
         $this->task($this->finance, null, TaskStatus::Done, TaskPriority::Low, self::TODAY, 'Done today');
@@ -78,8 +78,8 @@ class TaskMonitoringTest extends TestCase
                 'backlog' => 1,
                 'todo' => 2,
                 'on_process' => 1,
-                'ready_for_qa' => 1,
-                'on_qa' => 1,
+                'ready_review' => 1,
+                'on_review' => 1,
                 'completed' => 2,
                 'unfinished' => 6,
                 'overdue' => 3,
@@ -100,12 +100,12 @@ class TaskMonitoringTest extends TestCase
         }
     }
 
-    public function test_report_does_not_grant_access_to_tasks_outside_authority(): void
+    public function test_report_does_not_grant_changes_to_tasks_outside_authority(): void
     {
         $this->actingAs($this->staff)->getJson('/api/tasks/monitoring')->assertOk();
 
-        $this->actingAs($this->staff)->getJson("/api/tasks/{$this->financeTodo->id}")->assertForbidden();
-        $this->actingAs($this->manager)
+        $this->actingAs($this->staff)->getJson("/api/tasks/{$this->financeTodo->id}")->assertOk()->assertJsonPath('data.can_edit', false);
+        $this->actingAs($this->staff)
             ->patchJson("/api/tasks/{$this->financeTodo->id}/status", ['status' => 'in_progress', 'version' => 1])
             ->assertForbidden();
     }
@@ -115,17 +115,14 @@ class TaskMonitoringTest extends TestCase
         $this->actingAs($this->staff)
             ->getJson('/api/tasks/monitoring?scope=tasklist')
             ->assertOk()
-            ->assertJsonPath('data.scope', ['key' => 'tasklist', 'label' => 'Tugas yang ditugaskan kepada Anda'])
-            ->assertJsonPath('data.metrics.total_tasks', 3)
-            ->assertJsonPath('data.metrics.completed', 1)
-            ->assertJsonPath('data.metrics.overdue', 1)
-            ->assertJsonPath('data.metrics.completion_rate', 33.33);
+            ->assertJsonPath('data.scope', ['key' => 'tasklist', 'label' => 'Seluruh divisi'])
+            ->assertJsonPath('data.metrics.total_tasks', 8);
 
         $this->actingAs($this->manager)
             ->getJson('/api/tasks/monitoring?scope=tasklist')
             ->assertOk()
-            ->assertJsonPath('data.scope.label', 'Tugas divisi Anda')
-            ->assertJsonPath('data.metrics.total_tasks', 6);
+            ->assertJsonPath('data.scope.label', 'Seluruh divisi')
+            ->assertJsonPath('data.metrics.total_tasks', 8);
     }
 
     public function test_tasklist_scope_matches_the_tasklist_counts(): void
@@ -138,12 +135,12 @@ class TaskMonitoringTest extends TestCase
         $this->assertSame($tasklist->json('meta.status_counts.backlog'), $monitoring->json('data.metrics.backlog'));
     }
 
-    public function test_tasklist_scope_cannot_be_widened_by_division_filter(): void
+    public function test_tasklist_scope_division_filter_narrows_the_global_scope(): void
     {
         $this->actingAs($this->manager)
             ->getJson('/api/tasks/monitoring?scope=tasklist&division=FIN')
             ->assertOk()
-            ->assertJsonPath('data.metrics.total_tasks', 0);
+            ->assertJsonPath('data.metrics.total_tasks', 2);
     }
 
     public function test_division_filter_narrows_every_metric(): void

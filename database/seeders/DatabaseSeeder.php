@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             RoleSeeder::class,
+            PermissionSeeder::class,
             AccountSeeder::class,
             FunnelSeeder::class,
             PromoSourceSeeder::class,
@@ -31,7 +32,7 @@ class DatabaseSeeder extends Seeder
                 DownloaderSeeder::class,
                 PromoCodeSeeder::class,
                 TransactionSeeder::class,
-                ScheduleEventSeeder::class,
+                CalendarEventSeeder::class,
             ]);
         }
     }

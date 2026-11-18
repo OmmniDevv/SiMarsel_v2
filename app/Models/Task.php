@@ -10,22 +10,29 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * PICs live in task_assignments. The legacy pic_id column is kept only as migrated data and is not fillable, so the
+ * application never writes it again.
+ */
 #[Fillable([
-    'title', 'description', 'category_id', 'division_id', 'platform_id', 'pic_id', 'creator_id', 'priority', 'status',
-    'start_date', 'deadline', 'requires_review', 'evidence_required', 'completed_at',
+    'title', 'description', 'category_id', 'division_id', 'platform_id', 'creator_id', 'priority', 'status',
+    'start_date', 'deadline', 'requires_review', 'evidence_required', 'completed_at', 'deleted_by',
 ])]
 class Task extends Model
 {
     /** @use HasFactory<TaskFactory> */
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     /**
-     * Fields an Admin or the division's Manager may change through the edit form.
+     * Fields an Admin or the division's Manager may change through the edit form. PICs are changed through the
+     * assignment endpoint, not this form.
      */
     public const EDITABLE_FIELDS = [
-        'title', 'description', 'category_id', 'division_id', 'platform_id', 'pic_id', 'priority', 'status',
+        'title', 'description', 'category_id', 'division_id', 'platform_id', 'priority', 'status',
         'start_date', 'deadline', 'requires_review',
     ];
 
@@ -73,7 +80,7 @@ class Task extends Model
      */
     public function reviews(): HasMany
     {
-        return $this->hasMany(TaskReview::class)->orderByDesc('created_at')->orderByDesc('id');
+        return $this->hasMany(TaskReview::class)->withCycle()->orderByDesc('created_at')->orderByDesc('id');
     }
 
     public function division(): BelongsTo
@@ -91,33 +98,84 @@ class Task extends Model
         return $this->belongsTo(Platform::class);
     }
 
-    public function pic(): BelongsTo
-    {
-        return $this->belongsTo(Account::class, 'pic_id');
-    }
-
     public function creator(): BelongsTo
     {
         return $this->belongsTo(Account::class, 'creator_id');
     }
 
+    public function deletedBy(): BelongsTo
+    {
+        return $this->belongsTo(Account::class, 'deleted_by');
+    }
+
     /**
-     * Limit tasks to what the account may see: Admin sees every division, a Manager sees the
-     * division they manage, and Staff only sees tasks assigned to them as PIC.
+     * Every assignment, active and ended, oldest first.
+     */
+    public function assignments(): HasMany
+    {
+        return $this->hasMany(TaskAssignment::class)->orderBy('assigned_at')->orderBy('id');
+    }
+
+    public function activeAssignments(): HasMany
+    {
+        return $this->hasMany(TaskAssignment::class)->whereNull('unassigned_at');
+    }
+
+    /**
+     * The active PICs, by name.
+     */
+    public function pics(): BelongsToMany
+    {
+        return $this->belongsToMany(Account::class, 'task_assignments')
+            ->wherePivotNull('unassigned_at')
+            ->withPivot(['id', 'assigned_by', 'assigned_at'])
+            ->orderBy('accounts.fullname')
+            ->orderBy('accounts.id');
+    }
+
+    /**
+     * Collaborating divisions, besides the owning division in division_id. Attaching the owning division is
+     * rejected by TaskDivision.
+     */
+    public function collaboratingDivisions(): BelongsToMany
+    {
+        return $this->belongsToMany(Division::class, 'task_divisions')
+            ->using(TaskDivision::class)
+            // created_at is set by TaskDivision; listing it here would make Laravel also write a missing updated_at.
+            ->withPivot(['added_by']);
+    }
+
+    /**
+     * Tasks the account is an active PIC of. A subquery, not a join, so a task with several PICs is listed once.
+     */
+    public function scopeAssignedTo(Builder $query, Account $account): void
+    {
+        $query->whereHas('activeAssignments', fn (Builder $query) => $query->where('account_id', $account->id));
+    }
+
+    /**
+     * Comments and replies, oldest first.
+     */
+    public function comments(): HasMany
+    {
+        return $this->hasMany(TaskComment::class)->orderBy('created_at')->orderBy('id');
+    }
+
+    /**
+     * Limit tasks to what the account may see. Every active account whose role grants task.view_all sees the tasks
+     * of every division (TASK-19/TASK-12); seeing a task never grants changing it. An inactive account sees nothing.
      */
     public function scopeVisibleTo(Builder $query, Account $account): void
     {
-        if ($account->isAdmin()) {
-            return;
-        }
-
-        if ($account->isManager()) {
-            $query->where('division_id', $account->division_id ?? 0);
+        if (! $account->is_active) {
+            $query->whereRaw('1 = 0');
 
             return;
         }
 
-        $query->where('pic_id', $account->id);
+        if (! $account->hasPermission(Permission::TASK_VIEW_ALL)) {
+            $query->assignedTo($account);
+        }
     }
 
     /**
@@ -125,39 +183,73 @@ class Task extends Model
      */
     public function isVisibleTo(Account $account): bool
     {
-        return match (true) {
-            $account->isAdmin() => true,
-            $account->isManager() => $this->managedBy($account),
-            default => $this->pic_id === $account->id,
-        };
+        return $account->is_active && ($account->hasPermission(Permission::TASK_VIEW_ALL) || $this->assignedTo($account));
     }
 
     /**
-     * Whether the account manages this task: Admin for every division, a Manager for their own.
+     * Who may add or release PICs and forward the task: an account with task.assign that manages the task.
      */
-    public function managedBy(Account $account): bool
+    public function assignableBy(Account $account): bool
+    {
+        return $this->managedBy($account, Permission::TASK_ASSIGN);
+    }
+
+    /**
+     * Whether the account manages this task: Admin and Managers for every division, a Supervisor for the division
+     * they manage. With a permission, the account's role must also grant it. Staff and Freelance never manage a
+     * task; they work on it as its PIC.
+     */
+    public function managedBy(Account $account, ?string $permission = null): bool
+    {
+        return $account->is_active
+            && self::managesDivision($account, $this->division_id)
+            && ($permission === null || $account->hasPermission($permission));
+    }
+
+    /**
+     * The management scope of a role: Admin and Manager cover every division, a Supervisor their own division.
+     */
+    public static function managesDivision(Account $account, ?int $divisionId): bool
     {
         return $account->isAdmin()
-            || ($account->isManager() && $account->division_id !== null && $this->division_id === $account->division_id);
-    }
-
-    public function assignedTo(Account $account): bool
-    {
-        return $this->pic_id !== null && $this->pic_id === $account->id;
+            || $account->isManager()
+            || ($account->isSupervisor() && $account->division_id !== null && $divisionId === $account->division_id);
     }
 
     /**
-     * Seeing a task is not editing it: Admin and the division's Manager may edit it until it is Done, its PIC
-     * only while there is a status step for them to take. Otherwise the task is read-only.
+     * Whether the account is one of the task's active PICs. Every active PIC may run the shared workflow.
+     */
+    public function assignedTo(Account $account): bool
+    {
+        if (! $account->is_active) {
+            return false;
+        }
+
+        if ($this->relationLoaded('pics')) {
+            return $this->pics->contains('id', $account->id);
+        }
+
+        return $this->activeAssignments()->where('account_id', $account->id)->exists();
+    }
+
+    public function hasActivePic(): bool
+    {
+        return $this->relationLoaded('pics') ? $this->pics->isNotEmpty() : $this->activeAssignments()->exists();
+    }
+
+    /**
+     * Seeing a task is not editing it: Admin, Managers, and the division's Supervisor may edit it until it is Done,
+     * its PIC only while there is a status step for them to take. Otherwise the task is read-only.
      */
     public function updatableBy(Account $account): bool
     {
-        return ($this->managedBy($account) && $this->status !== TaskStatus::Done) || $this->nextStatusesFor($account) !== [];
+        return ($this->managedBy($account, Permission::TASK_UPDATE) && $this->status !== TaskStatus::Done)
+            || $this->nextStatusesFor($account) !== [];
     }
 
     /**
-     * Statuses the account may move the task to from its current one: the PIC starts the work and hands it
-     * to QA or finishes it; Admin or the division's Manager makes every other move.
+     * Statuses the account may move the task to from its current one: every active PIC starts the work and hands
+     * it to review or finishes it; Admin, a Manager, or the division's Supervisor makes every other move.
      *
      * @return array<int, TaskStatus>
      */
@@ -169,12 +261,13 @@ class Task extends Model
     }
 
     /**
-     * Whether the account may run this task's QA: Admin for every division, a Manager for their own, and only
-     * for a task that requires QA. Staff never reviews, not even their own work.
+     * Whether the account may review this task: Admin and Managers for every division, a Supervisor for their own,
+     * and only for a task that requires review. Being one of its active PICs does not take that away, so a Manager
+     * or Supervisor may approve their own work (self-approval). Staff and Freelance never review.
      */
     public function reviewableBy(Account $account): bool
     {
-        return $this->requires_review && $this->managedBy($account);
+        return $this->requires_review && $this->managedBy($account, Permission::TASK_REVIEW);
     }
 
     /**
@@ -182,7 +275,7 @@ class Task extends Model
      */
     public function awaitsDecisionFrom(Account $account): bool
     {
-        return $this->status === TaskStatus::OnQa && $this->reviewableBy($account);
+        return $this->status === TaskStatus::OnReview && $this->reviewableBy($account);
     }
 
     /**
@@ -203,7 +296,7 @@ class Task extends Model
         if (! $this->movesStatusFor($account)) {
             return $from->movedByPic()
                 ? "Hanya PIC tugas yang dapat mengubah status dari {$from->label()} ke {$status->label()}."
-                : "Hanya Admin atau Manajer divisi yang dapat mengubah status dari {$from->label()} ke {$status->label()}.";
+                : "Hanya Admin, Manajer, atau Supervisor divisi yang dapat mengubah status dari {$from->label()} ke {$status->label()}.";
         }
 
         if ($from->decidedByReview()) {
@@ -222,11 +315,15 @@ class Task extends Model
      */
     public function resubmitsTo(TaskStatus $status): bool
     {
-        return $status === TaskStatus::ReadyForQa && $this->reviews()->exists();
+        return $status === TaskStatus::ReadyReview && $this->reviews()->exists();
     }
 
     private function movesStatusFor(Account $account): bool
     {
+        if (! $account->hasPermission(Permission::TASK_CHANGE_STATUS)) {
+            return false;
+        }
+
         return $this->status->movedByPic() ? $this->assignedTo($account) : $this->managedBy($account);
     }
 
@@ -237,7 +334,7 @@ class Task extends Model
      */
     public function lockedFieldsFor(Account $account): array
     {
-        if (! $this->managedBy($account)) {
+        if (! $this->managedBy($account, Permission::TASK_UPDATE)) {
             return collect(self::EDITABLE_FIELDS)
                 ->reject(fn (string $field) => $field === 'status')
                 ->mapWithKeys(fn (string $field) => [$field => 'PIC hanya dapat mengubah status tugas.'])
@@ -252,16 +349,28 @@ class Task extends Model
 
         $locked = [];
 
-        if (! $account->isAdmin()) {
-            $locked['division_id'] = 'Hanya Admin yang dapat memindahkan tugas ke divisi lain.';
+        if (! $this->assignableBy($account)) {
+            $locked['division_id'] = 'Anda tidak berwenang memindahkan tugas ke divisi lain.';
         }
 
         if ($this->status->inQa()) {
             $locked['requires_review'] = 'Kewajiban QA tidak dapat diubah setelah tugas masuk tahap QA.';
-            $locked['pic_id'] = 'PIC tidak dapat diganti selama tugas dalam tahap QA.';
         }
 
         return $locked;
+    }
+
+    /**
+     * Why the account may not add or release PICs right now, or null when it may.
+     */
+    public function assignmentLockFor(Account $account): ?string
+    {
+        return match (true) {
+            ! $this->assignableBy($account) => 'Anda tidak berwenang mengatur PIC tugas ini.',
+            $this->status === TaskStatus::Done => 'Tugas yang sudah selesai tidak dapat diubah.',
+            $this->status->inQa() => 'PIC tidak dapat diganti selama tugas dalam tahap QA.',
+            default => null,
+        };
     }
 
     /**

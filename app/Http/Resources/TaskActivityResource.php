@@ -19,7 +19,7 @@ class TaskActivityResource extends JsonResource
             'action' => $this->action,
             'action_label' => $this->resource->actionLabel(),
             'description' => $this->resource->description(),
-            'changes' => $this->changes ?? (object) [],
+            'changes' => $this->resource->orderedChanges() ?: (object) [],
             'actor' => $this->resource->actorSummary(),
             'created_at' => $this->created_at?->toIso8601ZuluString(),
         ];

@@ -21,13 +21,24 @@ class TaskActivity extends Model
 
     public const UPDATED = 'updated';
 
+    public const DELETED = 'deleted';
+
     public const ASSIGNED = 'assigned';
 
     public const REASSIGNED = 'reassigned';
 
+    public const UNASSIGNED = 'unassigned';
+
     public const STATUS_CHANGED = 'status_changed';
 
+    /**
+     * Evidence added to the task.
+     */
     public const EVIDENCE_SUBMITTED = 'evidence_submitted';
+
+    public const EVIDENCE_DELETED = 'evidence_deleted';
+
+    public const COMMENT_ADDED = 'comment_added';
 
     public const APPROVED = 'approved';
 
@@ -41,10 +52,14 @@ class TaskActivity extends Model
     public const ACTION_LABELS = [
         self::CREATED => 'Tugas dibuat',
         self::UPDATED => 'Informasi tugas diubah',
+        self::DELETED => 'Tugas dihapus',
         self::ASSIGNED => 'PIC ditetapkan',
         self::REASSIGNED => 'PIC diganti',
+        self::UNASSIGNED => 'PIC dilepas',
         self::STATUS_CHANGED => 'Status diubah',
         self::EVIDENCE_SUBMITTED => 'Evidence dikirim',
+        self::EVIDENCE_DELETED => 'Evidence dihapus',
+        self::COMMENT_ADDED => 'Komentar ditambahkan',
         self::APPROVED => 'Tugas disetujui',
         self::REVISION_REQUESTED => 'Revisi diminta',
         self::RESUBMITTED => 'Hasil revisi dikirim ulang',
@@ -57,6 +72,7 @@ class TaskActivity extends Model
         'division' => 'Divisi',
         'platform' => 'Platform',
         'pic' => 'PIC',
+        'pics' => 'PIC',
         'priority' => 'Prioritas',
         'status' => 'Status',
         'start_date' => 'Tanggal mulai',
@@ -124,12 +140,34 @@ class TaskActivity extends Model
     }
 
     /**
+     * The stored changes in a fixed order: fields in the order of FIELD_LABELS (other keys such as evidence and review
+     * after them), each as old then new. MySQL's JSON column does not keep key order, so without this the history would
+     * read differently depending on the database.
+     *
+     * @return array<string, mixed>
+     */
+    public function orderedChanges(): array
+    {
+        // $this->changes is Eloquent's own dirty-tracking property, not the column.
+        $changes = $this->getAttribute('changes') ?? [];
+        $rank = array_flip(array_keys(self::FIELD_LABELS));
+
+        uksort($changes, fn (string $a, string $b) => [$rank[$a] ?? PHP_INT_MAX, $a] <=> [$rank[$b] ?? PHP_INT_MAX, $b]);
+
+        return array_map(
+            fn (mixed $change) => is_array($change) && array_key_exists('old', $change) && array_key_exists('new', $change)
+                ? ['old' => $change['old'], 'new' => $change['new']] + $change
+                : $change,
+            $changes,
+        );
+    }
+
+    /**
      * Human-readable summary of what changed, built from the stored old and new values.
      */
     public function description(): string
     {
-        // $this->changes is Eloquent's own dirty-tracking property, not the column.
-        $changes = $this->getAttribute('changes') ?? [];
+        $changes = $this->orderedChanges();
         $parts = [];
 
         foreach ($changes as $field => $change) {
@@ -162,7 +200,9 @@ class TaskActivity extends Model
     private function formatValue(string $field, mixed $value): string
     {
         return match (true) {
-            $value === null || $value === '' => '-',
+            $value === null || $value === '' || $value === [] => '-',
+            // A list of references, such as the PICs before and after an assignment change.
+            is_array($value) && array_is_list($value) => implode(', ', array_map(fn (mixed $item) => is_array($item) ? (string) ($item['name'] ?? '-') : (string) $item, $value)),
             is_array($value) => (string) ($value['name'] ?? '-'),
             is_bool($value) => $value ? 'Ya' : 'Tidak',
             $field === 'status' => TaskStatus::tryFrom($value)?->label() ?? (string) $value,

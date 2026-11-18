@@ -79,14 +79,8 @@ class TaskMonitoringService
      */
     private function scope(Account $account, string $scope): array
     {
-        if ($scope === self::SCOPE_REPORT || $account->isAdmin()) {
-            return ['key' => $scope, 'label' => 'Seluruh divisi'];
-        }
-
-        return [
-            'key' => $scope,
-            'label' => $account->isManager() ? 'Tugas divisi Anda' : 'Tugas yang ditugaskan kepada Anda',
-        ];
+        // Every active account sees the tasks of every division, so both scopes cover the same tasks.
+        return ['key' => $scope, 'label' => 'Seluruh divisi'];
     }
 
     /**
