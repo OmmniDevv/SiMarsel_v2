@@ -8,7 +8,7 @@ Wajib login. Header dan kode error umum mengikuti [authentication.md](authentica
 
 ## Role & cakupan data
 
-Role dan kewenangan membuat tugas berasal dari `GET /api/tasks/meta`. Jika pemuatan meta gagal, frontend memakai pemetaan role akun `MGR` → `manager`, `EMP` → `staff`, dan `ADM` → `admin`.
+Role dan kewenangan membuat tugas berasal dari `GET /api/tasks/meta`. Jika pemuatan meta gagal, frontend memakai pemetaan role akun `ADM` → `admin`, `MGR` → `manager`, serta `SPV`, `EMP`, dan `FRL` → `staff`.
 
 Semua akun **aktif** melihat daftar dan detail tugas **seluruh divisi** (Board, Table, Calendar, Timeline, histori, evidence, review, monitoring). Melihat tidak memberi hak mengubah; hak mengubah mengikuti permission role (`meta.permissions`), cakupan divisi, dan assignment PIC aktif.
 
@@ -26,6 +26,14 @@ Semua akun **aktif** melihat daftar dan detail tugas **seluruh divisi** (Board, 
 - `meta.role` tetap tiga nilai (`admin`, `manager`, `staff`) agar kode lama tidak rusak; pakai `meta.role_code` untuk membedakan Supervisor dan Freelance, dan `meta.can_create` untuk tombol Buat Tugas.
 
 Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend hanya untuk tampilan.
+
+**Frontend (TASK-12)**:
+
+- Nama role (Admin, Manajer, Supervisor, Staff, Freelance) berasal dari `meta.role_code`. Filter divisi tersedia untuk semua role; nilai awalnya mengikuti `meta.default_division`.
+- Papan dan Tabel memiliki cakupan **Semua Tugas** (`scope=all_tasks`) dan **Tugas Saya** (`scope=my_tasks`). Cakupan tersimpan di URL (`?scope=`) dan filter aktif dipertahankan saat berpindah cakupan.
+- `GET /api/tasks/monitoring` belum memiliki cakupan `my_tasks`, sehingga ringkasan pada Tugas Saya dihitung frontend dari daftar `my_tasks` dengan rumus yang sama.
+- Tugas tanpa `can_edit`, `can_assign`, dan `can_delete` diberi tanda **Hanya lihat**. Tombol Ubah, Atur PIC, Hapus, dan keputusan review mengikuti flag backend per tugas.
+- Pemilihan PIC mengirim daftar lengkap `pic_ids`. Tombol Hapus Tugas memakai `DELETE /api/tasks/{id}` dengan `version`.
 
 ## Objek
 
