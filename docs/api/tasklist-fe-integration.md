@@ -81,7 +81,7 @@ lintas divisi, dan tampilan read-only untuk tugas di luar kewenangan. Calendar d
 | `PATCH /api/tasks/{id}` | Tidak lagi mengubah PIC; `pic_id`/`pic_ids` diabaikan. Gunakan endpoint assignment. |
 | Histori | Perubahan PIC baru memakai `changes.pics` (daftar) dan action `assigned`/`unassigned`/`reassigned`; histori lama tetap `changes.pic`. Pakai `description` dari backend. |
 | Hapus akun | `DELETE /api/accounts/{id}` bisa `422` bila akun punya riwayat tugas; tampilkan `message`. |
-| Calendar & Timeline | Agenda kini dari `calendar_events` sesuai ERD; bentuk response dan id agenda **tidak berubah**. Agenda tidak lagi terhubung ke tugas: `task_id` `null` dan `can_view_detail` `false`, sehingga tombol "Lihat Detail Tugas Terkait" di pop-up agenda tidak muncul (tanpa perubahan kode FE). Agenda umum (`division` `null`) untuk semua; agenda divisi hanya untuk divisinya, Admin, dan Manajer. Agenda internal lama yang ditujukan ke beberapa divisi kini hanya tampil di satu divisi. |
+| Calendar & Timeline | Agenda kini dari `calendar_events`; id agenda dan aturan akses **sama dengan sebelumnya**: agenda bersama untuk semua, agenda internal untuk Admin dan semua divisi tujuannya (Manajer hanya divisinya). Field baru `is_shared` (tambahan, tidak wajib dipakai). `target_divisions` tetap berisi semua divisi tujuan. Agenda tidak lagi terhubung ke tugas: `task_id` `null` dan `can_view_detail` `false`, sehingga tombol "Lihat Detail Tugas Terkait" di pop-up agenda tidak muncul (tanpa perubahan kode FE). |
 
 ## 3. Kesiapan per fitur
 

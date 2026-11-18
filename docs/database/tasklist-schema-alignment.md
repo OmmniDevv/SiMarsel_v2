@@ -30,7 +30,7 @@ rollback (bagian 8), dan penyesuaian skema dengan ERD (revisi kedua: `calendar_e
 | `task_reviews` | `cycle`, `decision` varchar(20), tanpa `updated_at` | `decision` varchar(30), `updated_at` | `decision` varchar(30), `updated_at` ditambah (diisi `created_at`), `cycle` di-drop |
 | `task_comments` | Tidak ada | Komentar + balasan | Tabel baru; `created_at` NOT NULL, index `parent_comment_id` |
 | `task_activities` | `action` varchar(30), `created_at` nullable, `actor_name_snapshot` | `action` varchar(50), `created_at` NOT NULL | `action` dilebarkan; `created_at` NOT NULL (baris kosong diisi waktu pembuatan task) |
-| `calendar_events` | Agenda di `schedule_events` (+ `schedule_event_divisions`) | `calendar_events` | Tabel baru persis sesuai ERD, menjadi **satu-satunya sumber agenda** (bagian 5a) |
+| `calendar_events` | Agenda di `schedule_events` (+ `schedule_event_divisions`) | `calendar_events` + `calendar_event_divisions` | Tabel baru sesuai ERD ditambah `is_shared` dan divisi tujuan (penyimpangan yang disengaja), menjadi **satu-satunya sumber agenda** (bagian 5a) |
 
 ## 2. Pemetaan nama field / nilai
 
@@ -142,44 +142,53 @@ Prasyarat: semua migration sebelumnya sudah jalan, termasuk `2026_11_05_*`, `202
   Saat tugas dipindah ke divisi lain, divisi tujuan dihapus dari daftar kolaborator. Belum ada endpoint untuk mengelola
   divisi kolaborator.
 
-### 5a. Agenda: `calendar_events` sesuai ERD sebagai satu-satunya sumber (revisi PR)
+### 5a. Agenda: `calendar_events` sebagai satu-satunya sumber (revisi PR)
 
-- `calendar_events` **persis sesuai ERD**: `id`, `division_id` (nullable), `creator_id` (NOT NULL), `title`,
-  `description`, `start_at`, `end_at`, timestamps, `deleted_at`, index `start_at`, FK `division_id` dan `creator_id`.
-  Tidak ada kolom atau tabel tambahan (`is_shared`, `task_id`, `legacy_schedule_event_id`, dan
-  `calendar_event_divisions` dari revisi sebelumnya dihapus).
-- **Aturan akses agenda** (`CalendarEvent::scopeVisibleTo`):
+- `calendar_events` memuat semua kolom ERD: `id`, `division_id` (nullable, divisi penyelenggara), `creator_id`
+  (NOT NULL), `title`, `description`, `start_at`, `end_at`, timestamps, `deleted_at`, index `start_at`, FK
+  `division_id` dan `creator_id`. Ada dua **penyimpangan dari ERD v1.0 yang disengaja** (review PR #115), agar aturan
+  akses agenda Schedule/Calendar yang sudah berjalan tidak berubah:
+  - kolom `is_shared` (boolean, NOT NULL, default `false`): penanda eksplisit agenda bersama;
+  - tabel `calendar_event_divisions` (`calendar_event_id`, `division_id`; PK gabungan, FK ke kedua tabel, cascade
+    saat agenda atau divisi dihapus): semua divisi tujuan agenda internal.
 
-  | Agenda | Admin | Manajer | Supervisor, Staff, Freelance |
-  |---|---|---|---|
-  | `division_id` NULL (agenda umum perusahaan) | ✓ | ✓ | ✓ |
-  | `division_id` terisi (agenda divisi) | ✓ | ✓ | Hanya akun divisi itu |
+  Keduanya perlu ditambahkan ke ERD oleh SA. `task_id` dan `legacy_schedule_event_id` tidak ada (agenda tidak
+  terhubung ke tugas).
+- **Aturan akses agenda** (`CalendarEvent::scopeVisibleTo`), sama dengan aplikasi sebelumnya:
 
-  Akun nonaktif tidak melihat agenda. Fokus divisi di Calendar/Timeline menampilkan agenda divisi itu ditambah agenda
-  umum, dan tidak pernah memperluas visibilitas.
+  | Agenda | Admin | Manajer, Supervisor, Staff, Freelance |
+  |---|---|---|
+  | Bersama (`is_shared = 1`) | ✓ | ✓ |
+  | Internal (`is_shared = 0`) | ✓ | Hanya bila divisi akunnya termasuk divisi tujuan |
+  | Internal tanpa divisi tujuan | ✓ | – |
+
+  `division_id` (penyelenggara) tidak memberi akses. Manajer tidak melihat agenda internal divisi lain (contoh: Manajer
+  Finance tidak melihat agenda internal Sales). Akun tanpa divisi hanya melihat agenda bersama; akun nonaktif tidak
+  melihat agenda. Fokus divisi di Calendar/Timeline menampilkan agenda yang diselenggarakan divisi itu atau
+  menjadikannya divisi tujuan, ditambah agenda bersama tanpa penyelenggara, dan tidak pernah memperluas visibilitas.
 - **Pemindahan dari `schedule_events`** (migration #16, `App\Support\LegacyAgendaMapper`). Id agenda dipertahankan
   (tabel `calendar_events` masih kosong saat migrate), jadi id di API tidak berubah dan pemulihan memetakan agenda lewat
-  id yang sama:
+  id yang sama. Tidak ada data yang dikarang atau dibuang:
 
   | `schedule_events` | `calendar_events` |
   |---|---|
-  | Agenda bersama (`is_shared = 1`) | `division_id` NULL, terlihat semua |
-  | Agenda internal | `division_id` = divisi penyelenggara; bila kosong, divisi tujuan pertama; bila kosong, divisi pembuat |
-  | Agenda internal tanpa ketiganya | **Migrate berhenti** (`UnmappableAgendaException`) dan tidak menyalin apa pun; lengkapi datanya lalu migrate ulang |
-  | `creator_id` NULL | Akun Admin pertama (id terkecil); migrate berhenti bila tidak ada akun Admin |
+  | `is_shared` | `is_shared` (sama) |
+  | `owner_division_id` | `division_id` (sama, boleh NULL) |
+  | `schedule_event_divisions` | `calendar_event_divisions`, **semua** divisi tujuan |
+  | `creator_id` | `creator_id` (sama). Bila NULL, **migrate berhenti** (`UnmappableAgendaException`) dengan id dan judul agenda, tanpa menyalin apa pun; isi pembuat aslinya lalu migrate ulang. Tidak ada akun pengganti |
   | `start_date`, `end_date` | `start_at`, `end_at` (00:00); API tetap mengirim `start_date`/`end_date` |
-  | `task_id`, `schedule_event_divisions` | Tidak dipindah (tidak ada di ERD); tetap tersimpan di tabel lama |
+  | `task_id` | Tidak dipindah (tidak ada di ERD); tetap tersimpan di tabel lama |
   | `created_at`, `updated_at` | Disalin apa adanya |
 
-- **Dampak yang disengaja**: agenda internal yang ditujukan ke beberapa divisi kini hanya terlihat oleh satu divisi
-  (dilaporkan `tasks:validate-migration`), dan agenda tidak lagi menautkan tugas (API mengirim `task_id` `null` dan
-  `can_view_detail` `false`; bentuk response tidak berubah).
+- **Dampak yang disengaja**: agenda tidak lagi menautkan tugas (API mengirim `task_id` `null` dan `can_view_detail`
+  `false`). Response agenda mendapat field tambahan `is_shared`; `target_divisions` tetap berisi semua divisi tujuan.
 - **Pembaca dan penulis**: `TaskCalendarService`, `TaskScheduleService`, `CalendarEventResource`, `ScheduleItemResource`,
   `CalendarEventFactory`, dan `CalendarEventSeeder` memakai `CalendarEvent`. Belum ada endpoint tulis agenda
   (TASK-11/TASK-15).
 - **`schedule_events` tidak dihapus** dan tidak lagi dibaca atau ditulis aplikasi, kecuali oleh prosedur pemulihan
   (bagian 8). Tabel ini di-drop dengan migration terpisah setelah hasil pemindahan diverifikasi di production
-  (`tasks:validate-migration`: "Agenda lama tersalin" dan "Salinan agenda sesuai pemetaan ERD" PASS).
+  (`tasks:validate-migration`: "Agenda lama tersalin" dan "Salinan agenda sama dengan aslinya" PASS; yang kedua FAIL
+  bila ada agenda yang kehilangan divisi tujuan atau `is_shared`-nya berubah).
 
 ### 5b. Aturan akses (revisi PR, acceptance criteria TASK-19/TASK-12)
 
@@ -244,11 +253,8 @@ SELECT status, COUNT(*) FROM tasks GROUP BY status;
 SELECT COUNT(*) FROM task_activities;
 SELECT COUNT(*) FROM accounts;
 SELECT COUNT(*) FROM schedule_events;
--- agenda internal tanpa divisi penyelenggara, divisi tujuan, maupun divisi pembuat menghentikan migrate (bagian 5a)
-SELECT s.id, s.title FROM schedule_events s
-LEFT JOIN accounts a ON a.id = s.creator_id
-WHERE s.is_shared = 0 AND s.owner_division_id IS NULL AND a.division_id IS NULL
-  AND NOT EXISTS (SELECT 1 FROM schedule_event_divisions d WHERE d.schedule_event_id = s.id);
+-- agenda tanpa pembuat menghentikan migrate (bagian 5a); isi creator_id dengan pembuat aslinya sebelum deploy
+SELECT id, title FROM schedule_events WHERE creator_id IS NULL;
 ```
 
 ### Migrate dan seed
@@ -318,8 +324,8 @@ php artisan tasks:recovery to-legacy --apply   # lalu deploy kode versi sebelumn
 
 `to-legacy` mengisi `tasks.pic_id` dengan PIC aktif paling awal, mengembalikan nama status lama di `tasks` dan
 `task_activities`, serta menyalin agenda terbaru ke `schedule_events` dengan id yang sama (baru, diubah, dan dihapus;
-agenda umum menjadi agenda bersama, agenda divisi menjadi agenda internal untuk divisi itu; agenda yang tidak diubah
-mempertahankan baris aslinya termasuk `task_id` dan divisi tujuannya). Tabel baru tidak disentuh, jadi PIC tambahan,
+termasuk `is_shared`, divisi penyelenggara, dan semua divisi tujuan; agenda yang tidak diubah mempertahankan baris
+aslinya termasuk `task_id`). Tabel baru tidak disentuh, jadi PIC tambahan,
 komentar, dan agenda tetap tersimpan. Daftar agenda yang ditulis disimpan di cache
 (`tasklist.recovery.legacy_agenda_ids`) agar `from-legacy` bisa mengenali agenda yang dihapus aplikasi lama.
 

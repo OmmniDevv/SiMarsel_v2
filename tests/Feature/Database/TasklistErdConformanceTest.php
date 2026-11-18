@@ -10,7 +10,8 @@ use Tests\TestCase;
 /**
  * The migrated schema against the Tasklist ERD TO-BE v1.0 (docs/database/tasklist-erd-to-be-v1.dbml): every ERD
  * column with its nullability (and type on MySQL), index, unique key, and reference exists. Columns the ERD does
- * not list are allowed only when they are a documented deviation (DEVIATIONS).
+ * not list are allowed only when they are a documented deviation (DEVIATIONS); the agenda target divisions table is
+ * one too.
  */
 class TasklistErdConformanceTest extends TestCase
 {
@@ -82,6 +83,7 @@ class TasklistErdConformanceTest extends TestCase
         'tasks' => ['pic_id'],                      // kept until every reader is compatible, as the ERD notes
         'task_assignments' => ['active_flag'],      // the MySQL mechanism the ERD asks for: one active PIC per account
         'task_activities' => ['actor_name_snapshot'], // existing before TASK-19: name of a deleted actor
+        'calendar_events' => ['is_shared'],         // agenda access of the existing Schedule/Calendar (PR #115 review)
     ];
 
     /**
@@ -175,9 +177,24 @@ class TasklistErdConformanceTest extends TestCase
         }
     }
 
-    public function test_calendar_events_has_no_columns_or_tables_beyond_the_erd(): void
+    /**
+     * Beyond the ERD, kept so agendas keep the access rules of the existing Schedule/Calendar: is_shared and the
+     * target divisions of an internal agenda. calendar_events has no task link.
+     */
+    public function test_the_agenda_deviations_from_the_erd_are_only_is_shared_and_the_target_divisions(): void
     {
-        $this->assertFalse(Schema::hasTable('calendar_event_divisions'));
+        $isShared = collect(Schema::getColumns('calendar_events'))->firstWhere('name', 'is_shared');
+        $this->assertFalse($isShared['nullable']);
+
+        $this->assertSame(['calendar_event_id', 'division_id'], Schema::getColumnListing('calendar_event_divisions'));
+        $this->assertTrue(collect(Schema::getIndexes('calendar_event_divisions'))
+            ->contains(fn (array $index) => $index['columns'] === ['calendar_event_id', 'division_id'] && $index['unique']));
+        $this->assertEqualsCanonicalizing(
+            ['calendar_event_id>calendar_events.id', 'division_id>divisions.id'],
+            collect(Schema::getForeignKeys('calendar_event_divisions'))
+                ->map(fn (array $key) => $key['columns'][0].'>'.$key['foreign_table'].'.'.$key['foreign_columns'][0])->all(),
+        );
+
         $this->assertSame(['calendar_events.division_id', 'calendar_events.creator_id'], collect(Schema::getForeignKeys('calendar_events'))
             ->map(fn (array $key) => 'calendar_events.'.$key['columns'][0])->sort(fn ($a, $b) => $b <=> $a)->values()->all());
     }

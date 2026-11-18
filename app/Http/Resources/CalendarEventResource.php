@@ -7,8 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * An agenda on the Calendar: its general information only. division and target_divisions both name the division
- * of an internal agenda; both are empty for a company-wide agenda.
+ * An agenda on the Calendar: its general information only. division is the organising division; target_divisions
+ * are the divisions an internal agenda is meant for (empty for a shared agenda).
  */
 class CalendarEventResource extends JsonResource
 {
@@ -23,7 +23,10 @@ class CalendarEventResource extends JsonResource
             'id' => $this->id,
             'title' => $this->title,
             'division' => $this->division ? $this->divisionData($this->division) : null,
-            'target_divisions' => $this->division ? [$this->divisionData($this->division)] : [],
+            'is_shared' => $this->is_shared,
+            'target_divisions' => $this->is_shared
+                ? []
+                : $this->targetDivisions->map(fn (Division $division) => $this->divisionData($division))->all(),
             'start_date' => $this->start_at->toDateString(),
             'end_date' => $this->end_at?->toDateString(),
             'description' => $this->description,

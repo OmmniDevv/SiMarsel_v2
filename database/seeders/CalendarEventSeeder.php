@@ -39,6 +39,7 @@ class CalendarEventSeeder extends Seeder
             CalendarEvent::create([
                 'creator_id' => $creator->id,
                 'title' => $title,
+                'is_shared' => true,
                 'start_at' => $monday->addDays($offset),
                 'end_at' => $days > 1 ? $monday->addDays($offset + $days - 1) : null,
             ]);
@@ -48,7 +49,8 @@ class CalendarEventSeeder extends Seeder
             'division_id' => $division->id,
             'creator_id' => $creator->id,
             'title' => "Briefing internal {$division->name}",
+            'is_shared' => false,
             'start_at' => $monday->addDays(1 + $index % 5),
-        ]));
+        ])->targetDivisions()->attach($division->id));
     }
 }
