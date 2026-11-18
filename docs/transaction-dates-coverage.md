@@ -216,20 +216,20 @@ Implementasi resolver dimiliki FIX-04-BE-01. Tabel ini adalah nilai harapan.
 | Ada yang `is_complete = false` | `unavailable` | `null` | `null` |
 | Ada yang tidak tersimpan | `unavailable` | `null` | `null` |
 
-## Rancangan agregasi bersama (dikerjakan di FIX-02-BE-02)
+## Agregasi bersama (FIX-02-BE-02)
 
-Bagian ini adalah rancangan dan kontrak untuk FIX-02-BE-02, **belum diimplementasikan**. Kode saat ini belum memiliki layanan perhitungan agregasi maupun test-nya. Implementasi dan test-nya dikerjakan di FIX-02-BE-02.
+Diimplementasikan di `App\Services\TransactionAggregationService` (`aggregate()`, `aggregateDaily()`, `buyerRows()`, `membersOf()`) dan `App\Services\ComparisonSnapshotService` (`compare()`, `read()`), dan diperiksa oleh `tests/Unit/TransactionAggregationTest.php` dan `tests/Unit/ComparisonSnapshotTest.php`.
 
-Input yang dirancang: baris transaksi berbentuk kontrak di atas dan baris `dashboard_snapshots`. Agregasi hanya membaca keadaan tersimpan dan tidak memanggil Markaz. Query database disambungkan setelah migrasi FIX-15 tersedia.
+Input: baris transaksi berbentuk kontrak di atas (`App\Support\TransactionAggregation\TransactionRecord::fromArray()`) dan baris `dashboard_snapshots`. Agregasi hanya membaca keadaan tersimpan dan tidak memanggil Markaz. Query database disambungkan setelah migrasi FIX-15 tersedia.
 
-Filter yang dirancang: `platform_ids` (wajib, tidak kosong), `date_from`/`date_to` WIB inklusif, `basis` (`created` atau `paid`), dan `complete_until` dari resolver FIX-04-BE-01. Ketersediaan dan cutoff diturunkan dari `complete_until` sesuai tabel status ketersediaan. Kejadian dihitung jika `periode awal ≤ waktu < cutoff`.
+Filter (`App\Support\TransactionAggregation\AggregationFilter`): `platform_ids` (wajib, tidak kosong), `date_from`/`date_to` WIB inklusif, `basis` (`created` atau `paid`), dan `complete_until` dari resolver FIX-04-BE-01. Ketersediaan dan cutoff diturunkan dari `complete_until` sesuai tabel status ketersediaan. Kejadian dihitung jika `periode awal ≤ waktu < cutoff`.
 
 | `basis` | Waktu kelompok | Baris yang dihitung |
 |---|---|---|
 | `created` | `markaz_created_at` | Baris pembeli dengan semua status |
 | `paid` | `paid_date` + `paid_time` (jam kosong = 00.00) | Baris pembeli Success dengan tanggal bayar valid, bukan klaim |
 
-Output agregasi periode: `basis`, `platform_ids`, `date_from`, `date_to`, `availability`, `as_of` (cutoff, `null` jika `unavailable`), dan `metrics`. Agregasi harian mengeluarkan satu output per hari dengan ketersediaannya masing-masing.
+Output `aggregate()`: `basis`, `platform_ids`, `date_from`, `date_to`, `availability`, `as_of` (cutoff, `null` jika `unavailable`), dan `metrics`. `aggregateDaily()` mengeluarkan satu output per hari dengan ketersediaannya masing-masing.
 
 | `metrics` dasar `created` | Arti |
 |---|---|
@@ -252,7 +252,7 @@ Jika `availability = unavailable`, semua nilai `metrics` bernilai `null`.
 
 ### Pembanding
 
-Pembanding yang dirancang memakai filter periode pembanding:
+`ComparisonSnapshotService::compare()` memakai filter periode pembanding:
 
 | Ketersediaan filter | Sumber (`source`) | Nilai |
 |---|---|---|
