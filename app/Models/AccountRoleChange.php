@@ -8,9 +8,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * One role an account was given: the role before (null at creation), the role after, who changed it, and when.
- * Append-only audit; the application never updates or deletes these rows.
+ * Append-only audit; the application never updates or deletes these rows. The names and usernames are copied in
+ * when the row is written, so it still says who was changed and by whom after either account is deleted.
  */
-#[Fillable(['account_id', 'old_role_id', 'new_role_id', 'changed_by', 'changed_at'])]
+#[Fillable([
+    'account_id', 'account_fullname', 'account_username', 'old_role_id', 'new_role_id',
+    'changed_by', 'changed_by_fullname', 'changed_by_username', 'changed_at',
+])]
 class AccountRoleChange extends Model
 {
     public $timestamps = false;

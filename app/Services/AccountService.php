@@ -39,19 +39,23 @@ class AccountService
     }
 
     /**
+     * The account row is locked and its current role read inside the transaction, so of two role changes made at
+     * nearly the same time the second waits for the first and its audit starts from the role the first one saved.
+     *
      * @param  array<string, mixed>  $data
      *
      * @throws CannotChangeOwnRoleException
      */
     public function update(Account $account, array $data, Account $actor): Account
     {
-        if ($account->is($actor) && array_key_exists('role_id', $data) && (int) $data['role_id'] !== (int) $account->role_id) {
-            throw new CannotChangeOwnRoleException;
-        }
+        return DB::transaction(function () use ($account, $data, $actor) {
+            $account = $this->accountRepository->lockForUpdate($account);
+            $oldRoleId = $account->role_id;
 
-        $oldRoleId = $account->role_id;
+            if ($account->is($actor) && array_key_exists('role_id', $data) && (int) $data['role_id'] !== (int) $oldRoleId) {
+                throw new CannotChangeOwnRoleException;
+            }
 
-        return DB::transaction(function () use ($account, $data, $actor, $oldRoleId) {
             $account = $this->accountRepository->update($account, $data);
 
             // A role change takes effect on the next request, since permissions are read from the role; task history
@@ -85,9 +89,13 @@ class AccountService
     {
         AccountRoleChange::create([
             'account_id' => $account->id,
+            'account_fullname' => $account->fullname,
+            'account_username' => $account->username,
             'old_role_id' => $oldRoleId,
             'new_role_id' => $account->role_id,
             'changed_by' => $actor->id,
+            'changed_by_fullname' => $actor->fullname,
+            'changed_by_username' => $actor->username,
             'changed_at' => now(),
         ]);
     }

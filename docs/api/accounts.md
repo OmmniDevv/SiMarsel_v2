@@ -90,6 +90,11 @@ Setiap kali role berubah, perubahannya dicatat di tabel audit `account_role_chan
 mengubah, waktu). Pembuatan akun juga dicatat dengan role lama kosong. Hak akses Tasklist langsung mengikuti role baru
 pada request berikutnya, tanpa mengubah histori tugas. Belum ada endpoint untuk membaca audit ini.
 
+Audit tetap tersimpan setelah akun dihapus: `account_id` atau `changed_by` menjadi `null`, sedangkan nama dan username
+akun yang diubah serta pengubahnya sudah disalin ke audit saat dicatat. Menghapus akun yang hanya punya audit role
+tetap diizinkan. Akun dikunci selama perubahan disimpan, sehingga dua perubahan role yang hampir bersamaan tercatat
+berurutan (mis. Staff → Supervisor, lalu Supervisor → Manajer).
+
 **422**, jika Manager mencoba mengubah role akunnya sendiri:
 
 ```json

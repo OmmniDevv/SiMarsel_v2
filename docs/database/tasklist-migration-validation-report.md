@@ -162,7 +162,7 @@ Diuji di `TaskRoleCompatibilityTest`, `TaskListingTest`, `TaskAssignmentTest`, `
 | Hapus Task Card (TASK-12) | Admin dan Manajer semua divisi, Supervisor divisinya `200`; Staff/Freelance (termasuk PIC) dan Supervisor divisi lain `403`; tugas Done `422`; task terhapus hilang dari semua tampilan dan `404` (`TaskDeletionAndPreviewTest`) |
 | Catatan kerja PIC (TASK-13) | Hanya PIC aktif menulis/menghapus catatannya sendiri; catatan PIC lain, `description`, status, dan `version` tidak berubah; Admin/Manajer/Supervisor non-PIC `403`; PIC yang dilepas `403` dan catatannya tetap di assignment lama; Done `422`; tercatat di histori (`TaskRoleBasedManagementTest`) |
 | Hapus evidence (TASK-13) | Hanya PIC aktif pengunggahnya saat To Do/On Process `200` (soft delete, file tetap, histori `evidence_deleted`); PIC lain, PIC yang dilepas, role lain, evidence lama tanpa pengunggah `403`; Ready Review/On Review/Done `422`; tugas tidak ikut terhapus (`TaskRoleBasedManagementTest`) |
-| Audit role (TASK-12) | Pembuatan akun dan setiap perubahan role tercatat di `account_role_changes`; histori task tidak berubah (`AccountRoleAuditTest`) |
+| Audit role (TASK-12) | Pembuatan akun dan setiap perubahan role tercatat di `account_role_changes`; histori task tidak berubah; audit tetap ada dengan nama/username akun dan pengubahnya setelah salah satunya dihapus; dua perubahan hampir bersamaan tercatat berurutan dari role terbaru (`AccountRoleAuditTest`) |
 
 ### 5.4 Pemulihan setelah fitur dipakai
 
