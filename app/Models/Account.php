@@ -94,6 +94,27 @@ class Account extends Authenticatable
             ->whereHas('role', fn (Builder $query) => $query->whereIn('code_role', Role::PIC_ROLES));
     }
 
+    /**
+     * Accounts the assigner may add as a new PIC: Admin and Managers from every division, a Supervisor only from the
+     * division they manage. Anyone else may not assign PICs.
+     */
+    public function scopeAssignableAsPicBy(Builder $query, Account $assigner): void
+    {
+        $query->assignableAsPic();
+
+        if (! $assigner->assignsPicsAcrossDivisions()) {
+            $query->where('division_id', $assigner->isSupervisor() ? ($assigner->division_id ?? 0) : 0);
+        }
+    }
+
+    /**
+     * Admin and Managers work across divisions: they assign PICs from, and move tasks to, every division.
+     */
+    public function assignsPicsAcrossDivisions(): bool
+    {
+        return $this->isAdmin() || $this->isManager();
+    }
+
     public function isAdmin(): bool
     {
         return $this->role?->code_role === Role::ADMIN;

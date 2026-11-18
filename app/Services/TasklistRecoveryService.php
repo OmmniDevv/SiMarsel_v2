@@ -6,6 +6,7 @@ use App\Support\LegacyAgendaMapper;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Recovery of the TASK-19 Tasklist changes once the application has written data the old schema cannot hold.
@@ -54,6 +55,7 @@ class TasklistRecoveryService
             'Task yang dihapus (soft delete)' => DB::table('tasks')->whereNotNull('deleted_at')->count(),
             'Evidence yang dihapus (soft delete)' => DB::table('task_evidences')->whereNotNull('deleted_at')->count(),
             'Akun nonaktif' => DB::table('accounts')->where('is_active', false)->count(),
+            'Catatan kerja PIC' => Schema::hasColumn('task_assignments', 'work_note') ? DB::table('task_assignments')->whereNotNull('work_note')->count() : 0,
         ];
     }
 

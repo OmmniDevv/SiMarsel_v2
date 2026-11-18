@@ -72,7 +72,7 @@ class Task extends Model
 
     public function evidences(): HasMany
     {
-        return $this->hasMany(TaskEvidence::class)->latest();
+        return $this->hasMany(TaskEvidence::class)->latest()->chaperone();
     }
 
     /**
@@ -192,6 +192,27 @@ class Task extends Model
     public function assignableBy(Account $account): bool
     {
         return $this->managedBy($account, Permission::TASK_ASSIGN);
+    }
+
+    /**
+     * Who may move the task to another division: Admin and Managers, who work across divisions. A Supervisor manages
+     * the PICs of their own division's tasks but does not hand them to another division.
+     */
+    public function forwardableBy(Account $account): bool
+    {
+        return $this->assignableBy($account) && $account->assignsPicsAcrossDivisions();
+    }
+
+    /**
+     * Whether the account may write its own work note on this task right now: an active PIC with task.update, until
+     * the task is Done. The note belongs to the PIC's assignment, so it never touches the task's main instruction or
+     * another PIC's note.
+     */
+    public function workNoteEditableBy(Account $account): bool
+    {
+        return $this->status !== TaskStatus::Done
+            && $account->hasPermission(Permission::TASK_UPDATE)
+            && $this->assignedTo($account);
     }
 
     /**
@@ -349,8 +370,8 @@ class Task extends Model
 
         $locked = [];
 
-        if (! $this->assignableBy($account)) {
-            $locked['division_id'] = 'Anda tidak berwenang memindahkan tugas ke divisi lain.';
+        if (! $this->forwardableBy($account)) {
+            $locked['division_id'] = 'Hanya Admin dan Manajer yang dapat memindahkan tugas ke divisi lain.';
         }
 
         if ($this->status->inQa()) {

@@ -213,16 +213,22 @@ kedua.
 - PIC yang dilepas tetap melihat task lewat `all_tasks`, tetapi hilang dari `my_tasks` dan kehilangan hak PIC.
 - Perubahan role berlaku pada request berikutnya (permission dibaca dari database) tanpa mengubah histori task.
 - Hapus Task Card (TASK-12): `DELETE /api/tasks/{id}`, soft delete oleh Admin/Manajer (semua divisi) dan Supervisor (divisinya), kecuali tugas Done.
+- TASK-13: Supervisor hanya menambah PIC dari divisinya dan tidak dapat memindahkan tugas ke divisi lain (hanya Admin/Manajer).
+  PIC aktif menulis catatan kerja sendiri (`task_assignments.work_note`) dan menghapus evidence yang diunggahnya sendiri
+  (soft delete, saat To Do/On Process).
 - Perubahan role akun dicatat di `account_role_changes` (TASK-12, migration `2026_11_16_142438_create_account_role_changes_table`). Rollback migration itu ditolak bila audit sudah berisi data, kecuali `TASKLIST_ALLOW_DESTRUCTIVE_ROLLBACK=true`.
 
 ## 6. Hal yang belum dikerjakan
 
 - **FE** masih memakai kontrak lama (`pic_id`/`pic`, status QA lama) dan perlu disesuaikan **sebelum** perubahan ini
   dipakai pengguna. Lihat [../api/tasklist-fe-integration.md](../api/tasklist-fe-integration.md).
-- **Komentar, hapus evidence, endpoint tulis agenda, nonaktifkan akun, pulihkan task terhapus, baca audit role**: tabel/kolom
+- **Komentar, ubah evidence, endpoint tulis agenda, nonaktifkan akun, pulihkan task terhapus, baca audit role**: tabel/kolom
   siap, endpoint di ticket lain.
 - **Drop `schedule_events` dan `tasks.pic_id`**: setelah verifikasi production dan FE tidak lagi memakai kontrak lama.
-- **Catatan kerja PIC (TASK-13)**: masih PENDING di ERD, menunggu keputusan SA.
+- **Catatan kerja PIC (TASK-13)**: disimpan di `task_assignments.work_note` dan `work_note_updated_at` (migration
+  `2026_11_18_092704_add_work_note_to_task_assignments_table`). ERD v1.0 masih menandainya PENDING; **SA perlu
+  menambahkan kedua kolom ini ke ERD**. Rollback migration itu ditolak bila sudah ada catatan, kecuali
+  `TASKLIST_ALLOW_DESTRUCTIVE_ROLLBACK=true`; `tasks:recovery` melaporkannya sebagai "Catatan kerja PIC".
 - **Divisi yang dikelola Supervisor**: sementara memakai `accounts.division_id`.
 
 ## 7. Migration dari branch lama yang belum di-merge

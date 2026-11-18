@@ -93,4 +93,23 @@ class TaskPolicy
     {
         return $task->assignedTo($user);
     }
+
+    /**
+     * Only the task's active PICs with task.update may delete evidence, and then only evidence they uploaded
+     * themselves; that and the task's status are checked by TaskEvidenceService so the rejection carries its reason.
+     * Admin, Managers, and Supervisors who are not its PIC never delete a PIC's evidence.
+     */
+    public function deleteEvidence(Account $user, Task $task): bool
+    {
+        return $user->hasPermission(Permission::TASK_UPDATE) && $task->assignedTo($user);
+    }
+
+    /**
+     * Only the task's active PICs with task.update write a work note, each only their own. Whether the task is still
+     * open is checked by TaskService so the rejection carries its reason.
+     */
+    public function updateWorkNote(Account $user, Task $task): bool
+    {
+        return $user->hasPermission(Permission::TASK_UPDATE) && $task->assignedTo($user);
+    }
 }

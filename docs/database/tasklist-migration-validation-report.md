@@ -36,14 +36,14 @@ MySQL), lulus di SQLite dan MySQL.
 | `task_categories` | ✅ | ✅ `name` unique | — | — |
 | `tasks` | ✅ | ✅ `(division_id, status)`, `(status, deadline)`, `start_date`, `deleted_at` | ✅ 5 | `pic_id` (ERD: dihentikan setelah semua pembaca kompatibel) |
 | `task_divisions` | ✅ | ✅ PK `(task_id, division_id)` | ✅ 3 | — |
-| `task_assignments` | ✅ | ✅ `(task_id, unassigned_at)`, `(account_id, unassigned_at)` | ✅ 4 | `active_flag` (mekanisme unik PIC aktif khusus MySQL yang diminta ERD) |
+| `task_assignments` | ✅ | ✅ `(task_id, unassigned_at)`, `(account_id, unassigned_at)` | ✅ 4 | `active_flag` (mekanisme unik PIC aktif khusus MySQL yang diminta ERD); `work_note`, `work_note_updated_at` (catatan kerja PIC, TASK-13; ERD: PENDING) |
 | `task_evidences` | ✅ | ✅ `(task_id, created_at)` | ✅ 3 | — |
 | `task_reviews` | ✅ `decision` varchar(30), `updated_at` | ✅ `(task_id, created_at)` | ✅ 2 | — (`cycle` di-drop; API menghitungnya) |
 | `task_comments` | ✅ `created_at` NOT NULL | ✅ `(task_id, created_at)`, `parent_comment_id` | ✅ 3 | — |
 | `task_activities` | ✅ `created_at` NOT NULL | ✅ `(task_id, created_at)` | ✅ 2 | `actor_name_snapshot` (sudah ada sebelum TASK-19, nama pelaku yang akunnya terhapus) |
 | `calendar_events` | ✅ `division_id` nullable, `creator_id` NOT NULL | ✅ `start_at` | ✅ 2 | `is_shared` (penanda agenda bersama) + tabel `calendar_event_divisions` (divisi tujuan), lihat di bawah |
 
-Perbedaan dengan ERD yang **disengaja** (5 kolom di atas) dicatat juga di `TasklistErdConformanceTest::DEVIATIONS`;
+Perbedaan dengan ERD yang **disengaja** (7 kolom di atas) dicatat juga di `TasklistErdConformanceTest::DEVIATIONS`;
 kolom lain di luar ERD membuat test gagal. Tabel di luar ERD:
 
 - `calendar_event_divisions` (`calendar_event_id`, `division_id`; PK gabungan, FK ke `calendar_events` dan
@@ -52,6 +52,8 @@ kolom lain di luar ERD membuat test gagal. Tabel di luar ERD:
   belum memuat keduanya; **SA perlu menambahkannya ke ERD**. Dicek oleh
   `test_the_agenda_deviations_from_the_erd_are_only_is_shared_and_the_target_divisions`.
 - `account_role_changes` (audit role, TASK-12): **perlu ditambahkan ke ERD**.
+- `task_assignments.work_note` dan `work_note_updated_at` (catatan kerja PIC, TASK-13): ERD v1.0 menandai lokasi
+  catatan ini PENDING; **SA perlu menambahkannya ke ERD**.
 - `schedule_events` dan `schedule_event_divisions` (read-only, untuk rollback dan pemulihan; tidak dibaca aplikasi).
 
 Nilai yang ERD minta dicocokkan dengan existing: `task_reviews.decision` tetap `approve`/`revision` (enum
@@ -149,7 +151,7 @@ Diuji di `TaskRoleCompatibilityTest`, `TaskListingTest`, `TaskAssignmentTest`, `
 | Melihat tidak memberi hak mengubah | Task di luar kewenangan: `can_edit`/`can_assign`/`can_review` `false`, `editable_fields`/`next_statuses` kosong; PATCH, assignment, status, evidence, dan review lewat API `403` |
 | Buat task | Admin dan Manajer semua divisi `201`; Supervisor divisinya `201`, divisi lain `422`; Staff dan Freelance `403` |
 | Edit task | Admin dan Manajer lintas divisi; Supervisor hanya divisinya; Staff/Freelance non-PIC `403` |
-| Atur PIC dan forward | Admin dan Manajer lintas divisi; Supervisor dari task divisinya (setelah diteruskan, task keluar dari cakupannya); Staff, Freelance, Supervisor divisi lain `403` |
+| Atur PIC dan forward | Admin dan Manajer lintas divisi dengan PIC dari semua divisi; Supervisor dari task divisinya dengan PIC baru hanya dari divisinya (PIC divisi lain yang sudah ada boleh dipertahankan/dilepas); pindah divisi hanya Admin/Manajer, Supervisor `422`; Staff, Freelance, Supervisor divisi lain `403` (TASK-13: `TaskRoleBasedManagementTest`, `TaskAssignmentTest`) |
 | Review | Admin dan Manajer lintas divisi; Supervisor divisinya; Supervisor divisi lain, Staff, Freelance `403` |
 | Self-approval | Supervisor yang PIC menyetujui task divisinya; Manajer yang PIC menyetujui task divisi lain; tercatat di review dan aktivitas `approved` |
 | Workflow Multi-PIC | Setiap PIC aktif (Staff, Freelance, Supervisor) memindahkan status sampai Ready Review tanpa Lead PIC; non-PIC `403` |
@@ -158,6 +160,8 @@ Diuji di `TaskRoleCompatibilityTest`, `TaskListingTest`, `TaskAssignmentTest`, `
 | Perubahan role | Staff yang diubah menjadi Supervisor langsung bisa mengatur PIC dan membuat task; histori task tidak berubah |
 | Akun nonaktif | Login ditolak ("Akun Anda nonaktif. Hubungi Admin."); request Tasklist `403` |
 | Hapus Task Card (TASK-12) | Admin dan Manajer semua divisi, Supervisor divisinya `200`; Staff/Freelance (termasuk PIC) dan Supervisor divisi lain `403`; tugas Done `422`; task terhapus hilang dari semua tampilan dan `404` (`TaskDeletionAndPreviewTest`) |
+| Catatan kerja PIC (TASK-13) | Hanya PIC aktif menulis/menghapus catatannya sendiri; catatan PIC lain, `description`, status, dan `version` tidak berubah; Admin/Manajer/Supervisor non-PIC `403`; PIC yang dilepas `403` dan catatannya tetap di assignment lama; Done `422`; tercatat di histori (`TaskRoleBasedManagementTest`) |
+| Hapus evidence (TASK-13) | Hanya PIC aktif pengunggahnya saat To Do/On Process `200` (soft delete, file tetap, histori `evidence_deleted`); PIC lain, PIC yang dilepas, role lain, evidence lama tanpa pengunggah `403`; Ready Review/On Review/Done `422`; tugas tidak ikut terhapus (`TaskRoleBasedManagementTest`) |
 | Audit role (TASK-12) | Pembuatan akun dan setiap perubahan role tercatat di `account_role_changes`; histori task tidak berubah (`AccountRoleAuditTest`) |
 
 ### 5.4 Pemulihan setelah fitur dipakai

@@ -89,6 +89,48 @@ class TaskEvidenceService
     }
 
     /**
+     * Delete evidence the PIC uploaded (soft delete) and record it in the task's history. The stored file is kept so
+     * the deletion can be traced; the evidence leaves every list and can no longer be downloaded. The task itself, its
+     * status, and other evidence are not touched. Everything is checked again on the locked task row, so evidence
+     * cannot be deleted while the task is being reassigned or handed to QA.
+     *
+     * @throws AuthorizationException When the account is not the PIC who uploaded it.
+     * @throws ValidationException When the task is no longer in a status in which evidence may change.
+     */
+    public function delete(Task $task, TaskEvidence $evidence, Account $actor): void
+    {
+        abort_unless($evidence->task_id === $task->id, 404);
+
+        DB::transaction(function () use ($task, $evidence, $actor) {
+            $locked = Task::query()->whereKey($task->id)->lockForUpdate()->firstOrFail();
+            $evidence->setRelation('task', $locked);
+
+            if ($evidence->submitter_id !== $actor->id || ! $locked->assignedTo($actor)) {
+                throw new AuthorizationException;
+            }
+
+            if (! in_array($locked->status, self::SUBMITTABLE_STATUSES, true)) {
+                throw ValidationException::withMessages([
+                    'evidence' => "Evidence hanya dapat dihapus saat tugas berstatus To Do atau On Process, bukan {$locked->status->label()}.",
+                ]);
+            }
+
+            $evidence->deleted_by = $actor->id;
+            $evidence->save();
+            $evidence->delete();
+
+            $locked->activities()->create([
+                'account_id' => $actor->id,
+                'action' => TaskActivity::EVIDENCE_DELETED,
+                'changes' => ['evidence' => [
+                    'old' => ['id' => $evidence->id, 'type' => $evidence->type, 'name' => $evidence->file_name ?? $evidence->url],
+                    'new' => null,
+                ]],
+            ]);
+        });
+    }
+
+    /**
      * Only file evidence of this task has something to download; evidence of another task, a link, or a
      * missing stored file is treated as not found.
      */

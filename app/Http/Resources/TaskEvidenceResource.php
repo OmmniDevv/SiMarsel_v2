@@ -21,6 +21,7 @@ class TaskEvidenceResource extends JsonResource
                 'id' => $this->submitter->id,
                 'fullname' => $this->submitter->fullname,
             ] : null,
+            'can_delete' => $this->resource->deletableBy($request->user()),
             'created_at' => $this->created_at?->toIso8601ZuluString(),
         ];
     }
