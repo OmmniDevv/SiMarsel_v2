@@ -1,6 +1,6 @@
 @extends('layouts.dashboard')
 
-@section('title', 'Ringkasan Performa')
+@section('title', 'Dashboard')
 @push('scripts')
     @vite('resources/js/pages/performance/index.js')
 @endpush
@@ -12,7 +12,6 @@
     // Display metadata only. Every value, comparison and formula comes from the backend.
     $rows = [
         'primary' => [
-            'grid' => 'sm:grid-cols-2 xl:grid-cols-4',
             'metrics' => [
                 ['key' => 'total_revenue', 'label' => 'Total Revenue', 'format' => 'currency', 'compact' => true, 'hint' => 'Total nilai transaksi berhasil'],
                 ['key' => 'total_transactions', 'label' => 'Total Transaksi', 'format' => 'number', 'hint' => 'Jumlah transaksi berhasil'],
@@ -21,7 +20,6 @@
             ],
         ],
         'secondary' => [
-            'grid' => 'sm:grid-cols-2 xl:grid-cols-4',
             'metrics' => [
                 ['key' => 'unique_users', 'label' => 'Pengguna Unik', 'format' => 'number', 'hint' => 'Email pembeli unik'],
                 ['key' => 'average_order_value', 'label' => 'AOV', 'format' => 'currency', 'hint' => 'Total revenue ÷ jumlah transaksi'],
@@ -78,55 +76,113 @@
 
 @section('page')
     <div x-data="performanceSummary(@js($platformOptions), @js($years))" class="min-w-0">
-        <header class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-                <h1 class="text-2xl font-bold tracking-tight text-ink">Ringkasan Performa</h1>
-                <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
-                    <span>Data keseluruhan performa perusahaan</span>
-                    <span x-show="loadedLabel" x-cloak aria-hidden="true">·</span>
-                    <span x-show="loadedLabel" x-cloak>Dimuat <span x-text="loadedLabel"></span></span>
-                </p>
-            </div>
+        <div x-data="dashboardShell" class="min-w-0">
+            @include('pages.performance.components.dashboard-compact-header')
 
-            <div class="flex flex-wrap items-center gap-2">
-                <button type="button" x-show="!loading && loadError" x-cloak class="{{ $exportButton }}" @click="load()">Muat Ulang</button>
-                <a :href="exportLink('xlsx')" href="{{ route('api.performance.export', ['format' => 'xlsx']) }}" class="{{ $exportButton }}" :class="filterInvalid && 'pointer-events-none opacity-50'" :aria-disabled="filterInvalid.toString()">Ekspor Excel</a>
-                <a :href="exportLink('csv')" href="{{ route('api.performance.export', ['format' => 'csv']) }}" class="{{ $exportButton }}" :class="filterInvalid && 'pointer-events-none opacity-50'" :aria-disabled="filterInvalid.toString()">Ekspor CSV</a>
-            </div>
-        </header>
+            {{-- 1. Header & Filter --}}
+            <header x-ref="pageHeader" class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold tracking-tight text-ink">Dashboard</h1>
+                    <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+                        <span>Data keseluruhan performa perusahaan</span>
+                        <span x-show="loadedLabel" x-cloak aria-hidden="true">·</span>
+                        <span x-show="loadedLabel" x-cloak>Dimuat <span x-text="loadedLabel"></span></span>
+                    </p>
+                </div>
 
-        <p x-show="loadError" x-cloak x-text="loadError" class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700" role="alert"></p>
+                {{-- FIX-14-FE-01 wires the final Ekspor Laporan Dashboard action here. --}}
+                <div data-dashboard-slot="dashboard-export" role="group" aria-label="Ekspor Laporan Dashboard" class="flex flex-wrap items-center gap-2">
+                    <button type="button" x-show="!loading && loadError" x-cloak class="{{ $exportButton }}" @click="load()">Muat Ulang</button>
+                    <a :href="exportLink('xlsx')" href="{{ route('api.performance.export', ['format' => 'xlsx']) }}" class="{{ $exportButton }}" :class="filterInvalid && 'pointer-events-none opacity-50'" :aria-disabled="filterInvalid.toString()">Ekspor Excel</a>
+                    <a :href="exportLink('csv')" href="{{ route('api.performance.export', ['format' => 'csv']) }}" class="{{ $exportButton }}" :class="filterInvalid && 'pointer-events-none opacity-50'" :aria-disabled="filterInvalid.toString()">Ekspor CSV</a>
+                </div>
+            </header>
 
-        <section class="{{ $card }} relative mt-5 p-5" aria-labelledby="filter-title">
-            @include('pages.performance.components.performance-filter')
-        </section>
+            <p x-show="loadError" x-cloak x-text="loadError" class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700" role="alert"></p>
 
-        <p x-show="emptyMessage" x-cloak x-text="emptyMessage" class="mt-4 rounded-lg border border-line bg-soft px-4 py-2.5 text-sm text-muted" role="status"></p>
+            {{-- FIX-04-FE-01 owns the filter controls. --}}
+            <section data-dashboard-section="filter" class="{{ $card }} relative mt-5 p-5" aria-labelledby="filter-title">
+                @include('pages.performance.components.performance-filter')
+            </section>
 
-        <section aria-label="Indikator Kinerja Utama" :aria-busy="loading.toString()">
-            @foreach ($rows as $size => $row)
-                <div class="mt-4 grid gap-4 {{ $row['grid'] }}">
-                    @foreach ($row['metrics'] as $metric)
-                        @include('pages.performance.components.performance-card', ['metric' => $metric, 'size' => $size])
+            <p x-show="emptyMessage" x-cloak x-text="emptyMessage" class="mt-4 rounded-lg border border-line bg-soft px-4 py-2.5 text-sm text-muted" role="status"></p>
+
+            {{-- 2. Ringkasan Sales: two blocks side by side when there is room, stacked on phones. --}}
+            <section data-dashboard-section="sales-summary" class="mt-6" aria-labelledby="dashboard-sales-summary-title" :aria-busy="loading.toString()">
+                <h2 id="dashboard-sales-summary-title" class="text-base font-semibold text-ink">Ringkasan Sales</h2>
+
+                <div class="mt-3 grid gap-4 xl:grid-cols-2">
+                    @foreach ($rows as $size => $row)
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            @foreach ($row['metrics'] as $metric)
+                                @include('pages.performance.components.performance-card', ['metric' => $metric, 'size' => $size])
+                            @endforeach
+                        </div>
                     @endforeach
                 </div>
-            @endforeach
-        </section>
+            </section>
 
-        <section class="{{ $card }} mt-4 p-5" aria-labelledby="performance-trend-title">
-            @include('pages.performance.components.performance-trend')
-        </section>
+            {{-- 3. Tren dan Performa --}}
+            <section data-dashboard-section="trend" class="{{ $card }} mt-4 p-5" aria-labelledby="performance-trend-title">
+                @include('pages.performance.components.performance-trend')
+            </section>
 
-        <section class="{{ $card }} mt-4 p-5" aria-labelledby="performance-contribution-title">
-            @include('pages.performance.components.performance-contribution')
-        </section>
+            {{-- 4. Kontribusi Platform --}}
+            <section data-dashboard-section="platform-contribution" class="{{ $card }} mt-4 p-5" aria-labelledby="performance-contribution-title">
+                @include('pages.performance.components.performance-contribution')
+            </section>
 
-        <section class="{{ $card }} mt-4 p-5" aria-labelledby="performance-payment-method-title">
-            @include('pages.performance.components.performance-payment-method')
-        </section>
+            {{-- 5. Downloader --}}
+            <section data-dashboard-section="downloader" class="{{ $card }} mt-4 p-5" aria-labelledby="dashboard-downloader-title">
+                @include('pages.performance.components.dashboard-slot', [
+                    'key' => 'downloader',
+                    'title' => 'Downloader',
+                ])
+            </section>
 
-        <section class="{{ $card }} mt-4 p-5" aria-labelledby="performance-purchase-time-title">
-            @include('pages.performance.components.performance-purchase-time')
-        </section>
+            {{-- 6. Status Transaksi & Perdana vs Perpanjangan: side by side when there is room, stacked on phones. --}}
+            <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                <section data-dashboard-section="transaction-status" class="{{ $card }} min-w-0 p-5" aria-labelledby="dashboard-transaction-status-title">
+                    @include('pages.performance.components.dashboard-slot', [
+                        'key' => 'transaction-status',
+                        'title' => 'Status Transaksi',
+                    ])
+                </section>
+
+                <section data-dashboard-section="product-type" class="{{ $card }} min-w-0 p-5" aria-labelledby="dashboard-product-type-title">
+                    @include('pages.performance.components.dashboard-slot', [
+                        'key' => 'product-type',
+                        'title' => 'Perdana vs Perpanjangan',
+                    ])
+                </section>
+            </div>
+
+            {{-- 7. Metode Pembayaran --}}
+            <section data-dashboard-section="payment-method" class="{{ $card }} mt-4 p-5" aria-labelledby="performance-payment-method-title">
+                @include('pages.performance.components.performance-payment-method')
+            </section>
+
+            {{-- 8. Performa Produk: the table is built in FIX-11-FE-01. --}}
+            <section data-dashboard-section="product-performance" class="{{ $card }} mt-4 min-w-0 p-5" aria-labelledby="dashboard-product-performance-title">
+                @include('pages.performance.components.dashboard-slot', [
+                    'key' => 'product-performance',
+                    'title' => 'Performa Produk',
+                ])
+            </section>
+
+            {{-- 9. Jam Ramai Pembelian --}}
+            <section data-dashboard-section="purchase-time" class="{{ $card }} mt-4 p-5" aria-labelledby="performance-purchase-time-title">
+                @include('pages.performance.components.performance-purchase-time')
+            </section>
+
+            {{-- 10. Daftar Transaksi: Ekspor Daftar Transaksi lives in this section (FIX-14-FE-01). --}}
+            <section data-dashboard-section="transactions" class="{{ $card }} mt-4 min-w-0 p-5" aria-labelledby="dashboard-transactions-title">
+                @include('pages.performance.components.dashboard-slot', [
+                    'key' => 'transactions',
+                    'title' => 'Daftar Transaksi',
+                    'exportLabel' => 'Ekspor Daftar Transaksi',
+                ])
+            </section>
+        </div>
     </div>
 @endsection

@@ -41,7 +41,7 @@ class PerformancePageTest extends TestCase
         $this->actingAs($this->employee)
             ->get('/dashboard')
             ->assertOk()
-            ->assertSee('Ringkasan Performa')
+            ->assertSee('Ringkasan Sales')
             ->assertSee('performanceSummary', false)
             ->assertSeeInOrder([
                 'Filter',
@@ -264,8 +264,81 @@ class PerformancePageTest extends TestCase
         $this->actingAs($this->employee)
             ->get('/dashboard')
             ->assertOk()
-            ->assertSeeInOrder(['Analitik', 'Analisis Performa', 'Ringkasan', 'Sistem'])
+            ->assertSeeInOrder(['Analitik', 'Dashboard', 'Pekerjaan', 'Sistem'])
             ->assertSee('href="'.route('dashboard').'"', false)
             ->assertSee('aria-current="page"', false);
+    }
+
+    public function test_page_and_browser_tab_are_titled_dashboard(): void
+    {
+        $this->actingAs($this->employee)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertSee('<title>Dashboard — simarsel</title>', false)
+            ->assertSee('<h1 class="text-2xl font-bold tracking-tight text-ink">Dashboard</h1>', false)
+            ->assertDontSee('Ringkasan Performa');
+    }
+
+    public function test_dashboard_sections_follow_the_reading_order(): void
+    {
+        $this->actingAs($this->employee)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertSeeInOrder([
+                'data-dashboard-section="filter"',
+                'data-dashboard-section="sales-summary"',
+                'data-dashboard-section="trend"',
+                'data-dashboard-section="platform-contribution"',
+                'data-dashboard-section="downloader"',
+                'data-dashboard-section="transaction-status"',
+                'data-dashboard-section="product-type"',
+                'data-dashboard-section="payment-method"',
+                'data-dashboard-section="product-performance"',
+                'data-dashboard-section="purchase-time"',
+                'data-dashboard-section="transactions"',
+            ], false)
+            ->assertSeeInOrder(['Ringkasan Sales', 'Downloader', 'Status Transaksi', 'Perdana vs Perpanjangan', 'Metode Pembayaran', 'Performa Produk', 'Waktu Pembelian', 'Daftar Transaksi']);
+    }
+
+    public function test_paired_blocks_stack_on_phones_and_sit_side_by_side_on_wide_screens(): void
+    {
+        $this->actingAs($this->employee)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertSeeInOrder(['data-dashboard-section="sales-summary"', 'class="mt-3 grid gap-4 xl:grid-cols-2"', 'class="grid gap-4 sm:grid-cols-2"', 'Total Revenue', 'class="grid gap-4 sm:grid-cols-2"', 'Pengguna Unik'], false)
+            ->assertSeeInOrder(['class="mt-4 grid gap-4 lg:grid-cols-2"', 'data-dashboard-section="transaction-status"', 'data-dashboard-section="product-type"'], false);
+    }
+
+    public function test_compact_header_keeps_the_active_period_and_an_accessible_filter_button(): void
+    {
+        $this->actingAs($this->employee)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertSee('x-data="dashboardShell"', false)
+            ->assertSeeInOrder(['data-dashboard-compact-header', 'x-text="periodLabel || \'Memuat periode…\'"', 'aria-label="Buka panel filter dashboard"'], false)
+            ->assertSee('aria-controls="dashboard-filter-panel"', false)
+            ->assertSee(':aria-expanded="filterPanelOpen.toString()"', false)
+            ->assertSeeInOrder(['id="dashboard-filter-panel"', 'x-dialog="filterPanelOpen"', 'aria-modal="true"', '@keydown.escape.stop="closeFilterPanel()"', 'data-dashboard-slot="filter-panel"'], false)
+            ->assertSeeInOrder(['data-dashboard-compact-header', 'x-ref="pageHeader"'], false);
+    }
+
+    public function test_export_actions_sit_in_their_own_sections(): void
+    {
+        $this->actingAs($this->employee)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertSeeInOrder(['x-ref="pageHeader"', 'aria-label="Ekspor Laporan Dashboard"', '</header>', 'data-dashboard-section="filter"'], false)
+            ->assertSeeInOrder(['data-dashboard-section="transactions"', 'data-dashboard-slot="transactions-export"', 'Ekspor Daftar Transaksi'], false)
+            ->assertSeeInOrder(['Ekspor Daftar Transaksi', '</main>'], false);
+    }
+
+    public function test_dashboard_does_not_load_the_legacy_products_frontend(): void
+    {
+        $this->actingAs($this->employee)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertDontSee('/api/products', false)
+            ->assertDontSee('productOverview', false)
+            ->assertDontSee('performance/products', false);
     }
 }
