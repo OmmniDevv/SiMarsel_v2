@@ -50,6 +50,25 @@ class AccountCrudTest extends TestCase
         ], $overrides);
     }
 
+    public function test_account_page_renders_shared_forms_for_manager_and_read_only_list_for_staff(): void
+    {
+        $this->actingAs($this->manager)->get('/settings?tab=accounts')
+            ->assertOk()
+            ->assertSee('id="create-fullname"', false)
+            ->assertSee('id="edit-fullname"', false)
+            ->assertSee('aria-describedby="edit-username-help edit-username-error"', false)
+            ->assertSee(":type=\"showDraftPassword ? 'text' : 'password'\"", false)
+            ->assertSee(":type=\"showPassword ? 'text' : 'password'\"", false)
+            ->assertSee('Hanya Manager yang dapat menambah, mengubah, dan menghapus akun.')
+            ->assertSee('Akun yang memiliki riwayat tugas tidak dapat dihapus.');
+
+        $this->actingAs($this->employee)->get('/settings?tab=accounts')
+            ->assertOk()
+            ->assertDontSee('id="create-fullname"', false)
+            ->assertDontSee('id="edit-fullname"', false)
+            ->assertSee('Ringkasan Akun');
+    }
+
     public function test_guest_cannot_access_account_endpoints(): void
     {
         $this->getJson('/api/accounts')

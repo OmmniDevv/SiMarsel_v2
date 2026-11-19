@@ -5,7 +5,7 @@
 <div class="mt-4 overflow-hidden rounded-lg border border-line">
     <div class="overflow-x-auto">
         <table class="w-full min-w-[640px] text-left text-sm">
-            <thead class="bg-soft text-xs font-semibold text-label">
+            <thead class="bg-soft text-xs font-semibold text-muted">
                 <tr>
                     <th scope="col" class="px-4 py-3">Nama Lengkap</th>
                     <th scope="col" class="px-4 py-3">Divisi</th>
@@ -38,7 +38,7 @@
                         <td class="px-4 py-3 text-right whitespace-nowrap">
                             <button
                                 type="button"
-                                class="rounded-md px-2 py-1 font-semibold text-primary hover:text-primary-hover focus-visible:outline-2 focus-visible:outline-primary"
+                                class="rounded-md px-2 py-1 font-semibold text-primary-hover hover:text-navy focus-visible:outline-2 focus-visible:outline-primary"
                                 @click="openEdit(user)"
                             >Ubah</button>
                             <button
@@ -64,15 +64,15 @@
                 <tr x-show="!loading && loadError" x-cloak>
                     <td colspan="{{ $columns }}" class="px-4 py-10 text-center">
                         <p class="text-sm font-medium text-red-600" x-text="loadError"></p>
-                        <button type="button" class="mt-2 text-xs font-semibold text-primary hover:text-primary-hover" @click="fetchUsers()">Coba Lagi</button>
+                        <button type="button" class="mt-2 text-xs font-semibold text-primary-hover hover:text-navy" @click="fetchUsers()">Coba Lagi</button>
                     </td>
                 </tr>
 
                 <tr x-show="!loading && !loadError && filteredUsers.length === 0" x-cloak>
                     <td colspan="{{ $columns }}" class="px-4 py-10 text-center">
-                        <p class="text-sm font-medium text-ink">Tidak ada akun yang cocok.</p>
-                        <p class="mt-1 text-xs text-muted">Coba ubah kata kunci atau pilih divisi lain.</p>
-                        <button type="button" class="mt-2 text-xs font-semibold text-primary hover:text-primary-hover" @click="resetFilters()">Atur Ulang Filter</button>
+                        <p class="text-sm font-medium text-ink" x-text="users.length ? 'Tidak ada akun yang cocok.' : 'Belum ada akun terdaftar.'"></p>
+                        <p class="mt-1 text-xs text-muted" x-text="users.length ? 'Coba ubah kata kunci atau pilih divisi lain.' : 'Akun anggota tim akan ditampilkan di sini.'"></p>
+                        <button type="button" x-show="search || filterDivision" class="mt-2 text-xs font-semibold text-primary-hover hover:text-navy" @click="resetFilters()">Atur Ulang Filter</button>
                     </td>
                 </tr>
             </tbody>
