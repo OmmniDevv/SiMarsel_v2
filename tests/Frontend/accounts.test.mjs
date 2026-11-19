@@ -90,3 +90,79 @@ test('failed loading remains distinct from a successfully loaded empty list and 
     assert.equal(page.loadError, '');
     assert.equal(page.accountSummary.total, 0);
 });
+
+test('unchanged forms close directly; edits require confirmation and reverting restores direct close', async () => {
+    const page = await fixture();
+    page.openCreate();
+    assert.equal(page.hasUnsavedChanges, false);
+    page.requestClose();
+    assert.equal(page.modal, null);
+    page.openCreate();
+    page.draft.fullname = 'New colleague';
+    page.requestClose();
+    assert.equal(page.modal, 'create');
+    assert.equal(page.discardConfirmation, true);
+    assert.equal(page.draft.fullname, 'New colleague');
+    // Continue editing leaves all input intact, then explicitly discard.
+    page.discardConfirmation = false;
+    assert.equal(page.draft.fullname, 'New colleague');
+    page.requestClose();
+    page.closeModal();
+    assert.equal(page.modal, null);
+    assert.equal(page.discardConfirmation, false);
+    page.openCreate();
+    assert.equal(page.draft.fullname, '');
+    page.draft.role_id = String(page.draft.role_id);
+    assert.equal(page.hasUnsavedChanges, false, 'select value type changes alone are not edits');
+    page.closeModal();
+    page.openEdit(users[1]);
+    page.form.fullname = 'Updated';
+    page.requestClose();
+    assert.equal(page.discardConfirmation, true);
+    page.discardConfirmation = false;
+    page.form.fullname = users[1].fullname;
+    assert.equal(page.hasUnsavedChanges, false);
+    page.requestClose();
+    assert.equal(page.modal, null);
+});
+
+test('pending create/save cannot open discard confirmation or close the form', async () => {
+    const page = await fixture();
+    page.openCreate();
+    page.draft.username = 'new.staff';
+    page.creating = true;
+    page.requestClose();
+    page.closeModal();
+    assert.equal(page.modal, 'create');
+    assert.equal(page.discardConfirmation, false);
+    page.creating = false;
+    page.closeModal();
+    page.openEdit(users[1]);
+    page.form.password = 'new-password';
+    page.saving = true;
+    page.requestClose();
+    page.closeModal();
+    assert.equal(page.modal, 'edit');
+    assert.equal(page.discardConfirmation, false);
+});
+
+test('successful saves bypass discard confirmation and update global role counts', async () => {
+    let calls = 0;
+    const page = await fixture(async (_url, options) => {
+        calls++;
+        return { data: { ...users[1], fullname: options.body.fullname, role: { code_role: 'MGR', name: 'Manager' } } };
+    });
+    page.users = [...users];
+    page.openEdit(users[1]);
+    page.form.fullname = 'New Manager';
+    page.form.role_id = 1;
+    assert.equal(page.hasUnsavedChanges, true);
+    await page.submitEdit();
+    assert.equal(calls, 1);
+    assert.equal(page.modal, null);
+    assert.equal(page.discardConfirmation, false);
+    assert.equal(page.users[1].fullname, 'New Manager');
+    assert.equal(page.accountSummary.total, 2);
+    assert.equal(page.accountSummary.roleCounts.MGR, 2);
+    assert.equal(page.accountSummary.roleCounts.EMP, 0);
+});
