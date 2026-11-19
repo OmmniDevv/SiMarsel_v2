@@ -60,7 +60,12 @@ class AccountCrudTest extends TestCase
             ->assertSee(":type=\"showDraftPassword ? 'text' : 'password'\"", false)
             ->assertSee(":type=\"showPassword ? 'text' : 'password'\"", false)
             ->assertSee('Hanya Manager yang dapat menambah, mengubah, dan menghapus akun.')
-            ->assertSee('Akun yang memiliki riwayat tugas tidak dapat dihapus.');
+            ->assertSee('Akun yang memiliki riwayat tugas tidak dapat dihapus.')
+            ->assertSee('aria-describedby="delete-user-identity delete-user-desc delete-user-history"', false)
+            ->assertSee('id="delete-user-identity"', false)
+            ->assertSee('Penghapusan tidak dapat dibatalkan.')
+            ->assertSee('Tentang akses akun')
+            ->assertSee('Anda tidak dapat menghapus akun sendiri.');
 
         $this->actingAs($this->employee)->get('/settings?tab=accounts')
             ->assertOk()

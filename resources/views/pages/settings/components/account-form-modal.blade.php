@@ -32,7 +32,7 @@
         <h2 id="{{ $mode }}-user-title" class="text-base font-semibold text-ink">{{ $isCreate ? 'Tambah Akun' : 'Ubah Akun' }}</h2>
         <p id="{{ $mode }}-user-desc" class="mt-1 text-sm text-muted">{{ $isCreate ? 'Daftarkan anggota tim dan tentukan role serta divisinya.' : 'Perbarui identitas, role, atau divisi anggota tim.' }}</p>
 
-        <p class="mt-2 text-xs text-muted">Field bertanda * wajib diisi.</p>
+        <p class="mt-2 text-xs text-muted">Kolom bertanda * wajib diisi.</p>
         <form class="mt-5 flex flex-col gap-4" novalidate @submit.prevent="{{ $isCreate ? 'submitCreate()' : 'submitEdit()' }}" :aria-busy="{{ $pending }}">
             <div>
                 <label for="{{ $mode }}-fullname" class="{{ $labelClass }}">Nama Lengkap *</label>
@@ -53,7 +53,8 @@
                 <div>
                     <label for="{{ $mode }}-role_id" class="{{ $labelClass }}">Role *</label>
                     <div class="relative">
-                        <select id="{{ $mode }}-role_id" aria-required="true" :aria-invalid="Boolean({{ $fieldErrors }}.role_id).toString()" aria-describedby="{{ $mode }}-role-help {{ $mode }}-role_id-error" x-model="{{ $model }}.role_id" @change="{{ $fieldErrors }}.role_id = null" @unless ($isCreate) :disabled="editingId === currentUserId" @endunless
+                        <select id="{{ $mode }}-role_id" aria-required="true" :aria-invalid="Boolean({{ $fieldErrors }}.role_id).toString()" @if ($isCreate) aria-describedby="{{ $mode }}-role_id-error"
+                            @else :aria-describedby="editingId === currentUserId ? '{{ $mode }}-role-help {{ $mode }}-role_id-error' : '{{ $mode }}-role_id-error'" @endif x-model="{{ $model }}.role_id" @change="{{ $fieldErrors }}.role_id = null" @unless ($isCreate) :disabled="editingId === currentUserId" @endunless
                             class="{{ $selectClass }}" :class="{{ $fieldErrors }}.role_id && 'border-red-500!'">
                             <template x-for="role in roles" :key="role.id">
                                 <option :value="role.id" x-text="role.name" :selected="role.id == {{ $model }}.role_id"></option>
@@ -61,12 +62,9 @@
                         </select>
                         {!! $chevron !!}
                     </div>
-                    <div id="{{ $mode }}-role-help" class="mt-1.5 text-xs text-muted">
-                        <p>Hanya Manager yang dapat menambah, mengubah, dan menghapus akun.</p>
-                        @unless ($isCreate)
-                            <p x-show="editingId === currentUserId" class="mt-1">Role akun sendiri tidak dapat diubah.</p>
-                        @endunless
-                    </div>
+                    @unless ($isCreate)
+                        <p id="{{ $mode }}-role-help" x-show="editingId === currentUserId" class="mt-1.5 text-xs text-muted">Role akun sendiri tidak dapat diubah.</p>
+                    @endunless
                     <p id="{{ $mode }}-role_id-error" aria-live="polite" x-show="{{ $fieldErrors }}.role_id" x-text="{{ $fieldErrors }}.role_id" class="{{ $errorClass }}"></p>
                 </div>
 
@@ -82,10 +80,15 @@
                         </select>
                         {!! $chevron !!}
                     </div>
-                    <p id="{{ $mode }}-division_id-help" class="mt-1.5 text-xs text-muted">Pilih Tanpa Divisi untuk akun yang tidak terikat pada satu divisi.</p>
+                    <p id="{{ $mode }}-division_id-help" class="mt-1.5 text-xs text-muted">Tanpa Divisi: tidak terikat pada satu divisi.</p>
                     <p id="{{ $mode }}-division_id-error" aria-live="polite" x-show="{{ $fieldErrors }}.division_id" x-text="{{ $fieldErrors }}.division_id" class="{{ $errorClass }}"></p>
                 </div>
             </div>
+
+            <details class="text-xs text-muted">
+                <summary class="w-fit cursor-pointer rounded-sm font-semibold hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Tentang akses akun</summary>
+                <p class="mt-2 max-w-prose">Hanya Manager yang dapat menambah, mengubah, dan menghapus akun.</p>
+            </details>
 
             <div>
                 <label for="{{ $mode }}-password" class="{{ $labelClass }}">{{ $isCreate ? 'Password *' : 'Password baru (opsional)' }}</label>
