@@ -27,6 +27,8 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
     search: '',
 
     modal: null,
+    discardConfirmation: false,
+    formBaseline: null,
     form: emptyForm(),
     errors: {},
     formError: '',
@@ -120,6 +122,7 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
         if (!this.canManage) return;
 
         this.resetDraft();
+        this.formBaseline = { ...this.draft };
         this.modal = 'create';
     },
 
@@ -133,6 +136,7 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
         };
         this.editingId = user.id;
         this.resetFormState();
+        this.formBaseline = { ...this.form };
         this.modal = 'edit';
     },
 
@@ -144,9 +148,23 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
         this.modal = 'delete';
     },
 
+    get hasUnsavedChanges() {
+        const form = this.modal === 'create' ? this.draft : this.modal === 'edit' ? this.form : null;
+        return Boolean(form && this.formBaseline
+            && Object.keys(this.formBaseline).some((key) => String(form[key] ?? '') !== String(this.formBaseline[key] ?? '')));
+    },
+
+    requestClose() {
+        if (this.saving || this.creating || this.discardConfirmation) return;
+        if (this.hasUnsavedChanges) this.discardConfirmation = true;
+        else this.closeModal();
+    },
+
     closeModal() {
         if (this.saving || this.creating) return;
 
+        this.discardConfirmation = false;
+        this.formBaseline = null;
         this.modal = null;
         this.editingId = null;
         this.deletingUser = null;

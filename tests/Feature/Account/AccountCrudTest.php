@@ -65,6 +65,11 @@ class AccountCrudTest extends TestCase
             ->assertSee('id="delete-user-identity"', false)
             ->assertSee('Penghapusan tidak dapat dibatalkan.')
             ->assertSee('Tentang akses akun')
+            ->assertSee('Identitas akun')
+            ->assertSee('Role dan divisi')
+            ->assertSee('Keamanan akun')
+            ->assertSee('Buang perubahan?')
+            ->assertSee('Rincian berdasarkan role')
             ->assertSee('Anda tidak dapat menghapus akun sendiri.');
 
         $this->actingAs($this->employee)->get('/settings?tab=accounts')

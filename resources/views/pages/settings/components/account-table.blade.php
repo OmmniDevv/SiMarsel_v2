@@ -1,8 +1,45 @@
+<div class="mt-4">
+    <p x-show="loading" role="status" class="py-8 text-center text-sm text-muted">Memuat daftar akun…</p>
+    <div x-show="!loading && loadError" role="alert" class="rounded-lg border border-line px-4 py-8 text-center">
+        <p class="text-sm font-medium text-red-600" x-text="loadError"></p>
+        <button type="button" class="mt-2 inline-flex min-h-11 items-center rounded-md px-3 text-sm font-semibold text-primary-hover hover:text-navy focus-visible:outline-2 focus-visible:outline-primary-hover" @click="fetchUsers()">Coba Lagi</button>
+    </div>
+    <div x-show="!loading && !loadError && filteredUsers.length === 0" class="rounded-lg border border-line px-4 py-8 text-center">
+        <p class="text-sm font-medium text-ink" x-text="users.length ? 'Tidak ada akun yang cocok.' : 'Belum ada akun terdaftar.'"></p>
+        <p class="mt-1 text-sm text-muted" x-text="users.length ? 'Coba kata kunci lain atau ubah filter divisi.' : 'Akun anggota tim akan ditampilkan di sini.'"></p>
+        <button type="button" x-show="search || filterDivision" class="mt-2 inline-flex min-h-11 items-center rounded-md px-3 text-sm font-semibold text-primary-hover hover:text-navy focus-visible:outline-2 focus-visible:outline-primary-hover" @click="resetFilters()">Atur Ulang Filter</button>
+        @if ($canManage)
+            <button type="button" x-show="!users.length" class="mt-2 inline-flex min-h-11 items-center rounded-md px-3 text-sm font-semibold text-primary-hover hover:text-navy focus-visible:outline-2 focus-visible:outline-primary-hover" @click="openCreate()">Tambah Akun</button>
+        @endif
+    </div>
+</div>
+<ul x-show="!loading && !loadError && filteredUsers.length" class="mt-4 divide-y divide-line border-y border-line lg:hidden" aria-label="Daftar akun">
+    <template x-for="user in filteredUsers" :key="user.id">
+        <li class="space-y-3 py-4">
+            <div class="min-w-0 wrap-anywhere">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="font-semibold text-ink" x-text="user.fullname"></span>
+                    <span x-show="isSelf(user)" class="rounded-md bg-primary-soft px-2 py-0.5 text-xs font-semibold text-primary-hover">Anda</span>
+                </div>
+                <p class="mt-1 text-sm text-muted" x-text="'@' + user.username"></p>
+            </div>
+            <dl class="grid grid-cols-2 gap-4 text-sm">
+                <div class="min-w-0 wrap-anywhere"><dt class="text-xs text-muted">Role</dt><dd class="mt-1 text-ink" x-text="user.role.name"></dd></div>
+                <div class="min-w-0 wrap-anywhere"><dt class="text-xs text-muted">Divisi</dt><dd class="mt-1 text-ink" x-text="user.division?.name ?? 'Tanpa Divisi'"></dd></div>
+            </dl>
+            @if ($canManage)
+                <div class="flex justify-end">
+                    @include('pages.settings.components.account-actions')
+                </div>
+            @endif
+        </li>
+    </template>
+</ul>
 @php
     $columns = $canManage ? 4 : 3;
 @endphp
 
-<div class="mt-4 overflow-hidden rounded-lg border border-line">
+<div x-show="!loading && !loadError && filteredUsers.length" class="mt-4 hidden overflow-hidden rounded-lg border border-line lg:block">
     <div class="overflow-x-auto">
         <table class="w-full min-w-[640px] text-left text-sm">
             <thead class="bg-soft text-xs font-semibold text-muted">
@@ -19,8 +56,8 @@
             <tbody class="divide-y divide-line">
                 <template x-for="user in filteredUsers" :key="user.id">
                     <tr class="hover:bg-soft/60">
-                        <td class="px-4 py-3">
-                            <div class="flex items-center gap-2">
+                        <td class="max-w-sm px-4 py-3 wrap-anywhere">
+                            <div class="flex flex-wrap items-center gap-2">
                                 <span class="font-semibold text-ink" x-text="user.fullname"></span>
                                 <span
                                     x-show="isSelf(user)"
@@ -36,50 +73,11 @@
                         <td class="px-4 py-3 text-muted" x-text="user.role.name"></td>
                         @if ($canManage)
                         <td class="px-4 py-3 text-right whitespace-nowrap">
-                            <div class="inline-grid w-32 grid-cols-2 items-center gap-2 align-middle">
-                                <button
-                                    type="button"
-                                    class="inline-flex h-9 items-center justify-center rounded-md px-2 font-semibold text-primary-hover hover:text-navy focus-visible:outline-2 focus-visible:outline-primary"
-                                    :aria-label="'Ubah akun ' + user.fullname + ' (@' + user.username + ')'"
-                                    @click="openEdit(user)"
-                                >Ubah</button>
-                                <div class="min-w-0">
-                                    <button
-                                        type="button"
-                                        x-show="!isSelf(user)"
-                                        class="inline-flex h-9 w-full items-center justify-center rounded-md px-2 font-semibold text-red-600 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-red-600"
-                                        :aria-label="'Hapus akun ' + user.fullname + ' (@' + user.username + ')'"
-                                        @click="openDelete(user)"
-                                    >Hapus</button>
-                                    <span x-show="isSelf(user)" class="inline-flex h-9 w-full items-center justify-center text-muted" title="Anda tidak dapat menghapus akun sendiri">
-                                        <span aria-hidden="true">—</span>
-                                        <span class="sr-only">Anda tidak dapat menghapus akun sendiri.</span>
-                                    </span>
-                                </div>
-                            </div>
+                            @include('pages.settings.components.account-actions')
                         </td>
                         @endif
                     </tr>
                 </template>
-
-                <tr x-show="loading" x-cloak>
-                    <td colspan="{{ $columns }}" class="px-4 py-10 text-center text-sm text-muted">Memuat daftar akun…</td>
-                </tr>
-
-                <tr x-show="!loading && loadError" x-cloak>
-                    <td colspan="{{ $columns }}" class="px-4 py-10 text-center">
-                        <p class="text-sm font-medium text-red-600" x-text="loadError"></p>
-                        <button type="button" class="mt-2 text-xs font-semibold text-primary-hover hover:text-navy" @click="fetchUsers()">Coba Lagi</button>
-                    </td>
-                </tr>
-
-                <tr x-show="!loading && !loadError && filteredUsers.length === 0" x-cloak>
-                    <td colspan="{{ $columns }}" class="px-4 py-10 text-center">
-                        <p class="text-sm font-medium text-ink" x-text="users.length ? 'Tidak ada akun yang cocok.' : 'Belum ada akun terdaftar.'"></p>
-                        <p class="mt-1 text-xs text-muted" x-text="users.length ? 'Coba ubah kata kunci atau pilih divisi lain.' : 'Akun anggota tim akan ditampilkan di sini.'"></p>
-                        <button type="button" x-show="search || filterDivision" class="mt-2 text-xs font-semibold text-primary-hover hover:text-navy" @click="resetFilters()">Atur Ulang Filter</button>
-                    </td>
-                </tr>
             </tbody>
         </table>
     </div>
