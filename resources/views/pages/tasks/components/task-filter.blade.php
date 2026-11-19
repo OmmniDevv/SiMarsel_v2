@@ -63,7 +63,7 @@
     </div>
 </div>
 
-<form class="mt-3 border-t border-line pt-3" @submit.prevent="confirmPeriodFilter()" aria-labelledby="task-period-filter-title">
+<form x-show="view === 'board' || view === 'table'" x-cloak class="mt-3 border-t border-line pt-3" @submit.prevent="confirmPeriodFilter()" aria-labelledby="task-period-filter-title">
     <div class="mb-2 flex flex-wrap items-start justify-between gap-2">
         <div>
             <h2 id="task-period-filter-title" class="text-sm font-semibold text-ink">Filter Periode</h2>
@@ -94,40 +94,37 @@
 
         <label x-show="periodFilter.mode === 'date'" x-cloak class="block min-w-0">
             <span class="mb-1 block text-xs font-medium text-label">Tanggal</span>
-            <input id="task-period-date" type="date" x-model="periodFilter.date" class="{{ $periodControlClass }}">
+            <input id="task-period-date" type="date" max="9999-12-31" x-model="periodFilter.date" class="{{ $periodControlClass }}">
         </label>
 
         <label x-show="periodFilter.mode === 'month'" x-cloak class="block min-w-0">
             <span class="mb-1 block text-xs font-medium text-label">Bulan dan Tahun</span>
-            <input id="task-period-month" type="month" x-model="periodFilter.month" class="{{ $periodControlClass }}">
+            <input id="task-period-month" type="month" max="9999-12" x-model="periodFilter.month" class="{{ $periodControlClass }}">
         </label>
 
         <label x-show="periodFilter.mode === 'year'" x-cloak class="block min-w-0">
             <span class="mb-1 block text-xs font-medium text-label">Tahun</span>
-            <select id="task-period-year" x-model="periodFilter.year" class="{{ $periodControlClass }}">
-                <template x-for="year in periodYears" :key="year">
-                    <option :value="String(year)" x-text="year"></option>
-                </template>
-            </select>
+            <input id="task-period-year" type="number" inputmode="numeric" min="1000" max="9999" step="1" placeholder="Contoh: 2009"
+                x-model="periodFilter.year" :aria-invalid="Boolean(periodYearError)" aria-describedby="task-period-year-error" class="{{ $periodControlClass }}">
+            <p id="task-period-year-error" x-show="periodYearError" x-cloak class="mt-1 text-xs text-red-600" role="alert" x-text="periodYearError"></p>
         </label>
 
         <template x-if="periodFilter.mode === 'range'">
             <div class="grid min-w-0 grid-cols-2 gap-2 sm:col-span-2">
                 <label class="block min-w-0">
                     <span class="mb-1 block text-xs font-medium text-label">Dari Tanggal</span>
-                    <input id="task-period-start" type="date" x-model="periodFilter.startDate" class="{{ $periodControlClass }}">
+                    <input id="task-period-start" type="date" max="9999-12-31" x-model="periodFilter.startDate" class="{{ $periodControlClass }}">
                 </label>
                 <label class="block min-w-0">
                     <span class="mb-1 block text-xs font-medium text-label">Sampai Tanggal</span>
-                    <input id="task-period-end" type="date" x-model="periodFilter.endDate" class="{{ $periodControlClass }}">
+                    <input id="task-period-end" type="date" max="9999-12-31" x-model="periodFilter.endDate" class="{{ $periodControlClass }}">
                 </label>
             </div>
         </template>
 
         <div class="flex flex-col justify-end gap-1">
             <button type="submit" class="{{ $button }} w-full" :disabled="!canConfirmPeriodFilter">Terapkan Periode</button>
-            <p x-show="periodFilter.mode === 'range' && periodFilter.startDate && periodFilter.endDate && periodFilter.endDate < periodFilter.startDate"
-                x-cloak class="text-xs text-red-600" role="alert">Tanggal akhir harus sama dengan atau setelah tanggal awal.</p>
+            <p x-show="periodRangeError" x-cloak class="text-xs text-red-600" role="alert" x-text="periodRangeError"></p>
         </div>
     </div>
 </form>
