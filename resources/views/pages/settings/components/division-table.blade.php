@@ -5,7 +5,7 @@
 <div class="mt-4 overflow-hidden rounded-lg border border-line">
     <div class="overflow-x-auto">
         <table class="w-full min-w-[560px] text-left text-sm">
-            <thead class="bg-soft text-xs font-semibold text-label">
+            <thead class="bg-soft text-xs font-semibold text-muted">
                 <tr>
                     <th scope="col" class="px-4 py-3">Kode</th>
                     <th scope="col" class="px-4 py-3">Nama Divisi</th>
@@ -31,7 +31,7 @@
                             <td class="px-4 py-3 text-right whitespace-nowrap">
                                 <button
                                     type="button"
-                                    class="rounded-md px-2 py-1 font-semibold text-primary hover:text-primary-hover focus-visible:outline-2 focus-visible:outline-primary"
+                                    class="rounded-md px-2 py-1 font-semibold text-primary-hover hover:text-navy focus-visible:outline-2 focus-visible:outline-primary"
                                     @click="openEdit(division)"
                                 >Ubah</button>
                                 <button
@@ -51,7 +51,7 @@
                 <tr x-show="!loading && loadError" x-cloak>
                     <td colspan="{{ $columns }}" class="px-4 py-10 text-center">
                         <p class="text-sm font-medium text-red-600" x-text="loadError"></p>
-                        <button type="button" class="mt-2 text-xs font-semibold text-primary hover:text-primary-hover" @click="fetchDivisions()">Coba Lagi</button>
+                        <button type="button" class="mt-2 text-xs font-semibold text-primary-hover hover:text-navy" @click="fetchDivisions()">Coba Lagi</button>
                     </td>
                 </tr>
 
@@ -59,7 +59,7 @@
                     <td colspan="{{ $columns }}" class="px-4 py-10 text-center">
                         <p class="text-sm font-medium text-ink">Belum ada divisi.</p>
                         @if ($canManage)
-                            <button type="button" class="mt-2 text-xs font-semibold text-primary hover:text-primary-hover" @click="openCreate()">Tambah Divisi Pertama</button>
+                            <button type="button" class="mt-2 text-xs font-semibold text-primary-hover hover:text-navy" @click="openCreate()">Tambah Divisi Pertama</button>
                         @endif
                     </td>
                 </tr>
@@ -68,7 +68,7 @@
                     <td colspan="{{ $columns }}" class="px-4 py-10 text-center">
                         <p class="text-sm font-medium text-ink">Tidak ada divisi yang cocok.</p>
                         <p class="mt-1 text-xs text-muted">Coba ubah kata kunci pencarian.</p>
-                        <button type="button" class="mt-2 text-xs font-semibold text-primary hover:text-primary-hover" @click="search = ''">Atur Ulang Pencarian</button>
+                        <button type="button" class="mt-2 text-xs font-semibold text-primary-hover hover:text-navy" @click="search = ''">Atur Ulang Pencarian</button>
                     </td>
                 </tr>
             </tbody>

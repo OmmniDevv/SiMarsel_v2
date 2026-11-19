@@ -108,6 +108,18 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
         return { code_division: form.code_division.trim(), name: form.name.trim() };
     },
 
+    focusFirstError(mode, errors) {
+        this.$nextTick(() => {
+            for (const field of Object.keys(errors)) {
+                const input = this.$root.querySelector(`#${mode}-division-${field}`);
+                if (input && !input.disabled) {
+                    input.focus();
+                    break;
+                }
+            }
+        });
+    },
+
     async save(request) {
         this.saving = true;
         this.errors = {};
@@ -118,6 +130,7 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
         } catch (error) {
             if (error.status === 422 && error.data?.errors) {
                 this.errors = validationErrors(error);
+                this.focusFirstError('edit', this.errors);
             } else {
                 this.formError = errorMessage(error);
             }
@@ -142,6 +155,7 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
         } catch (error) {
             if (error.status === 422 && error.data?.errors) {
                 this.draftErrors = validationErrors(error);
+                this.focusFirstError('create', this.draftErrors);
             } else {
                 this.draftError = errorMessage(error);
             }
@@ -169,6 +183,7 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
 
         this.divisions = this.divisions.filter((item) => item.id !== division.id);
         this.closeModal();
+        this.$nextTick(() => this.$refs.divisionCreateButton?.focus());
         showToast({ title: 'Divisi Dihapus', text: `${division.name} sudah dihapus.` });
     },
 }));

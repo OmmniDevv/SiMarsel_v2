@@ -13,7 +13,7 @@
         >
     </label>
 
-    <p class="text-xs text-muted sm:ml-auto" aria-live="polite">
+    <p x-show="!loading && !loadError" class="text-xs text-muted sm:ml-auto" aria-live="polite">
         Menampilkan <span class="font-semibold text-ink" x-text="filteredDivisions.length"></span>
         dari <span x-text="divisions.length"></span> divisi
     </p>

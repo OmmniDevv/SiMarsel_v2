@@ -1,7 +1,5 @@
 @php
     $card = 'rounded-panel border border-line bg-surface shadow-sm';
-    $tileLabel = 'text-xs font-semibold text-label';
-    $tileValue = 'mt-1 text-2xl font-bold text-ink';
     $canManageDivisions = auth()->user()->can('create', App\Models\Division::class);
 @endphp
 
@@ -10,25 +8,21 @@
     @organization-tab-changed.window="activate($event.detail)"
     class="min-w-0"
 >
-        {{-- Ringkasan --}}
-        <section class="mt-6 grid gap-4 sm:grid-cols-3" aria-label="Ringkasan Divisi">
-            <article class="{{ $card }} p-4">
-                <p class="{{ $tileLabel }}">Total Divisi</p>
-                <p class="{{ $tileValue }}" x-text="loading ? '—' : divisions.length">—</p>
-                <p class="mt-1 text-sm text-muted">Terdaftar di sistem</p>
-            </article>
-
-            <article class="{{ $card }} p-4">
-                <p class="{{ $tileLabel }}">Anggota Divisi</p>
-                <p class="{{ $tileValue }}" x-text="loading ? '—' : totalMembers">—</p>
-                <p class="mt-1 text-sm text-muted">Akun yang tergabung di divisi</p>
-            </article>
-
-            <article class="{{ $card }} p-4">
-                <p class="{{ $tileLabel }}">Divisi Tanpa Anggota</p>
-                <p class="{{ $tileValue }}" x-text="loading ? '—' : emptyDivisions">—</p>
-                <p class="mt-1 text-sm text-muted">Belum memiliki anggota</p>
-            </article>
+        <section class="{{ $card }} mt-6 px-5 py-4" aria-label="Ringkasan Divisi" :aria-busy="loading">
+            <dl class="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
+                <div class="col-span-2 border-b border-line pb-4 sm:col-span-1 sm:border-b-0 sm:pb-0">
+                    <dt class="text-xs font-semibold text-muted">Total Divisi</dt>
+                    <dd class="mt-1 text-xl font-bold text-ink tabular-nums" x-text="loading ? '—' : loadError ? 'Tidak tersedia' : divisions.length">—</dd>
+                </div>
+                <div class="min-w-0">
+                    <dt class="text-xs font-medium text-muted">Anggota Divisi</dt>
+                    <dd class="mt-1 text-lg font-semibold text-ink tabular-nums" x-text="loading ? '—' : loadError ? '—' : totalMembers">—</dd>
+                </div>
+                <div class="min-w-0">
+                    <dt class="text-xs font-medium text-muted">Divisi Tanpa Anggota</dt>
+                    <dd class="mt-1 text-lg font-semibold text-ink tabular-nums" x-text="loading ? '—' : loadError ? '—' : emptyDivisions">—</dd>
+                </div>
+            </dl>
         </section>
 
         <section class="{{ $card }} mt-6 p-5" aria-labelledby="division-list-title">
@@ -43,8 +37,8 @@
                 @if ($canManageDivisions)
                     <button
                         type="button"
-                        class="inline-flex h-9 shrink-0 items-center justify-center gap-2 self-start rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50"
-                        @click="openCreate()"
+                        class="inline-flex h-9 shrink-0 items-center justify-center gap-2 self-start rounded-lg bg-primary-hover px-4 text-sm font-semibold text-white hover:bg-navy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50"
+                        x-ref="divisionCreateButton" @click="openCreate()"
                     >
                         Tambah Divisi
                     </button>
