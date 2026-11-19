@@ -8,7 +8,7 @@
         <input
             type="search"
             x-model="search"
-            placeholder="Cari nama atau username…"
+            placeholder="Cari nama, username, atau divisi…"
             class="h-9 w-full rounded-lg border border-line bg-white pr-3 pl-9 text-sm text-ink placeholder:text-label focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
         >
     </label>
@@ -20,6 +20,7 @@
             class="h-9 w-full appearance-none rounded-lg border border-line bg-white px-3 pr-9 text-sm text-ink focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
         >
             <option value="">Semua Divisi</option>
+            <option value="__unassigned__">Tanpa Divisi</option>
             <template x-for="division in divisions" :key="division.id">
                 <option :value="division.code_division" x-text="division.name"></option>
             </template>
@@ -29,7 +30,7 @@
         </svg>
     </label>
 
-    <p class="text-xs text-muted sm:ml-auto" aria-live="polite">
+    <p x-show="!loading && !loadError" class="text-xs text-muted sm:ml-auto" aria-live="polite">
         Menampilkan <span class="font-semibold text-ink" x-text="filteredUsers.length"></span>
         dari <span x-text="users.length"></span> akun
     </p>
