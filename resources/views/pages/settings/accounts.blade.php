@@ -14,7 +14,7 @@
             <div class="flex flex-wrap items-center gap-x-5 gap-y-2 bg-soft px-5 py-5 sm:px-6">
                 <div class="min-w-0 flex-1">
                     <h2 id="account-total-title" class="text-lg font-semibold text-navy">Total Akun</h2>
-                    <p class="mt-1 text-sm text-muted">Seluruh akun terdaftar, sebelum pencarian dan filter.</p>
+                    <p class="mt-1 text-sm text-muted">Seluruh akun terdaftar.</p>
                 </div>
                 <p aria-labelledby="account-total-title" class="text-4xl font-bold text-navy tabular-nums" :class="loadError && 'text-base!'" x-text="loading ? '—' : loadError ? 'Tidak tersedia' : accountSummary.total">—</p>
             </div>

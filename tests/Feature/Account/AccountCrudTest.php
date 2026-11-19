@@ -64,7 +64,6 @@ class AccountCrudTest extends TestCase
             ->assertSee('aria-describedby="delete-user-identity delete-user-desc delete-user-history"', false)
             ->assertSee('id="delete-user-identity"', false)
             ->assertSee('Penghapusan tidak dapat dibatalkan.')
-            ->assertSee('Tentang akses akun')
             ->assertSee('Identitas akun')
             ->assertSee('Role dan divisi')
             ->assertSee('Keamanan akun')

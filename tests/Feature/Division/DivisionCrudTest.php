@@ -44,7 +44,13 @@ class DivisionCrudTest extends TestCase
             ->assertSee('aria-describedby="edit-division-name-help edit-division-name-error"', false)
             ->assertSee('Perbarui kode atau nama divisi. Anggota divisi tidak berubah.')
             ->assertSee('di divisi ini akan menjadi Tanpa Divisi. Akun tetap tersimpan.')
-            ->assertSee('Ringkasan Divisi');
+            ->assertSee('Ringkasan Divisi')
+            ->assertSee('Keanggotaan divisi')
+            ->assertSee('Identitas divisi')
+            ->assertSee('id="discard-division-title"', false)
+            ->assertSee('id="discard-account-title"', false)
+            ->assertSee('aria-describedby="delete-division-identity delete-division-desc delete-division-impact"', false)
+            ->assertSee('Divisi ini belum memiliki anggota.');
 
         $this->actingAs($this->employee)->get('/settings?tab=divisions')
             ->assertOk()

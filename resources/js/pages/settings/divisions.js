@@ -23,6 +23,8 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
     search: '',
 
     modal: null,
+    discardConfirmation: false,
+    formBaseline: null,
     form: emptyForm(),
     errors: {},
     formError: '',
@@ -77,6 +79,7 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
 
     openCreate() {
         this.resetDraft();
+        this.formBaseline = { ...this.draft };
         this.modal = 'create';
     },
 
@@ -85,6 +88,7 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
         this.editingId = division.id;
         this.errors = {};
         this.formError = '';
+        this.formBaseline = { ...this.form };
         this.modal = 'edit';
     },
 
@@ -94,9 +98,23 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
         this.modal = 'delete';
     },
 
+    get hasUnsavedChanges() {
+        const form = this.modal === 'create' ? this.draft : this.modal === 'edit' ? this.form : null;
+        return Boolean(form && this.formBaseline
+            && Object.keys(this.formBaseline).some((key) => form[key] !== this.formBaseline[key]));
+    },
+
+    requestClose() {
+        if (this.saving || this.creating || this.discardConfirmation) return;
+        if (this.hasUnsavedChanges) this.discardConfirmation = true;
+        else this.closeModal();
+    },
+
     closeModal() {
         if (this.saving || this.creating) return;
 
+        this.discardConfirmation = false;
+        this.formBaseline = null;
         this.modal = null;
         this.editingId = null;
         this.deletingDivision = null;

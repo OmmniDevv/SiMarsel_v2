@@ -91,12 +91,7 @@
                         <p id="{{ $mode }}-division_id-error" aria-live="polite" x-show="{{ $fieldErrors }}.division_id" x-text="{{ $fieldErrors }}.division_id" class="{{ $errorClass }}"></p>
                     </div>
                 </div>
-
-                <details class="mt-3 text-xs text-muted">
-                    <summary class="min-h-6 w-fit cursor-pointer rounded-sm font-semibold hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Tentang akses akun</summary>
-                    <p class="mt-2 max-w-prose">Hanya Manager yang dapat menambah, mengubah, dan menghapus akun.</p>
-                </details>
-
+                
             </fieldset>
             <fieldset class="min-w-0 border-t border-line pt-4">
                 <legend class="pr-2 text-sm font-semibold text-ink">Keamanan akun</legend>
