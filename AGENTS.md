@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 ## Project Summary
 
@@ -42,6 +42,12 @@ The primary objective is to build a structured, maintainable web application for
 - `tests/` — automated tests
 - `storage/` — runtime files
 - `bootstrap/` — application bootstrap
+
+### Before coding and preparing a pull request
+
+Before coding, read the linked story, parent epic, and acceptance criteria. Identify the user outcome and check how the affected modules already handle it. If the task proposes a database schema change, an auth or permissions change, or a change owned by another module, cite the relevant code and explain why the existing behavior cannot meet the requirement. If the need or intended behavior is unclear, leave that change out of the implementation until a maintainer decides.
+
+Whenever asked to draft, open, or mark a PR ready, run the SiMarsel PR review workflow on the actual diff first. Include the ticket links, any unresolved decision, and the checks actually run with their results. For UI changes, include browser evidence if available. If a ticket, test, or page could not be checked, say so explicitly. Leave the PR in draft when a required decision is still open.
 
 ## Development Rules
 
