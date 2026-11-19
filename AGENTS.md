@@ -47,7 +47,9 @@ The primary objective is to build a structured, maintainable web application for
 
 Before coding, read the linked story, parent epic, and acceptance criteria. Identify the user outcome and check how the affected modules already handle it. If the task proposes a database schema change, an auth or permissions change, or a change owned by another module, cite the relevant code and explain why the existing behavior cannot meet the requirement. If the need or intended behavior is unclear, leave that change out of the implementation until a maintainer decides.
 
-Whenever asked to draft, open, or mark a PR ready, run the SiMarsel PR review workflow on the actual diff first. Include the ticket links, any unresolved decision, and the checks actually run with their results. For UI changes, include browser evidence if available. If a ticket, test, or page could not be checked, say so explicitly. Leave the PR in draft when a required decision is still open.
+When asked to “siapin PR”, “siapkan PR”, “buat draft PR”, “prepare the PR”, or to open or mark a PR ready, invoke `simarsel-pr-review` in **Siapkan PR** mode on the actual diff before writing the title and description. For “review PR” or a bare link to a SiMarsel V2 pull request, use **Review independen** mode. Use the registered skill in Claude Code or Codex. If it is not listed, read the [shared skill instructions](.claude/skills/simarsel-pr-review/SKILL.md) and follow the relevant mode.
+
+“Siapin PR” requests a draft in chat. Push, create or update a GitHub PR, publish review comments, or merge only when explicitly requested. If a required decision is still open, recommend leaving the PR in draft.
 
 ## Development Rules
 
