@@ -14,7 +14,6 @@ use App\Http\Requests\Task\TaskCalendarRequest;
 use App\Http\Requests\Task\TaskListRequest;
 use App\Http\Requests\Task\TaskScheduleRequest;
 use App\Http\Requests\Task\UpdateTaskRequest;
-use App\Http\Requests\Task\UpdateWorkNoteRequest;
 use App\Http\Resources\CalendarDeadlineResource;
 use App\Http\Resources\CalendarEventResource;
 use App\Http\Resources\ScheduleItemResource;
@@ -111,15 +110,6 @@ class TaskController extends Controller
         $this->taskService->delete($request->user(), $task, $request->validated());
 
         return response()->json(['message' => 'Tugas berhasil dihapus.']);
-    }
-
-    public function updateWorkNote(UpdateWorkNoteRequest $request, Task $task): JsonResponse
-    {
-        $task = $this->taskService->updateWorkNote($request->user(), $task, $request->validated());
-
-        return TaskDetailResource::make($task)
-            ->additional(['message' => 'Catatan kerja berhasil disimpan.'])
-            ->response();
     }
 
     public function destroyEvidence(Request $request, Task $task, TaskEvidence $evidence, TaskEvidenceService $service): JsonResponse

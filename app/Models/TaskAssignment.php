@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * One account assigned as PIC of a task. It is active while unassigned_at is null; ending it keeps the row,
  * so the assignment history is never lost. A task may have several active PICs.
  */
-#[Fillable(['task_id', 'account_id', 'assigned_by', 'assigned_at', 'unassigned_by', 'unassigned_at', 'note', 'work_note', 'work_note_updated_at'])]
+#[Fillable(['task_id', 'account_id', 'assigned_by', 'assigned_at', 'unassigned_by', 'unassigned_at', 'note'])]
 class TaskAssignment extends Model
 {
     public $timestamps = false;
@@ -26,7 +26,6 @@ class TaskAssignment extends Model
         return [
             'assigned_at' => 'datetime',
             'unassigned_at' => 'datetime',
-            'work_note_updated_at' => 'datetime',
         ];
     }
 

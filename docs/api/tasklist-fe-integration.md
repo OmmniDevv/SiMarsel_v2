@@ -33,7 +33,7 @@ lintas divisi, dan tampilan read-only untuk tugas di luar kewenangan. Calendar d
 | Pilihan PIC (buat & atur) | `create-options.pics`, `assignment-options.pics` | `[{ id, fullname, role, division: { id, code_division, name } \| null }]` dari semua divisi |
 | Status | `Task.status`, `meta.statuses` | `backlog`, `todo`, `in_progress`, `ready_review`, `on_review`, `done` |
 | Hak akses umum | `meta.role`, `meta.role_code`, `meta.permissions`, `meta.can_create` | `role` tetap `admin`/`manager`/`staff`; `role_code` = `ADM`/`MGR`/`SPV`/`EMP`/`FRL`; `permissions` = kode `task.*` |
-| Hak akses per tugas | `can_view_detail`, `can_edit`, `can_assign`, `can_delete`, `can_review`, `can_edit_work_note`, `editable_fields`, `next_statuses`; `can_delete` per Evidence | Dihitung backend; FE tidak perlu menghitung ulang |
+| Hak akses per tugas | `can_view_detail`, `can_edit`, `can_assign`, `can_delete`, `can_review`, `editable_fields`, `next_statuses`; `can_delete` per Evidence | Dihitung backend; FE tidak perlu menghitung ulang |
 | Versi (optimistic locking) | `Task.version` | Kirim di setiap `PATCH`/`POST` perubahan; `409 { current_version }` bila usang |
 | Cakupan daftar | `GET /api/tasks?scope=` | `all_tasks` (default, semua divisi) atau `my_tasks` (PIC aktif) |
 
@@ -99,7 +99,6 @@ lintas divisi, dan tampilan read-only untuk tugas di luar kewenangan. Calendar d
 | Komentar & balasan | ⏳ Tabel siap | Endpoint dibuat di TASK-16 |
 | Hapus Task Card | ✅ Siap (TASK-12) | `DELETE /api/tasks/{id}` dengan `version`; tampilkan tombol bila `can_delete`; tugas Done tidak bisa dihapus (`422`) |
 | Pop-up Calendar | ✅ Siap (TASK-12) | `GET /api/tasks/{id}/preview`: ringkasan terbaru dan flag akses untuk satu tugas |
-| Catatan kerja PIC | ✅ Siap (TASK-13) | `PUT /api/tasks/{id}/work-note`; tampilkan `work_notes` di detail, form bila `can_edit_work_note` |
 | Hapus evidence sendiri | ✅ Siap (TASK-13) | `DELETE /api/tasks/{id}/evidences/{evidence}`; tombol bila `can_delete` pada Evidence |
 | PIC & divisi untuk Supervisor | ✅ Siap (TASK-13) | `pics` di create/assignment-options sudah dibatasi ke divisi Supervisor; `can_change_division` `false` dan `division_id` tidak ada di `editable_fields` untuk Supervisor |
 | Kelola agenda (buat/ubah/hapus) | ⏳ Tabel siap | Endpoint belum ada |

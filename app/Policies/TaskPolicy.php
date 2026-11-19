@@ -103,13 +103,4 @@ class TaskPolicy
     {
         return $user->hasPermission(Permission::TASK_UPDATE) && $task->assignedTo($user);
     }
-
-    /**
-     * Only the task's active PICs with task.update write a work note, each only their own. Whether the task is still
-     * open is checked by TaskService so the rejection carries its reason.
-     */
-    public function updateWorkNote(Account $user, Task $task): bool
-    {
-        return $user->hasPermission(Permission::TASK_UPDATE) && $task->assignedTo($user);
-    }
 }

@@ -15,7 +15,6 @@ use App\Models\TaskCategory;
 use App\Repositories\TaskRepository;
 use BackedEnum;
 use Carbon\CarbonInterface;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -230,51 +229,6 @@ class TaskService
                 'changes' => null,
             ]);
         });
-    }
-
-    /**
-     * Save the PIC's own work note on their active assignment. The note never touches the task's main instruction
-     * (description), another PIC's note, the task's version, or its status, so PICs writing at the same time do not
-     * conflict. An empty note removes it. Saving the same note again changes nothing and records nothing.
-     *
-     * @param  array{work_note: ?string}  $data
-     *
-     * @throws AuthorizationException When the account is no longer an active PIC of the task.
-     * @throws ValidationException When the task is Done.
-     */
-    public function updateWorkNote(Account $pic, Task $task, array $data): Task
-    {
-        $note = trim((string) ($data['work_note'] ?? ''));
-        $note = $note === '' ? null : $note;
-
-        DB::transaction(function () use ($pic, $task, $note) {
-            $locked = Task::query()->whereKey($task->id)->lockForUpdate()->firstOrFail();
-            $assignment = $locked->activeAssignments()->where('account_id', $pic->id)->lockForUpdate()->first();
-
-            if ($assignment === null || ! $pic->is_active) {
-                throw new AuthorizationException;
-            }
-
-            if ($locked->status === TaskStatus::Done) {
-                throw ValidationException::withMessages(['work_note' => 'Catatan kerja tidak dapat diubah setelah tugas selesai.']);
-            }
-
-            $old = $assignment->work_note;
-
-            if ($old === $note) {
-                return;
-            }
-
-            $assignment->update(['work_note' => $note, 'work_note_updated_at' => now()]);
-
-            $locked->activities()->create([
-                'account_id' => $pic->id,
-                'action' => $note === null ? TaskActivity::WORK_NOTE_DELETED : TaskActivity::WORK_NOTE_UPDATED,
-                'changes' => ['work_note' => ['old' => $old, 'new' => $note]],
-            ]);
-        });
-
-        return $this->detail($task->refresh());
     }
 
     /**

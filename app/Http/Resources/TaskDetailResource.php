@@ -39,17 +39,6 @@ class TaskDetailResource extends TaskResource
                 'fullname' => $this->creator->fullname,
             ] : null,
             'assignments' => TaskAssignmentResource::collection($this->whenLoaded('assignments', fn () => $this->assignments, [])),
-            'work_notes' => $this->whenLoaded('assignments', fn () => $this->assignments
-                ->filter(fn ($assignment) => $assignment->isActive())
-                ->sortBy(fn ($assignment) => [$assignment->account?->fullname, $assignment->account_id])
-                ->map(fn ($assignment) => [
-                    'account' => $assignment->account?->only(['id', 'fullname']),
-                    'work_note' => $assignment->work_note,
-                    'updated_at' => $assignment->work_note_updated_at?->toIso8601ZuluString(),
-                ])
-                ->values()
-                ->all(), []),
-            'can_edit_work_note' => $this->resource->workNoteEditableBy($request->user()),
             'evidence' => TaskEvidenceResource::collection($this->whenLoaded('evidences', fn () => $this->evidences, [])),
             'history' => TaskActivityResource::collection($this->whenLoaded('activities', fn () => $this->activities, [])),
             'reviews' => TaskReviewResource::collection($this->whenLoaded('reviews', fn () => $this->reviews, [])),

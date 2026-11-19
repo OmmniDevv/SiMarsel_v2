@@ -81,26 +81,6 @@ class TasklistRecoveryTest extends TestCase
         $this->assertSame(6, DB::table('calendar_events')->count());
     }
 
-    public function test_a_pic_work_note_is_reported_and_keeps_its_column_from_being_rolled_back(): void
-    {
-        config(['tasklist.allow_destructive_rollback' => false]);
-        $assignmentId = DB::table('task_assignments')->whereNull('unassigned_at')->value('id');
-        DB::table('task_assignments')->where('id', $assignmentId)->update(['work_note' => 'Catatan PIC.', 'work_note_updated_at' => now()]);
-
-        $this->assertSame(1, app(TasklistRecoveryService::class)->newDataReport()['Catatan kerja PIC']);
-        $this->artisan('tasks:recovery')->expectsOutputToContain('Jangan rollback skema')->assertSuccessful();
-
-        try {
-            $this->artisan('migrate:rollback', ['--step' => 1])->run();
-            $this->fail('The rollback should have been refused.');
-        } catch (UnsafeTasklistRollbackException $exception) {
-            $this->assertStringContainsString('catatan kerja PIC', $exception->getMessage());
-        }
-
-        $this->assertTrue(Schema::hasColumn('task_assignments', 'work_note'));
-        $this->assertSame('Catatan PIC.', DB::table('task_assignments')->where('id', $assignmentId)->value('work_note'));
-    }
-
     public function test_recovery_keeps_the_latest_data_through_the_old_application_and_back(): void
     {
         $this->useTheNewFeatures();

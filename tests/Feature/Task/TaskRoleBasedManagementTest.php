@@ -10,7 +10,9 @@ use App\Models\Task;
 use App\Models\TaskActivity;
 use App\Models\TaskAssignment;
 use App\Models\TaskEvidence;
+use App\Services\TaskEvidenceService;
 use Database\Seeders\DatabaseSeeder;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -18,8 +20,8 @@ use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
- * TASK-13 (STEAM-245): the PIC's own work note, deleting one's own evidence, PICs a Supervisor may add, and who
- * moves a task to another division.
+ * TASK-13 (STEAM-245): the task's main instruction stays out of a PIC's reach, deleting one's own evidence, PICs a
+ * Supervisor may add, and who moves a task to another division.
  */
 class TaskRoleBasedManagementTest extends TestCase
 {
@@ -56,133 +58,20 @@ class TaskRoleBasedManagementTest extends TestCase
         ];
     }
 
-    // Catatan kerja PIC
+    // Instruksi utama tugas
 
-    public function test_a_pic_writes_their_own_work_note_without_touching_the_instruction_or_the_version(): void
+    public function test_a_staff_or_freelance_pic_cannot_change_the_main_instruction(): void
     {
-        $task = $this->task(['status' => TaskStatus::InProgress, 'description' => 'Instruksi utama.'], ['staff', 'other']);
+        $task = $this->task(['status' => TaskStatus::InProgress, 'description' => 'Instruksi utama.'], ['staff', 'freelance']);
 
-        $this->note($task, 'staff', '  Draft banner selesai 80%.  ')
-            ->assertOk()
-            ->assertJsonPath('message', 'Catatan kerja berhasil disimpan.')
-            ->assertJsonPath('data.description', 'Instruksi utama.')
-            ->assertJsonPath('data.version', 1)
-            ->assertJsonPath('data.can_edit_work_note', true)
-            ->assertJsonPath('data.work_notes', [
-                ['account' => ['id' => $this->accounts['other']->id, 'fullname' => 'other'], 'work_note' => null, 'updated_at' => null],
-                ['account' => ['id' => $this->accounts['staff']->id, 'fullname' => 'staff'], 'work_note' => 'Draft banner selesai 80%.', 'updated_at' => '2026-11-18T02:00:00Z'],
-            ]);
-
-        $fresh = $task->fresh();
-        $this->assertSame('Instruksi utama.', $fresh->description);
-        $this->assertSame(TaskStatus::InProgress, $fresh->status);
-
-        $activity = $task->activities()->first();
-        $this->assertSame(TaskActivity::WORK_NOTE_UPDATED, $activity->action);
-        $this->assertSame($this->accounts['staff']->id, $activity->account_id);
-        $this->assertSame(['work_note' => ['old' => null, 'new' => 'Draft banner selesai 80%.']], $activity->orderedChanges());
-        $this->assertSame('Catatan kerja diperbarui', $activity->description());
-    }
-
-    public function test_one_pic_never_overwrites_another_pics_note(): void
-    {
-        $task = $this->task(['status' => TaskStatus::InProgress], ['staff', 'other']);
-
-        $this->note($task, 'staff', 'Catatan staff.')->assertOk();
-        $this->note($task, 'other', 'Catatan other.')->assertOk();
-        $this->note($task, 'staff', 'Catatan staff revisi.')->assertOk();
-
-        $this->assertSame('Catatan staff revisi.', $this->assignmentOf($task, 'staff')->work_note);
-        $this->assertSame('Catatan other.', $this->assignmentOf($task, 'other')->work_note);
-    }
-
-    public function test_an_empty_note_removes_it_and_resending_the_same_note_records_nothing(): void
-    {
-        $task = $this->task(['status' => TaskStatus::Todo], ['staff']);
-
-        $this->note($task, 'staff', 'Catatan.')->assertOk();
-        $this->note($task, 'staff', 'Catatan.')->assertOk();
-        $this->assertSame(1, $task->activities()->count());
-
-        $this->note($task, 'staff', '')->assertOk()->assertJsonPath('data.work_notes.0.work_note', null);
-
-        $this->assertNull($this->assignmentOf($task, 'staff')->work_note);
-        $activity = $task->activities()->first();
-        $this->assertSame(TaskActivity::WORK_NOTE_DELETED, $activity->action);
-        $this->assertSame(['work_note' => ['old' => 'Catatan.', 'new' => null]], $activity->orderedChanges());
-    }
-
-    public function test_only_active_pics_write_a_work_note(): void
-    {
-        $task = $this->task(['status' => TaskStatus::InProgress], ['staff']);
-
-        foreach (['admin', 'manager', 'supervisor', 'other', 'freelance'] as $role) {
-            $this->note($task, $role, 'Bukan PIC.')->assertForbidden();
-            $this->actingAs($this->accounts[$role])->getJson("/api/tasks/{$task->id}")->assertJsonPath('data.can_edit_work_note', false);
+        foreach (['staff', 'freelance'] as $role) {
+            $this->actingAs($this->accounts[$role])
+                ->patchJson("/api/tasks/{$task->id}", ['description' => 'Diubah PIC.', 'version' => 1])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors(['description' => 'PIC hanya dapat mengubah status tugas.']);
         }
 
-        $this->assertNull($this->assignmentOf($task, 'staff')->work_note);
-        $this->assertSame(0, $task->activities()->count());
-    }
-
-    public function test_a_supervisor_who_is_pic_writes_their_note_like_any_pic(): void
-    {
-        $task = $this->task(['status' => TaskStatus::InProgress, 'division_id' => $this->finance->id], ['supervisor']);
-
-        $this->note($task, 'supervisor', 'Catatan supervisor sebagai PIC.')->assertOk();
-    }
-
-    public function test_a_released_pic_loses_the_note_rights_but_their_note_stays_on_the_ended_assignment(): void
-    {
-        $task = $this->task(['status' => TaskStatus::InProgress], ['staff', 'other']);
-        $this->note($task, 'staff', 'Catatan sebelum dilepas.')->assertOk();
-
-        $this->actingAs($this->accounts['admin'])
-            ->patchJson("/api/tasks/{$task->id}/assignment", ['pic_ids' => [$this->accounts['other']->id], 'version' => 1])
-            ->assertOk();
-
-        $this->note($task, 'staff', 'Masih boleh?')->assertForbidden();
-        $this->actingAs($this->accounts['staff'])->getJson("/api/tasks/{$task->id}")
-            ->assertOk()
-            ->assertJsonPath('data.can_edit_work_note', false)
-            ->assertJsonCount(1, 'data.work_notes');
-
-        $ended = TaskAssignment::where('task_id', $task->id)->where('account_id', $this->accounts['staff']->id)->sole();
-        $this->assertNotNull($ended->unassigned_at);
-        $this->assertSame('Catatan sebelum dilepas.', $ended->work_note);
-    }
-
-    public function test_the_work_note_cannot_change_once_the_task_is_done(): void
-    {
-        $task = $this->task(['status' => TaskStatus::Done], ['staff']);
-
-        $this->note($task, 'staff', 'Terlambat.')
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors(['work_note' => 'Catatan kerja tidak dapat diubah setelah tugas selesai.']);
-        $this->actingAs($this->accounts['staff'])->getJson("/api/tasks/{$task->id}")->assertJsonPath('data.can_edit_work_note', false);
-    }
-
-    public function test_the_work_note_is_validated_and_an_inactive_pic_is_refused(): void
-    {
-        $task = $this->task(['status' => TaskStatus::Todo], ['staff']);
-
-        $this->actingAs($this->accounts['staff'])->putJson("/api/tasks/{$task->id}/work-note", [])
-            ->assertUnprocessable()->assertJsonValidationErrors(['work_note']);
-        $this->note($task, 'staff', str_repeat('a', 5001))
-            ->assertUnprocessable()->assertJsonValidationErrors(['work_note' => 'Catatan kerja maksimal 5000 karakter.']);
-
-        $this->accounts['staff']->update(['is_active' => false]);
-        $this->note($task, 'staff', 'Akun nonaktif.')->assertForbidden();
-        $this->putJson("/api/tasks/{$task->id}/work-note", ['work_note' => 'x'])->assertForbidden();
-    }
-
-    public function test_writing_a_note_on_a_deleted_or_unknown_task_is_not_found(): void
-    {
-        $task = $this->task(['status' => TaskStatus::Todo], ['staff']);
-        $task->delete();
-
-        $this->note($task, 'staff', 'Tugas terhapus.')->assertNotFound();
-        $this->actingAs($this->accounts['staff'])->putJson('/api/tasks/999999/work-note', ['work_note' => 'x'])->assertNotFound();
+        $this->assertSame('Instruksi utama.', $task->fresh()->description);
     }
 
     // Hapus evidence milik sendiri
@@ -284,6 +173,29 @@ class TaskRoleBasedManagementTest extends TestCase
 
         $this->deleteEvidence($other, $evidence, 'staff')->assertOk();
         $this->deleteEvidence($other, $evidence, 'staff')->assertNotFound();
+    }
+
+    public function test_a_second_request_for_the_same_evidence_stops_without_adding_history(): void
+    {
+        $task = $this->task(['status' => TaskStatus::InProgress], ['staff']);
+        $evidence = $this->link($task, 'staff');
+        $service = app(TaskEvidenceService::class);
+
+        // Both requests resolved the evidence before either of them got its turn on the task lock.
+        $first = TaskEvidence::findOrFail($evidence->id);
+        $second = TaskEvidence::findOrFail($evidence->id);
+
+        $service->delete($task, $first, $this->accounts['staff']);
+        $deletedAt = TaskEvidence::withTrashed()->findOrFail($evidence->id)->deleted_at;
+        $this->travel(5)->minutes();
+
+        try {
+            $service->delete($task, $second, $this->accounts['staff']);
+            $this->fail('The second request should find the evidence already deleted.');
+        } catch (ModelNotFoundException) {
+            $this->assertSame(1, $task->activities()->where('action', TaskActivity::EVIDENCE_DELETED)->count());
+            $this->assertTrue($deletedAt->equalTo(TaskEvidence::withTrashed()->findOrFail($evidence->id)->deleted_at));
+        }
     }
 
     // Cakupan PIC Supervisor
@@ -392,11 +304,6 @@ class TaskRoleBasedManagementTest extends TestCase
     {
         return $this->actingAs($this->accounts[$role])
             ->patchJson("/api/tasks/{$task->id}/assignment", ['pic_ids' => $picIds, 'version' => $task->fresh()->version]);
-    }
-
-    private function note(Task $task, string $role, ?string $note): TestResponse
-    {
-        return $this->actingAs($this->accounts[$role])->putJson("/api/tasks/{$task->id}/work-note", ['work_note' => $note]);
     }
 
     private function deleteEvidence(Task $task, TaskEvidence $evidence, string $role): TestResponse

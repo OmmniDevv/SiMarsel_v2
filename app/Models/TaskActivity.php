@@ -49,16 +49,6 @@ class TaskActivity extends Model
      */
     public const RESUBMITTED = 'resubmitted';
 
-    /**
-     * A PIC wrote or changed their own work note.
-     */
-    public const WORK_NOTE_UPDATED = 'work_note_updated';
-
-    /**
-     * A PIC cleared their own work note.
-     */
-    public const WORK_NOTE_DELETED = 'work_note_deleted';
-
     public const ACTION_LABELS = [
         self::CREATED => 'Tugas dibuat',
         self::UPDATED => 'Informasi tugas diubah',
@@ -73,8 +63,6 @@ class TaskActivity extends Model
         self::APPROVED => 'Tugas disetujui',
         self::REVISION_REQUESTED => 'Revisi diminta',
         self::RESUBMITTED => 'Hasil revisi dikirim ulang',
-        self::WORK_NOTE_UPDATED => 'Catatan kerja PIC diperbarui',
-        self::WORK_NOTE_DELETED => 'Catatan kerja PIC dihapus',
     ];
 
     private const FIELD_LABELS = [
@@ -91,7 +79,6 @@ class TaskActivity extends Model
         'deadline' => 'Deadline',
         'requires_review' => 'Wajib QA',
         'evidence_required' => 'Wajib evidence',
-        'work_note' => 'Catatan kerja',
     ];
 
     public const UPDATED_AT = null;
@@ -190,7 +177,7 @@ class TaskActivity extends Model
 
             $label = self::FIELD_LABELS[$field] ?? $field;
 
-            $parts[] = in_array($field, ['description', 'work_note'], true)
+            $parts[] = $field === 'description'
                 ? "{$label} diperbarui"
                 : "{$label}: {$this->formatValue($field, $change['old'] ?? null)} → {$this->formatValue($field, $change['new'] ?? null)}";
         }

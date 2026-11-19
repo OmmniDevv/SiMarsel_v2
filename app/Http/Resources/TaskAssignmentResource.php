@@ -27,8 +27,6 @@ class TaskAssignmentResource extends JsonResource
             'unassigned_at' => $this->unassigned_at?->toIso8601ZuluString(),
             'is_active' => $this->resource->isActive(),
             'note' => $this->note,
-            'work_note' => $this->work_note,
-            'work_note_updated_at' => $this->work_note_updated_at?->toIso8601ZuluString(),
         ];
     }
 

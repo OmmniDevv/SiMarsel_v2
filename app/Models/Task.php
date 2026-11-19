@@ -204,18 +204,6 @@ class Task extends Model
     }
 
     /**
-     * Whether the account may write its own work note on this task right now: an active PIC with task.update, until
-     * the task is Done. The note belongs to the PIC's assignment, so it never touches the task's main instruction or
-     * another PIC's note.
-     */
-    public function workNoteEditableBy(Account $account): bool
-    {
-        return $this->status !== TaskStatus::Done
-            && $account->hasPermission(Permission::TASK_UPDATE)
-            && $this->assignedTo($account);
-    }
-
-    /**
      * Whether the account manages this task: Admin and Managers for every division, a Supervisor for the division
      * they manage. With a permission, the account's role must also grant it. Staff and Freelance never manage a
      * task; they work on it as its PIC.

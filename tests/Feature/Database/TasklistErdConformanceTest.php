@@ -81,7 +81,7 @@ class TasklistErdConformanceTest extends TestCase
     private const DEVIATIONS = [
         'accounts' => ['password'],                 // "Kolom autentikasi lain tidak ditampilkan"
         'tasks' => ['pic_id'],                      // kept until every reader is compatible, as the ERD notes
-        'task_assignments' => ['active_flag', 'work_note', 'work_note_updated_at'], // active_flag: the MySQL mechanism the ERD asks for (one active PIC per account); work_note*: the PIC work note the ERD leaves PENDING (TASK-13)
+        'task_assignments' => ['active_flag'],      // the MySQL mechanism the ERD asks for: one active PIC per account
         'task_activities' => ['actor_name_snapshot'], // existing before TASK-19: name of a deleted actor
         'calendar_events' => ['is_shared'],         // agenda access of the existing Schedule/Calendar (PR #115 review)
     ];
