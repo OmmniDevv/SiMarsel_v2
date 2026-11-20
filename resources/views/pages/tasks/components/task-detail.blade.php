@@ -271,8 +271,10 @@
                             <span x-show="task.evidence_required" class="text-xs font-semibold text-amber-700">Wajib sebelum submission</span>
                         </div>
 
+                        {{-- Penolakan dari backend untuk kirim maupun hapus evidence; tetap terlihat saat form kirim tidak tersedia. --}}
+                        <p x-show="evidenceErrors.evidence" x-cloak x-text="evidenceErrors.evidence" class="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700" role="alert"></p>
+
                         <form x-show="canSubmitEvidence" class="mt-3 flex flex-col gap-3 rounded-lg border border-line p-4" novalidate @submit.prevent="sendEvidence()">
-                            <p x-show="evidenceErrors.evidence" x-text="evidenceErrors.evidence" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700" role="alert"></p>
                             <div class="inline-flex self-start rounded-lg border border-line bg-soft p-1" role="group" aria-label="Jenis evidence">
                                 <button type="button" class="rounded-md px-3 py-1 text-xs font-semibold" :class="evidenceForm.type === 'file' ? 'bg-white text-ink shadow-sm' : 'text-muted'" @click="evidenceForm.type = 'file'; evidenceErrors = {}">File</button>
                                 <button type="button" class="rounded-md px-3 py-1 text-xs font-semibold" :class="evidenceForm.type === 'link' ? 'bg-white text-ink shadow-sm' : 'text-muted'" @click="evidenceForm.type = 'link'; evidenceErrors = {}">Tautan</button>
@@ -309,7 +311,17 @@
                                             <a :href="evidence.url ?? evidence.file_url" target="_blank" rel="noopener noreferrer" class="block truncate text-sm font-semibold text-primary hover:underline" x-text="evidence.file_name ?? evidence.url"></a>
                                             <p x-show="evidence.note" class="mt-0.5 text-sm text-ink" x-text="evidence.note"></p>
                                             <p class="mt-0.5 text-xs text-muted"><span x-text="evidence.submitter?.fullname ?? '-'"></span> · <span x-text="formatDateTime(evidence.created_at)"></span></p>
+                                            <div x-show="confirmingEvidenceId === evidence.id" x-cloak class="mt-2 rounded-lg border border-red-200 bg-red-50 p-2.5" role="alertdialog" :aria-label="`Konfirmasi hapus evidence ${evidence.file_name ?? evidence.url}`">
+                                                <p class="text-xs font-semibold text-red-800">Hapus evidence ini?</p>
+                                                <p class="mt-0.5 text-xs text-red-700">Evidence hilang dari tugas dan tercatat di histori. Tugas dan evidence lain tidak berubah.</p>
+                                                <div class="mt-2 flex justify-end gap-2">
+                                                    <button type="button" class="{{ $button }}" :disabled="deletingEvidenceId !== null" @click="confirmingEvidenceId = null">Batal</button>
+                                                    <button type="button" class="{{ $button }} border-red-600! bg-red-600! text-white! hover:bg-red-700!" :disabled="deletingEvidenceId !== null" @click="removeEvidence(evidence)" x-text="deletingEvidenceId === evidence.id ? 'Menghapus…' : 'Ya, Hapus'"></button>
+                                                </div>
+                                            </div>
                                         </div>
+                                        <button x-show="evidence.can_delete === true && confirmingEvidenceId !== evidence.id" type="button" class="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-primary"
+                                            :aria-label="`Hapus evidence ${evidence.file_name ?? evidence.url}`" @click="confirmingEvidenceId = evidence.id" data-delete-evidence>Hapus</button>
                                     </li>
                                 </template>
                             </ul>
