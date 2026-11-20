@@ -91,7 +91,7 @@
                         <p id="{{ $mode }}-division_id-error" aria-live="polite" x-show="{{ $fieldErrors }}.division_id" x-text="{{ $fieldErrors }}.division_id" class="{{ $errorClass }}"></p>
                     </div>
                 </div>
-                
+
             </fieldset>
             <fieldset class="min-w-0 border-t border-line pt-4">
                 <legend class="pr-2 text-sm font-semibold text-ink">Keamanan akun</legend>
