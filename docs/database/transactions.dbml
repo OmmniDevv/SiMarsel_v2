@@ -15,11 +15,11 @@ Table platforms {
 Table transactions {
   id bigint [pk, increment, note: 'PK lokal, tetap dipakai FK transaction_promo_codes']
   platform_id bigint [not null, ref: > platforms.id]
-  markaz_transaction_id varchar(64) [note: 'FIX-15-BE-02. ID transaksi Markaz. NULL pada histori tanpa ID sumber terverifikasi']
-  markaz_user_id bigint [not null, note: 'Legacy. Pemetaan ke akun pembayar belum diverifikasi; pakai markaz_customer_id']
+  markaz_transaction_id bigint [note: 'FIX-15-BE-02. ID transaksi Markaz. NULL pada histori tanpa ID sumber terverifikasi']
+  markaz_user_id bigint [note: 'Legacy. FIX-15-BE-02: nullable, nilai lama dipertahankan. Pemetaan ke akun pembayar belum diverifikasi; pakai markaz_customer_id. Penghapusan kolom dikerjakan terpisah']
   markaz_customer_id bigint [note: 'FIX-15-BE-02. ID akun pembayar dari API Markaz']
   trx_id varchar(255) [not null, note: 'FIX-15-BE-02: tidak lagi unik global. Nomor tampilan dan pencocokan']
-  markaz_ref_id varchar(64) [note: 'FIX-15-BE-02. Terisi = anggota grup; berisi markaz_transaction_id pembeli pada platform yang sama']
+  markaz_ref_id bigint [note: 'FIX-15-BE-02. ref_id dari API apa adanya. Terisi tidak selalu berarti anggota grup: transaksi biasa dapat berisi id-nya sendiri']
   markaz_created_at datetime [note: 'FIX-15-BE-02. Waktu transaksi dibuat di Markaz (WIB)']
   markaz_paid_at datetime [note: 'FIX-15-BE-02. paid_date terbaru dari API apa adanya; NULL jika belum dikirim']
   paid_date date [note: 'FIX-15-BE-02: nullable. Tanggal bayar valid terakhir untuk laporan']
@@ -38,7 +38,7 @@ Table transactions {
   product_type varchar(100)
   customer_name varchar(255) [note: 'FIX-15-BE-02']
   customer_email varchar(255)
-  customer_phone varchar(30) [note: 'FIX-15-BE-02']
+  customer_phone varchar(50) [note: 'FIX-15-BE-02']
   status_message varchar(100)
   synced_at datetime [note: 'FIX-15-BE-02. Waktu SiMarsel terakhir mengambil transaksi ini; bukan waktu kejadian']
   created_at timestamp
@@ -49,8 +49,8 @@ Table transactions {
     (platform_id, markaz_transaction_id) [unique, name: 'transactions_platform_id_markaz_transaction_id_unique']
     trx_id [name: 'transactions_trx_id_index']
     (platform_id, markaz_ref_id) [name: 'transactions_platform_id_markaz_ref_id_index']
-    markaz_created_at [name: 'transactions_markaz_created_at_index']
-    (paid_date, paid_time) [name: 'transactions_paid_date_paid_time_index']
+    (platform_id, markaz_created_at) [name: 'transactions_platform_id_markaz_created_at_index']
+    (platform_id, paid_date) [name: 'transactions_platform_id_paid_date_index']
   }
 }
 
