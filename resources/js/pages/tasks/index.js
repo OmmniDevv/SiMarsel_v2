@@ -1222,19 +1222,18 @@ Alpine.data('taskDetail', () => ({
             this.applyTask({ evidence_count: Math.max(0, (this.task.evidence_count ?? 1) - 1) });
             await this.refreshDetail('Evidence dihapus, tetapi histori aktivitas gagal diperbarui.');
         } catch (error) {
-            const stillOpen = this.task?.id === taskId;
+            // Penolakan untuk tugas yang sudah tidak ditampilkan tidak boleh muncul di atas tugas lain.
+            if (this.task?.id !== taskId) return;
 
             if (error?.status === 422) {
-                const reason = validationErrors(error).evidence ?? errorMessage(error, 'Evidence gagal dihapus.');
-                if (stillOpen) this.evidenceErrors = { evidence: reason };
-                else showToast({ type: 'info', title: 'Gagal', text: reason, duration: 5000 });
+                this.evidenceErrors = { evidence: validationErrors(error).evidence ?? errorMessage(error, 'Evidence gagal dihapus.') };
             } else if (error?.status === 404) {
                 showToast({ type: 'info', title: 'Gagal', text: 'Evidence tidak ditemukan atau sudah dihapus.', duration: 5000 });
             } else {
                 notifyFailure(error, 'Evidence gagal dihapus.');
             }
             // Status tugas atau PIC mungkin sudah berubah: muat ulang daftar evidence beserta flag can_delete terbaru.
-            if (stillOpen) await this.refreshDetail('Daftar evidence gagal dimuat ulang. Tutup dan buka kembali detail tugas.');
+            await this.refreshDetail('Daftar evidence gagal dimuat ulang. Tutup dan buka kembali detail tugas.');
         } finally {
             this.deletingEvidenceId = null;
             this.confirmingEvidenceId = null;

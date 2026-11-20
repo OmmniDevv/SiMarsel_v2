@@ -1916,3 +1916,37 @@ test('An evidence deletion that finishes after the detail was closed or moved on
     assert.equal(board.tasks.find(({ id }) => id === 7).evidence_count, 0);
     assert.equal(panel.deletingEvidenceId, null);
 });
+
+test('A rejected evidence deletion that returns after another task was opened shows nothing on that task', async () => {
+    let release;
+    const { board, detail: createDetail, requests, toasts } = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [task({ status: 'in_progress', evidence_count: 1 }), task({ id: 8, title: 'Tugas lain', status: 'in_progress', evidence_count: 3 })], meta: { status_counts: {} } } }),
+        'GET /api/tasks/7': () => ({ json: { data: task({ status: 'in_progress', evidence: [ownEvidence(2, 'banner-v2.png')], evidence_count: 1, history: [] }) } }),
+        'GET /api/tasks/8': () => ({ json: { data: task({ id: 8, title: 'Tugas lain', status: 'in_progress', evidence: [], evidence_count: 3, history: [] }) } }),
+        'GET /api/tasks/7/activities': () => ({ json: { data: [] } }),
+        'GET /api/tasks/8/activities': () => ({ json: { data: [] } }),
+        'DELETE /api/tasks/7/evidences/2': async () => {
+            await new Promise((resolve) => (release = resolve));
+            return { status: 422, json: { message: 'Data tidak valid.', errors: { evidence: ['Evidence hanya dapat dihapus saat tugas berstatus To Do atau On Process, bukan Ready Review.'] } } };
+        },
+    });
+    await board.load();
+    board.detailId = 7;
+    const panel = createDetail();
+    await panel.open(7);
+
+    const running = panel.removeEvidence(panel.evidences[0]);
+    await panel.open(8);
+    const toastsBefore = toasts.length;
+    const detailRequestsBefore = requests.filter(({ url }) => url === '/api/tasks/7').length;
+    release();
+    await running;
+
+    assert.equal(panel.task.id, 8);
+    assert.deepEqual({ ...panel.evidenceErrors }, {}, 'the reason for Task A is not shown on Task B');
+    assert.equal(toasts.length, toastsBefore, 'no error toast while Task B is open');
+    assert.equal(panel.task.evidence_count, 3);
+    assert.deepEqual(board.tasks.map(({ id, evidence_count }) => [id, evidence_count]), [[7, 1], [8, 3]], 'nothing was deleted, so no count changes');
+    assert.equal(requests.filter(({ url }) => url === '/api/tasks/7').length, detailRequestsBefore, 'Task A is not reloaded into the panel');
+    assert.equal(panel.deletingEvidenceId, null);
+});
