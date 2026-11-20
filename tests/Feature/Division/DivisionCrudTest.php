@@ -35,6 +35,30 @@ class DivisionCrudTest extends TestCase
         $this->division = Division::create(['code_division' => 'IT', 'name' => 'Information Tech']);
     }
 
+    public function test_division_page_renders_accessible_forms_only_for_manager(): void
+    {
+        $this->actingAs($this->manager)->get('/settings?tab=divisions')
+            ->assertOk()
+            ->assertSee('id="create-division-code_division"', false)
+            ->assertSee('id="edit-division-code_division"', false)
+            ->assertSee('aria-describedby="edit-division-name-help edit-division-name-error"', false)
+            ->assertSee('Perbarui kode atau nama divisi. Anggota divisi tidak berubah.')
+            ->assertSee('di divisi ini akan menjadi Tanpa Divisi. Akun tetap tersimpan.')
+            ->assertSee('Ringkasan Divisi')
+            ->assertSee('Keanggotaan divisi')
+            ->assertSee('Identitas divisi')
+            ->assertSee('id="discard-division-title"', false)
+            ->assertSee('id="discard-account-title"', false)
+            ->assertSee('aria-describedby="delete-division-identity delete-division-desc delete-division-impact"', false)
+            ->assertSee('Divisi ini belum memiliki anggota.');
+
+        $this->actingAs($this->employee)->get('/settings?tab=divisions')
+            ->assertOk()
+            ->assertDontSee('id="create-division-code_division"', false)
+            ->assertDontSee('id="edit-division-code_division"', false)
+            ->assertSee('Cari kode atau nama divisi');
+    }
+
     // Akses
 
     public function test_guest_cannot_access_division_endpoints(): void

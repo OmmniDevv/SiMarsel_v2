@@ -149,7 +149,7 @@ Diuji di `TaskRoleCompatibilityTest`, `TaskListingTest`, `TaskAssignmentTest`, `
 | Melihat tidak memberi hak mengubah | Task di luar kewenangan: `can_edit`/`can_assign`/`can_review` `false`, `editable_fields`/`next_statuses` kosong; PATCH, assignment, status, evidence, dan review lewat API `403` |
 | Buat task | Admin dan Manajer semua divisi `201`; Supervisor divisinya `201`, divisi lain `422`; Staff dan Freelance `403` |
 | Edit task | Admin dan Manajer lintas divisi; Supervisor hanya divisinya; Staff/Freelance non-PIC `403` |
-| Atur PIC dan forward | Admin dan Manajer lintas divisi; Supervisor dari task divisinya (setelah diteruskan, task keluar dari cakupannya); Staff, Freelance, Supervisor divisi lain `403` |
+| Atur PIC dan forward | Admin dan Manajer lintas divisi dengan PIC dari semua divisi; Supervisor dari task divisinya dengan PIC baru hanya dari divisinya (PIC divisi lain yang sudah ada boleh dipertahankan/dilepas); pindah divisi hanya Admin/Manajer, Supervisor `422`; Staff, Freelance, Supervisor divisi lain `403` (TASK-13: `TaskRoleBasedManagementTest`, `TaskAssignmentTest`) |
 | Review | Admin dan Manajer lintas divisi; Supervisor divisinya; Supervisor divisi lain, Staff, Freelance `403` |
 | Self-approval | Supervisor yang PIC menyetujui task divisinya; Manajer yang PIC menyetujui task divisi lain; tercatat di review dan aktivitas `approved` |
 | Workflow Multi-PIC | Setiap PIC aktif (Staff, Freelance, Supervisor) memindahkan status sampai Ready Review tanpa Lead PIC; non-PIC `403` |
@@ -158,6 +158,7 @@ Diuji di `TaskRoleCompatibilityTest`, `TaskListingTest`, `TaskAssignmentTest`, `
 | Perubahan role | Staff yang diubah menjadi Supervisor langsung bisa mengatur PIC dan membuat task; histori task tidak berubah |
 | Akun nonaktif | Login ditolak ("Akun Anda nonaktif. Hubungi Admin."); request Tasklist `403` |
 | Hapus Task Card (TASK-12) | Admin dan Manajer semua divisi, Supervisor divisinya `200`; Staff/Freelance (termasuk PIC) dan Supervisor divisi lain `403`; tugas Done `422`; task terhapus hilang dari semua tampilan dan `404` (`TaskDeletionAndPreviewTest`) |
+| Hapus evidence (TASK-13) | Hanya PIC aktif pengunggahnya saat To Do/On Process `200` (soft delete, file tetap, histori `evidence_deleted`); PIC lain, PIC yang dilepas, role lain, evidence lama tanpa pengunggah `403`; Ready Review/On Review/Done `422`; tugas tidak ikut terhapus (`TaskRoleBasedManagementTest`) |
 | Audit role (TASK-12) | Pembuatan akun dan setiap perubahan role tercatat di `account_role_changes`; histori task tidak berubah; audit tetap ada dengan nama/username akun dan pengubahnya setelah salah satunya dihapus; dua perubahan hampir bersamaan tercatat berurutan dari role terbaru (`AccountRoleAuditTest`) |
 
 ### 5.4 Pemulihan setelah fitur dipakai
