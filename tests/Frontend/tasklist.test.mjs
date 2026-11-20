@@ -1876,3 +1876,43 @@ test('A rejected evidence deletion explains why and reloads the evidence with th
     assert.deepEqual(panel.evidences, []);
     assert.equal(panel.deletingEvidenceId, null);
 });
+
+test('An evidence deletion that finishes after the detail was closed or moved on only updates its own card', async () => {
+    let release;
+    const { board, detail: createDetail, requests, toasts } = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [task({ status: 'in_progress', evidence_count: 1 }), task({ id: 8, title: 'Tugas lain', status: 'in_progress', evidence_count: 3 })], meta: { status_counts: {} } } }),
+        'GET /api/tasks/7': () => ({ json: { data: task({ status: 'in_progress', evidence: [ownEvidence(2, 'banner-v2.png')], evidence_count: 1, history: [] }) } }),
+        'GET /api/tasks/8': () => ({ json: { data: task({ id: 8, title: 'Tugas lain', status: 'in_progress', evidence: [], evidence_count: 3, history: [] }) } }),
+        'GET /api/tasks/7/activities': () => ({ json: { data: [] } }),
+        'GET /api/tasks/8/activities': () => ({ json: { data: [] } }),
+        'DELETE /api/tasks/7/evidences/2': async () => {
+            await new Promise((resolve) => (release = resolve));
+            return { json: { message: 'Evidence berhasil dihapus.' } };
+        },
+    });
+    await board.load();
+    board.detailId = 7;
+    const panel = createDetail();
+
+    // Closed while the request runs.
+    await panel.open(7);
+    let running = panel.removeEvidence(panel.evidences[0]);
+    panel.reset();
+    release();
+    await running;
+    assert.equal(toasts.at(-1).title, 'Evidence dihapus', 'the deletion succeeded, so no failure is reported');
+    assert.equal(board.tasks.find(({ id }) => id === 7).evidence_count, 0);
+    assert.equal(requests.some(({ url }) => url.includes('undefined')), false);
+
+    // Another task opened while the request runs: its card and panel stay untouched.
+    board.tasks.find(({ id }) => id === 7).evidence_count = 1;
+    await panel.open(7);
+    running = panel.removeEvidence(panel.evidences[0]);
+    await panel.open(8);
+    release();
+    await running;
+    assert.equal(board.tasks.find(({ id }) => id === 8).evidence_count, 3);
+    assert.equal(panel.task.evidence_count, 3);
+    assert.equal(board.tasks.find(({ id }) => id === 7).evidence_count, 0);
+    assert.equal(panel.deletingEvidenceId, null);
+});

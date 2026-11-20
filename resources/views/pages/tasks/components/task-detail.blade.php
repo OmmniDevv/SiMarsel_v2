@@ -311,7 +311,7 @@
                                             <a :href="evidence.url ?? evidence.file_url" target="_blank" rel="noopener noreferrer" class="block truncate text-sm font-semibold text-primary hover:underline" x-text="evidence.file_name ?? evidence.url"></a>
                                             <p x-show="evidence.note" class="mt-0.5 text-sm text-ink" x-text="evidence.note"></p>
                                             <p class="mt-0.5 text-xs text-muted"><span x-text="evidence.submitter?.fullname ?? '-'"></span> · <span x-text="formatDateTime(evidence.created_at)"></span></p>
-                                            <div x-show="confirmingEvidenceId === evidence.id" x-cloak class="mt-2 rounded-lg border border-red-200 bg-red-50 p-2.5" role="alertdialog" :aria-label="`Konfirmasi hapus evidence ${evidence.file_name ?? evidence.url}`">
+                                            <div x-show="confirmingEvidenceId === evidence.id && evidence.can_delete === true" x-cloak class="mt-2 rounded-lg border border-red-200 bg-red-50 p-2.5" role="alertdialog" :aria-label="`Konfirmasi hapus evidence ${evidence.file_name ?? evidence.url}`">
                                                 <p class="text-xs font-semibold text-red-800">Hapus evidence ini?</p>
                                                 <p class="mt-0.5 text-xs text-red-700">Evidence hilang dari tugas dan tercatat di histori. Tugas dan evidence lain tidak berubah.</p>
                                                 <div class="mt-2 flex justify-end gap-2">

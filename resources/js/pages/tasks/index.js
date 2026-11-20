@@ -1202,25 +1202,39 @@ Alpine.data('taskDetail', () => ({
     async removeEvidence(evidence) {
         if (this.deletingEvidenceId !== null || evidence?.can_delete !== true) return;
 
+        // Panel bisa ditutup atau berpindah tugas selama request berjalan: hasilnya hanya diterapkan pada tugas ini.
+        const taskId = this.task.id;
         this.deletingEvidenceId = evidence.id;
         this.evidenceErrors = {};
 
         try {
-            const { message } = await deleteEvidence(this.task.id, evidence.id);
+            const { message } = await deleteEvidence(taskId, evidence.id);
+            showToast({ title: 'Evidence dihapus', text: message ?? 'Evidence berhasil dihapus.' });
+
+            if (this.task?.id !== taskId) {
+                const listed = this.tasks.find(({ id }) => id === taskId);
+                if (listed) this.syncTask({ ...listed, evidence_count: Math.max(0, (listed.evidence_count ?? 1) - 1) });
+
+                return;
+            }
+
             this.evidences = this.evidences.filter(({ id }) => id !== evidence.id);
             this.applyTask({ evidence_count: Math.max(0, (this.task.evidence_count ?? 1) - 1) });
-            showToast({ title: 'Evidence dihapus', text: message ?? 'Evidence berhasil dihapus.' });
             await this.refreshDetail('Evidence dihapus, tetapi histori aktivitas gagal diperbarui.');
         } catch (error) {
+            const stillOpen = this.task?.id === taskId;
+
             if (error?.status === 422) {
-                this.evidenceErrors = { evidence: validationErrors(error).evidence ?? errorMessage(error, 'Evidence gagal dihapus.') };
+                const reason = validationErrors(error).evidence ?? errorMessage(error, 'Evidence gagal dihapus.');
+                if (stillOpen) this.evidenceErrors = { evidence: reason };
+                else showToast({ type: 'info', title: 'Gagal', text: reason, duration: 5000 });
             } else if (error?.status === 404) {
                 showToast({ type: 'info', title: 'Gagal', text: 'Evidence tidak ditemukan atau sudah dihapus.', duration: 5000 });
             } else {
                 notifyFailure(error, 'Evidence gagal dihapus.');
             }
             // Status tugas atau PIC mungkin sudah berubah: muat ulang daftar evidence beserta flag can_delete terbaru.
-            await this.refreshDetail('Daftar evidence gagal dimuat ulang. Tutup dan buka kembali detail tugas.');
+            if (stillOpen) await this.refreshDetail('Daftar evidence gagal dimuat ulang. Tutup dan buka kembali detail tugas.');
         } finally {
             this.deletingEvidenceId = null;
             this.confirmingEvidenceId = null;

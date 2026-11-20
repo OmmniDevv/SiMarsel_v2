@@ -67,6 +67,7 @@ class TaskPageTest extends TestCase
                 ->assertSee('x-show="evidence.can_delete === true && confirmingEvidenceId !== evidence.id"', false)
                 ->assertSee('@click="removeEvidence(evidence)"', false)
                 ->assertSee('Hapus evidence ini?')
+                ->assertSee('x-show="confirmingEvidenceId === evidence.id && evidence.can_delete === true"', false)
                 ->assertSee('x-text="calendarScopeLabel"', false)
                 ->assertSee('canOpenEventTask(picked.item)', false)
                 ->assertSee('@click="choose(cell.iso)"', false)
