@@ -205,6 +205,7 @@ Implementasi resolver dimiliki FIX-04-BE-01. Tabel ini adalah nilai harapan.
 }
 ```
 
+- Penyimpanannya (FIX-15-BE-03) dan struktur `payload` per dataset ada di [database.md](database.md#snapshot-dashboard-fix-15-be-03).
 - Pembanding jam setara (misalnya Hari Ini sampai 14.00) membaca `payload` catatan **lengkap** (`is_complete = true`) dengan `cutoff_at` yang setara dan mengeluarkan `availability = complete` dan `as_of` = `cutoff_at`. Perubahan status setelah jam itu tidak mengubah angka catatan.
 - Periode hari penuh (Kemarin, 7/30/90 Hari Terakhir) memakai status dan tanggal laporan terbaru, bukan catatan.
 - Jika catatan yang diperlukan tidak ada, atau ada tetapi `is_complete = false`, pembanding belum tersedia: `availability = unavailable`, `as_of = null`, `values = null`. Catatan parsial tetap tersimpan dan dikenali sebagai belum lengkap, tetapi angkanya tidak boleh dipakai sebagai pembanding.
