@@ -2,15 +2,21 @@
 
 namespace App\Http\Requests\Task;
 
+use App\Models\Task;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Validation\Rule;
 
 class AssignTaskRequest extends StoreTaskRequest
 {
     /**
+     * @var array<int, int>|null
+     */
+    private ?array $currentPicIds = null;
+
+    /**
      * pic_ids is the full list of PICs the task should have after the request. PICs not in the list are released and
-     * new ones are added; PICs that stay are left untouched. division_id is sent only when Admin forwards the task to
-     * another division. Who may assign, and the status restrictions, are checked by TaskService.
+     * new ones are added; PICs that stay are left untouched. division_id is sent only when Admin or a Manager forwards the
+     * task to another division. Who may assign, and the status restrictions, are checked by TaskService.
      *
      * @return array<string, ValidationRule|array<mixed>|string>
      */
@@ -37,6 +43,20 @@ class AssignTaskRequest extends StoreTaskRequest
             'version.integer' => 'Versi tugas tidak valid. Muat ulang detail tugas.',
             'version.min' => 'Versi tugas tidak valid. Muat ulang detail tugas.',
         ];
+    }
+
+    /**
+     * The task's active PICs, which a Supervisor may keep even when they belong to another division.
+     *
+     * @return array<int, int>
+     */
+    protected function currentPicIds(): array
+    {
+        $task = $this->route('task');
+
+        return $this->currentPicIds ??= $task instanceof Task
+            ? $task->activeAssignments()->pluck('account_id')->map(fn (mixed $id) => (int) $id)->all()
+            : [];
     }
 
     /**

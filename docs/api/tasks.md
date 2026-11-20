@@ -12,12 +12,12 @@ Role dan kewenangan membuat tugas berasal dari `GET /api/tasks/meta`. Jika pemua
 
 Semua akun **aktif** melihat daftar dan detail tugas **seluruh divisi** (Board, Table, Calendar, Timeline, histori, evidence, review, monitoring). Melihat tidak memberi hak mengubah; hak mengubah mengikuti permission role (`meta.permissions`), cakupan divisi, dan assignment PIC aktif.
 
-| Role | Melihat | Membuat | Edit field | Atur PIC / meneruskan | Status | Review (termasuk self-approval) |
-|---|---|---|---|---|---|---|
-| `admin` (`ADM`) | Semua tugas | Semua divisi | Semua divisi | Semua divisi | Semua divisi; langkah PIC bila dia PIC aktif | Semua divisi |
-| `manager` (`MGR`) | Semua tugas | Semua divisi | Semua divisi | Semua divisi | Semua divisi; langkah PIC bila dia PIC aktif | Semua divisi |
-| Supervisor (`SPV`, `meta.role` = `staff`) | Semua tugas | Divisinya | Divisinya | Tugas divisinya | Divisinya; langkah PIC bila dia PIC aktif | Divisinya |
-| Staff (`EMP`) dan Freelance (`FRL`), `meta.role` = `staff` | Semua tugas | Tidak | Tidak | Tidak | Hanya sebagai PIC aktif: To Do → On Process → Ready Review (atau → Done bila tanpa QA) | Tidak |
+| Role | Melihat | Membuat | Edit field | Atur PIC | Pindah divisi | Status | Review (termasuk self-approval) | Hapus evidence sendiri |
+|---|---|---|---|---|---|---|---|---|
+| `admin` (`ADM`) | Semua tugas | Semua divisi | Semua divisi | Semua divisi, PIC dari semua divisi | Ya | Semua divisi; langkah PIC bila dia PIC aktif | Semua divisi | Bila dia PIC aktif |
+| `manager` (`MGR`) | Semua tugas | Semua divisi | Semua divisi | Semua divisi, PIC dari semua divisi | Ya | Semua divisi; langkah PIC bila dia PIC aktif | Semua divisi | Bila dia PIC aktif |
+| Supervisor (`SPV`, `meta.role` = `staff`) | Semua tugas | Divisinya | Divisinya (kecuali divisi) | Tugas divisinya, PIC baru hanya dari divisinya | Tidak | Divisinya; langkah PIC bila dia PIC aktif | Divisinya | Bila dia PIC aktif |
+| Staff (`EMP`) dan Freelance (`FRL`), `meta.role` = `staff` | Semua tugas | Tidak | Tidak | Tidak | Tidak | Hanya sebagai PIC aktif: To Do → On Process → Ready Review (atau → Done bila tanpa QA) | Tidak | Bila dia PIC aktif |
 
 - Tugas di luar kewenangan tampil **read-only**: `can_edit`, `can_assign`, `can_delete`, `can_review` `false`, `editable_fields` dan `next_statuses` kosong. FE cukup mengikuti flag ini.
 - Perubahan tanpa hak lewat API ditolak `403`. Perubahan yang diizinkan tetapi tidak sah untuk kondisi tugas (mis. transisi status yang salah) ditolak `422` dengan alasan.
@@ -91,9 +91,10 @@ Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend h
 | `DELETE /api/tasks/{id}` | `version`* | `{ message: "Tugas berhasil dihapus." }`. Soft delete; hanya Admin/Manajer (semua divisi) dan Supervisor (divisinya), selain itu `403`. `422` di `errors.status` bila tugas sudah Done; `409` bila `version` usang |
 | `PATCH /api/tasks/{id}` | `title`, `description`, `category_id`, `platform_id`, `priority`, `start_date`, `deadline`, `version`* | `{ data: TaskDetail, message }` |
 | `PATCH /api/tasks/{id}/status` | `status`*, `version`* | `{ data: TaskDetail, message }`; semua transisi kecuali keluar dari `on_review` (approve/revisi memakai `POST /api/tasks/{id}/reviews`). `422` dengan alasan di `errors.status` bila transisi ditolak; `409 { message, current_version }` bila `version` sudah usang |
-| `GET /api/tasks/{id}/assignment-options` | – | `{ data: { current_pics, current_division, can_change_division, locked_reason, divisions, pics } }`. `divisions` = tujuan penerusan (semua divisi bila `can_change_division`; selain itu divisi tugas saat ini). `pics` = semua akun yang dapat menjadi PIC dari semua divisi (bentuk sama dengan `create-options`). |
-| `PATCH /api/tasks/{id}/assignment` | `pic_ids`* (array ID akun, boleh `[]`, maks. 20), `version`*, `note` (opsional, maks. 1000), `division_id` (opsional; untuk meneruskan, oleh Admin/Manajer atau Supervisor divisi tugas) | `{ data: TaskDetail, message }`. `pic_ids` adalah daftar PIC lengkap setelah perubahan: PIC yang tidak ada di daftar dilepas, PIC baru ditambahkan, PIC yang tetap tidak disentuh. `422` di `errors.pic_ids` bila tidak ada perubahan, PIC terkunci, atau daftar kosong untuk tugas yang bukan `backlog`; `422` di `errors.pic_ids.N` bila akun tidak memenuhi syarat; `409` bila `version` usang. |
+| `GET /api/tasks/{id}/assignment-options` | – | `{ data: { current_pics, current_division, can_change_division, locked_reason, divisions, pics } }`. `divisions` = tujuan penerusan (semua divisi bila `can_change_division`, yaitu Admin/Manajer; selain itu divisi tugas saat ini). `pics` = akun yang boleh ditambahkan user sebagai PIC: semua divisi untuk Admin/Manajer, divisinya sendiri untuk Supervisor (bentuk sama dengan `create-options`). |
+| `PATCH /api/tasks/{id}/assignment` | `pic_ids`* (array ID akun, boleh `[]`, maks. 20), `version`*, `note` (opsional, maks. 1000), `division_id` (opsional; untuk meneruskan, hanya Admin/Manajer; Supervisor `422` di `errors.division_id`) | `{ data: TaskDetail, message }`. `pic_ids` adalah daftar PIC lengkap setelah perubahan: PIC yang tidak ada di daftar dilepas, PIC baru ditambahkan, PIC yang tetap tidak disentuh. `422` di `errors.pic_ids` bila tidak ada perubahan, PIC terkunci, atau daftar kosong untuk tugas yang bukan `backlog`; `422` di `errors.pic_ids.N` bila akun tidak memenuhi syarat; `409` bila `version` usang. |
 | `GET /api/tasks/{id}/evidences` | – | `{ data: [Evidence] }` |
+| `DELETE /api/tasks/{id}/evidences/{evidence}` | – | `{ message: "Evidence berhasil dihapus." }` (TASK-13). Hanya PIC aktif yang mengunggahnya; PIC lain, PIC yang sudah dilepas, Admin/Manajer/Supervisor bukan pengunggah, dan evidence lama tanpa pengunggah `403`. `422` di `errors.evidence` bila tugas tidak berstatus `todo`/`in_progress`. `404` bila bukan evidence tugas itu atau sudah dihapus |
 | `GET /api/tasks/{id}/evidences/{evidence}/download` | – | File evidence (hanya untuk yang dapat melihat tugas; `404` bila bukan evidence tugas itu atau berupa tautan) |
 | `POST /api/tasks/{id}/evidences` | multipart: `file` **atau** `url`, `note` | `201 { data: Evidence, message }`; hanya PIC (`403` untuk yang lain); `422` dengan pesan di `errors.file`/`errors.url`, atau di `errors.evidence` bila status tugas tidak menerima evidence |
 | `GET /api/tasks/{id}/reviews` | – | `{ data: [Review] }`, terbaru lebih dulu; dapat dilihat siapa pun yang dapat melihat tugas (termasuk PIC) |
@@ -104,11 +105,11 @@ Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend h
 
 `*` = wajib.
 
-- **Evidence**: `{ id, task_id, type, file_name, file_url, url, note, submitter: { id, fullname }, created_at }`. `type` = `file` (isi `file_name`/`file_url`) atau `link` (isi `url`). Detail tugas mengirimnya di `evidence`, terbaru lebih dulu; `[]` bila tugas belum punya evidence.
+- **Evidence**: `{ id, task_id, type, file_name, file_url, url, note, submitter: { id, fullname }, can_delete, created_at }`. `can_delete` = `true` bila user boleh menghapus evidence ini sekarang. `type` = `file` (isi `file_name`/`file_url`) atau `link` (isi `url`). Detail tugas mengirimnya di `evidence`, terbaru lebih dulu; `[]` bila tugas belum punya evidence.
 - **Review**: `{ id, task_id, cycle, decision, decision_label, note, reviewer: { id, fullname }, created_at }`. `decision` = `approve` (label Approve) atau `revision` (label Request Revision). `cycle` = urutan pemeriksaan tugas itu (1, 2, ...), dihitung dari urutan review (tidak disimpan sebagai kolom sejak ERD TASK-19). Review tidak dapat diubah atau dihapus.
 - **Activity**: lihat bentuk JSON di atas (`action`, `action_label`, `description`, `changes`, `actor`). Histori hanya ditambahkan oleh sistem, tidak bisa diedit.
 - **Assignment** (di `TaskDetail.assignments`): `{ id, account: { id, fullname }, assigned_by: { id, fullname } | null, assigned_at, unassigned_by: { id, fullname } | null, unassigned_at, is_active, note }`. Assignment aktif = `unassigned_at` `null`. Melepas PIC tidak menghapus barisnya; menugaskan ulang PIC yang sudah dilepas membuat assignment baru.
-- **Mengatur PIC**: lewat `PATCH /api/tasks/{id}/assignment` dengan `version` dan daftar lengkap `pic_ids`. `PATCH /api/tasks/{id}` tidak lagi mengubah PIC (`pic_id`/`pic_ids` diabaikan). Sertakan `division_id` bila Admin meneruskan tugas ke divisi lain. Backend tidak mengubah status ketika PIC/divisi diperbarui dan mencatat daftar PIC sebelum/sesudah di `history`. Penugasan terkunci saat tugas berada di tahap QA atau sudah selesai.
+- **Mengatur PIC**: lewat `PATCH /api/tasks/{id}/assignment` dengan `version` dan daftar lengkap `pic_ids`. `PATCH /api/tasks/{id}` tidak lagi mengubah PIC (`pic_id`/`pic_ids` diabaikan). Sertakan `division_id` bila Admin atau Manajer meneruskan tugas ke divisi lain. Backend tidak mengubah status ketika PIC/divisi diperbarui dan mencatat daftar PIC sebelum/sesudah di `history`. Penugasan terkunci saat tugas berada di tahap QA atau sudah selesai.
 - **ScheduleItem**: `{ id, type: "task"|"event", title, division, is_shared, target_divisions, start_date, end_date, status, priority, task_id, can_view_detail }`. `status` dan `priority` dipakai agar filter Tasklist ikut berlaku di Timeline (agenda bersama tidak disaring), dan bernilai `null` untuk `event`; sebaliknya `is_shared` hanya untuk `event` (`null` untuk tugas). Untuk `event`, `task_id` selalu `null` dan `can_view_detail` selalu `false` (agenda tidak terhubung ke tugas di ERD). Untuk tugas, `can_view_detail` hanya `true` bila user berhak membuka detailnya. Lihat [Timeline](#timeline-task-10).
 - **Event** (Calendar): `{ id, title, division, is_shared, target_divisions, start_date, end_date, description, task_id, can_view_detail }`. `task_id` selalu `null` dan `can_view_detail` selalu `false`: agenda tidak terhubung ke tugas, sehingga tombol "Lihat Detail Tugas Terkait" tidak muncul. `deadlines` hanya berisi tugas dalam cakupan user dan yang memiliki deadline, berupa objek Task ditambah `description` (boleh `null`) dan `is_overdue`. Lihat [Calendar](#calendar-task-11).
 - **Lihat Detail dari Calendar**: frontend berpindah ke Board dan membuka detail lewat `GET /api/tasks/{id}`. Bila tugas tersembunyi oleh filter, filter cari/prioritas/status dikosongkan; Admin juga dipindah ke Semua Divisi. Akses tetap diputuskan backend (`403`/`404`).
@@ -170,8 +171,9 @@ Semua PIC aktif menjalankan workflow bersama; satu PIC dapat memindahkan status 
 
 **PIC (TASK-04, multi-PIC TASK-19)**
 - Satu tugas dapat memiliki banyak PIC aktif, dan satu akun dapat menjadi PIC di banyak tugas. Data disimpan di `task_assignments`; `tasks.pic_id` hanya data lama dan tidak lagi dibaca atau ditulis.
-- PIC harus akun aktif dengan role Staff (`EMP`), Freelance (`FRL`), atau Supervisor (`SPV`), dari divisi mana pun. PIC lintas divisi tidak memerlukan divisi kolaborator.
-- Yang boleh mengatur PIC dan meneruskan tugas ke divisi lain: Admin dan Manajer untuk semua divisi, Supervisor untuk tugas divisinya. Setelah diteruskan, tugas keluar dari cakupan Supervisor divisi asal.
+- PIC harus akun aktif dengan role Staff (`EMP`), Freelance (`FRL`), atau Supervisor (`SPV`). PIC lintas divisi tidak memerlukan divisi kolaborator.
+- Yang boleh mengatur PIC: Admin dan Manajer untuk semua divisi dengan PIC dari divisi mana pun; Supervisor untuk tugas divisinya dengan PIC **baru** hanya dari divisinya (TASK-13). Supervisor tetap boleh mempertahankan atau melepas PIC divisi lain yang sudah ada; menambah PIC divisi lain ditolak `422` di `errors.pic_ids.N` ("Supervisor hanya dapat menugaskan PIC dari divisinya sendiri."). Aturan yang sama berlaku di `POST /api/tasks`.
+- Memindahkan tugas ke divisi lain (lewat `division_id` di assignment maupun form edit) hanya oleh Admin dan Manajer (TASK-13). Supervisor ditolak `422` di `errors.division_id`. Setelah dipindah, tugas keluar dari cakupan Supervisor divisi asal.
 - Menambah atau melepas satu PIC tidak mengubah assignment PIC lain dan tidak mengubah status tugas.
 - PIC tidak boleh diubah saat status `ready_review`, `on_review`, atau `done`. Tugas selain `backlog` harus selalu punya minimal satu PIC.
 - Daftar PIC sebelum dan sesudah dicatat di histori; riwayat assignment tidak dihapus.
@@ -188,6 +190,7 @@ Semua PIC aktif menjalankan workflow bersama; satu PIC dapat memindahkan status 
 - Submission tetap lewat `PATCH /api/tasks/{id}/status` (`ready_review` bila wajib QA, `done` bila tidak); ditolak `422` bila evidence wajib tapi belum ada.
 - Setelah revisi (`on_review` → `in_progress`), PIC dapat mengirim evidence baru dan submit ulang. Evidence lama tetap tersimpan dan tampil di detail (terbaru lebih dulu).
 - Setiap evidence yang dikirim dicatat di histori dengan action `evidence_submitted`.
+- **Hapus evidence (TASK-13)**: hanya PIC aktif yang mengunggahnya, dengan permission `task.update`, saat status `todo` atau `in_progress` (evidence yang sedang/sudah direview tetap). Soft delete: `deleted_at`, `deleted_by`; file tetap disimpan untuk penelusuran, tetapi evidence hilang dari daftar dan tidak dapat diunduh (`404`). Tugas, statusnya, `version`, dan evidence lain tidak berubah. Dicatat di histori sebagai `evidence_deleted` dengan `changes.evidence.old` = `{ id, type, name }`. Bila evidence wajib dan evidence terakhir dihapus, PIC harus mengunggah lagi sebelum Ready Review. Mengubah evidence belum tersedia (TASK-18).
 
 **Review & revisi (TASK-07)**
 - Hanya tugas `requires_review = true` yang direview. Mulai pemeriksaan = `PATCH /status` dari `ready_review` ke `on_review` oleh Admin/Manajer atau Supervisor divisinya.
@@ -201,6 +204,7 @@ Semua PIC aktif menjalankan workflow bersama; satu PIC dapat memindahkan status 
 - Semua status boleh dihapus kecuali `done` (`422`).
 - Soft delete: tugas hilang dari daftar, Board, Table, Calendar, Timeline, ringkasan, dan monitoring; detail, preview, dan endpoint lain mengembalikan `404`. Histori, evidence, review, dan assignment tetap tersimpan; `deleted_by` dan aktivitas `deleted` mencatat siapa yang menghapus. Belum ada fitur memulihkan tugas.
 - Agenda tidak terhubung ke tugas (ERD), jadi menghapus tugas tidak mengubah agenda.
+- Konfirmasi sebelum menghapus ditampilkan FE; backend mewajibkan `version` sehingga tugas yang baru diubah orang lain tidak terhapus tanpa dilihat (`409`).
 
 **Histori aktivitas (TASK-08)**
 - Histori hanya dibuat setelah aktivitas berhasil; aksi yang ditolak tidak meninggalkan catatan.

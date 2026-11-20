@@ -144,7 +144,7 @@ class TaskRoleCompatibilityTest extends TestCase
 
         $this->actingAs($supervisor)->patchJson("/api/tasks/{$own->id}", ['title' => 'Judul baru', 'version' => 1])->assertOk();
         $this->actingAs($supervisor)
-            ->patchJson("/api/tasks/{$own->id}/assignment", ['pic_ids' => [$this->accounts['freelance']->id], 'version' => 2])
+            ->patchJson("/api/tasks/{$own->id}/assignment", ['pic_ids' => [$supervisor->id], 'version' => 2])
             ->assertOk();
     }
 
@@ -209,7 +209,11 @@ class TaskRoleCompatibilityTest extends TestCase
         $this->actingAs($this->accounts['freelance'])->patchJson("/api/tasks/{$task->id}/assignment", $payload($task, [$this->accounts['freelance']->id]))->assertForbidden();
         $this->actingAs($this->accounts['supervisor'])->patchJson("/api/tasks/{$financeTask->id}/assignment", $payload($financeTask, [$this->accounts['freelance']->id]))->assertForbidden();
 
-        $this->actingAs($this->accounts['supervisor'])->patchJson("/api/tasks/{$task->id}/assignment", $payload($task, [$this->accounts['staff']->id, $this->accounts['freelance']->id]))->assertOk();
+        // A Supervisor adds PICs only from their own division; the freelancer has none.
+        $this->actingAs($this->accounts['supervisor'])->patchJson("/api/tasks/{$task->id}/assignment", $payload($task, [$this->accounts['staff']->id, $this->accounts['freelance']->id]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['pic_ids.1' => 'Supervisor hanya dapat menugaskan PIC dari divisinya sendiri.']);
+        $this->actingAs($this->accounts['supervisor'])->patchJson("/api/tasks/{$task->id}/assignment", $payload($task, [$this->accounts['staff']->id, $this->accounts['supervisor']->id]))->assertOk();
         $this->actingAs($this->accounts['manager'])->patchJson("/api/tasks/{$financeTask->id}/assignment", $payload($financeTask, [$this->accounts['supervisor']->id]))->assertOk();
         $this->actingAs($this->accounts['admin'])->patchJson("/api/tasks/{$task->id}/assignment", $payload($task, [$this->accounts['freelance']->id]))->assertOk();
     }

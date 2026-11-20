@@ -182,7 +182,7 @@ class TaskActivity extends Model
                 : "{$label}: {$this->formatValue($field, $change['old'] ?? null)} → {$this->formatValue($field, $change['new'] ?? null)}";
         }
 
-        if ($evidence = $changes['evidence']['new'] ?? null) {
+        if ($evidence = $changes['evidence']['new'] ?? $changes['evidence']['old'] ?? null) {
             $parts[] = 'Evidence: '.($evidence['name'] ?? '-');
         }
 

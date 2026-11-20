@@ -112,6 +112,13 @@ class TaskController extends Controller
         return response()->json(['message' => 'Tugas berhasil dihapus.']);
     }
 
+    public function destroyEvidence(Request $request, Task $task, TaskEvidence $evidence, TaskEvidenceService $service): JsonResponse
+    {
+        $service->delete($task, $evidence, $request->user());
+
+        return response()->json(['message' => 'Evidence berhasil dihapus.']);
+    }
+
     public function activities(Task $task, TaskActivityService $service): AnonymousResourceCollection
     {
         return TaskActivityResource::collection($service->list($task));

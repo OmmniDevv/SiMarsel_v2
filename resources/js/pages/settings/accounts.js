@@ -27,6 +27,8 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
     search: '',
 
     modal: null,
+    discardConfirmation: false,
+    formBaseline: null,
     form: emptyForm(),
     errors: {},
     formError: '',
@@ -51,7 +53,9 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
         const keyword = this.search.trim().toLowerCase();
 
         return this.users.filter((user) => {
-            if (this.filterDivision && user.division?.code_division !== this.filterDivision) return false;
+            if (this.filterDivision === '__unassigned__') {
+                if (user.division) return false;
+            } else if (this.filterDivision && user.division?.code_division !== this.filterDivision) return false;
             if (!keyword) return true;
 
             return [user.fullname, user.username, user.division?.name ?? ''].some((value) => value.toLowerCase().includes(keyword));
@@ -118,6 +122,7 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
         if (!this.canManage) return;
 
         this.resetDraft();
+        this.formBaseline = { ...this.draft };
         this.modal = 'create';
     },
 
@@ -131,6 +136,7 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
         };
         this.editingId = user.id;
         this.resetFormState();
+        this.formBaseline = { ...this.form };
         this.modal = 'edit';
     },
 
@@ -142,9 +148,23 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
         this.modal = 'delete';
     },
 
+    get hasUnsavedChanges() {
+        const form = this.modal === 'create' ? this.draft : this.modal === 'edit' ? this.form : null;
+        return Boolean(form && this.formBaseline
+            && Object.keys(this.formBaseline).some((key) => String(form[key] ?? '') !== String(this.formBaseline[key] ?? '')));
+    },
+
+    requestClose() {
+        if (this.saving || this.creating || this.discardConfirmation) return;
+        if (this.hasUnsavedChanges) this.discardConfirmation = true;
+        else this.closeModal();
+    },
+
     closeModal() {
         if (this.saving || this.creating) return;
 
+        this.discardConfirmation = false;
+        this.formBaseline = null;
         this.modal = null;
         this.editingId = null;
         this.deletingUser = null;
@@ -164,6 +184,18 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
         return payload;
     },
 
+    focusFirstError(mode, errors) {
+        this.$nextTick(() => {
+            for (const field of Object.keys(errors)) {
+                const input = this.$root.querySelector(`#${mode}-${field}`);
+                if (input && !input.disabled) {
+                    input.focus();
+                    break;
+                }
+            }
+        });
+    },
+
     async save(request) {
         this.saving = true;
         this.errors = {};
@@ -174,6 +206,7 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
         } catch (error) {
             if (error.status === 422 && error.data?.errors) {
                 this.errors = validationErrors(error);
+                this.focusFirstError('edit', this.errors);
             } else {
                 this.formError = errorMessage(error);
             }
@@ -198,6 +231,7 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
         } catch (error) {
             if (error.status === 422 && error.data?.errors) {
                 this.draftErrors = validationErrors(error);
+                this.focusFirstError('create', this.draftErrors);
             } else {
                 this.draftError = errorMessage(error);
             }
@@ -229,6 +263,7 @@ Alpine.data('accountSettings', (roles = [], divisions = [], canManage = false, i
 
         this.users = this.users.filter((item) => item.id !== user.id);
         this.closeModal();
+        this.$nextTick(() => this.$refs.accountCreateButton?.focus());
         showToast({ title: 'Akun Dihapus', text: `${user.fullname} sudah dihapus.` });
     },
 }));

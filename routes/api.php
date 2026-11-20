@@ -211,6 +211,10 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('task')
             ->can('submitEvidence', 'task')
             ->name('evidences.store');
+        Route::delete('/{task}/evidences/{evidence}', [TaskController::class, 'destroyEvidence'])
+            ->whereNumber(['task', 'evidence'])
+            ->can('deleteEvidence', 'task')
+            ->name('evidences.destroy');
         Route::get('/{task}/evidences/{evidence}/download', [TaskController::class, 'downloadEvidence'])
             ->whereNumber(['task', 'evidence'])
             ->can('view', 'task')

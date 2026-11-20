@@ -58,6 +58,17 @@ const SUMMARY_FIELDS = [
 const affectsSummary = (before, after) => !before || SUMMARY_FIELDS.some((field) => field(after) !== undefined && field(after) !== field(before));
 const PAGE_SIZE = 10;
 const BACKEND_PENDING = 'Menunggu pengerjaan Back End.';
+const PERIOD_DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
+const PERIOD_YEAR_FORMAT = /^[1-9]\d{3}$/;
+const emptyPeriodFilter = () => ({
+    mode: '',
+    basis: 'deadline',
+    date: '',
+    month: '',
+    year: String(new Date().getFullYear()),
+    startDate: '',
+    endDate: '',
+});
 
 const EVIDENCE_MAX_MB = 10;
 const EVIDENCE_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip'];
@@ -128,6 +139,7 @@ Alpine.data('tasklist', () => ({
     summaryQueued: false,
 
     filters: { search: '', division: '', priority: '', status: '' },
+    periodFilter: emptyPeriodFilter(),
     sort: { key: 'deadline', dir: 'asc' },
     page: 1,
 
@@ -221,8 +233,51 @@ Alpine.data('tasklist', () => ({
         return ['search', 'priority', 'status'].some((key) => this.filters[key] !== '') || this.filters.division !== this.defaultDivision();
     },
 
+    get hasPeriodConfiguration() {
+        const { mode, basis, date, month, year, startDate, endDate } = this.periodFilter;
+
+        return mode !== ''
+            || basis !== 'deadline'
+            || Boolean(date || month || startDate || endDate)
+            || String(year) !== String(new Date().getFullYear());
+    },
+
+    get periodYearError() {
+        const { mode, year } = this.periodFilter;
+
+        return mode === 'year' && !PERIOD_YEAR_FORMAT.test(String(year)) ? 'Masukkan tahun 4 digit, misalnya 2009.' : '';
+    },
+
+    // Tanggal dibandingkan sebagai teks, sehingga tahun harus tepat 4 digit agar urutannya benar.
+    get periodRangeError() {
+        const { mode, startDate, endDate } = this.periodFilter;
+
+        if (mode !== 'range' || !startDate || !endDate) return '';
+        if (!PERIOD_DATE_FORMAT.test(startDate) || !PERIOD_DATE_FORMAT.test(endDate)) return 'Format tanggal tidak valid.';
+
+        return endDate < startDate ? 'Tanggal akhir harus sama dengan atau setelah tanggal awal.' : '';
+    },
+
+    get canConfirmPeriodFilter() {
+        const { mode, date, month, year, startDate, endDate } = this.periodFilter;
+
+        if (mode === 'date') return PERIOD_DATE_FORMAT.test(date);
+        if (mode === 'month') return /^\d{4}-(0[1-9]|1[0-2])$/.test(month);
+        if (mode === 'year') return !this.periodYearError;
+        if (mode === 'range') return Boolean(startDate && endDate) && !this.periodRangeError;
+
+        return false;
+    },
+
+    confirmPeriodFilter() {
+        if (!this.canConfirmPeriodFilter) return;
+
+        alert('backend belum tersedia');
+    },
+
     resetFilters() {
         this.filters = { search: '', division: this.defaultDivision(), priority: '', status: '' };
+        this.periodFilter = emptyPeriodFilter();
         this.sort = { key: 'deadline', dir: 'asc' };
     },
 

@@ -9,6 +9,7 @@ use App\Models\TaskActivity;
 use App\Models\TaskEvidence;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -86,6 +87,50 @@ class TaskEvidenceService
 
             throw $e;
         }
+    }
+
+    /**
+     * Delete evidence the PIC uploaded (soft delete) and record it in the task's history. The stored file is kept so
+     * the deletion can be traced; the evidence leaves every list and can no longer be downloaded. The task itself, its
+     * status, and other evidence are not touched. The task and the evidence are read again under lock, so evidence
+     * cannot be deleted while the task is being reassigned or handed to QA, and a request that lost the race to delete
+     * the same evidence stops without adding to the history.
+     *
+     * @throws ModelNotFoundException When the evidence has already been deleted.
+     * @throws AuthorizationException When the account is not the PIC who uploaded it.
+     * @throws ValidationException When the task is no longer in a status in which evidence may change.
+     */
+    public function delete(Task $task, TaskEvidence $evidence, Account $actor): void
+    {
+        abort_unless($evidence->task_id === $task->id, 404);
+
+        DB::transaction(function () use ($task, $evidence, $actor) {
+            $locked = Task::query()->whereKey($task->id)->lockForUpdate()->firstOrFail();
+            $current = $locked->evidences()->whereKey($evidence->id)->lockForUpdate()->firstOrFail();
+
+            if ($current->submitter_id !== $actor->id || ! $locked->assignedTo($actor)) {
+                throw new AuthorizationException;
+            }
+
+            if (! in_array($locked->status, self::SUBMITTABLE_STATUSES, true)) {
+                throw ValidationException::withMessages([
+                    'evidence' => "Evidence hanya dapat dihapus saat tugas berstatus To Do atau On Process, bukan {$locked->status->label()}.",
+                ]);
+            }
+
+            $current->deleted_by = $actor->id;
+            $current->save();
+            $current->delete();
+
+            $locked->activities()->create([
+                'account_id' => $actor->id,
+                'action' => TaskActivity::EVIDENCE_DELETED,
+                'changes' => ['evidence' => [
+                    'old' => ['id' => $current->id, 'type' => $current->type, 'name' => $current->file_name ?? $current->url],
+                    'new' => null,
+                ]],
+            ]);
+        });
     }
 
     /**

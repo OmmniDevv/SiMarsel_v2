@@ -1,5 +1,6 @@
 @php
     $selectClass = 'h-9 w-full rounded-lg border border-line bg-white pr-8 pl-3 sm:w-auto text-sm text-ink focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none disabled:bg-soft disabled:text-muted';
+    $periodControlClass = 'h-9 w-full rounded-lg border border-line bg-white pr-8 pl-3 text-sm text-ink focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none';
 @endphp
 
 {{-- Toolbar ringkas: pilihan tampilan + pencarian + filter dalam satu baris (desktop). Filter berlaku di semua tampilan. --}}
@@ -58,6 +59,72 @@
             </select>
         </label>
 
-        <button type="button" class="{{ $button }} shrink-0" :disabled="!hasActiveFilter" @click="resetFilters()">Atur Ulang Filter</button>
+        <button type="button" class="{{ $button }} shrink-0" :disabled="!hasActiveFilter && !hasPeriodConfiguration" @click="resetFilters()">Atur Ulang Filter</button>
     </div>
 </div>
+
+<form x-show="view === 'board' || view === 'table'" x-cloak class="mt-3 border-t border-line pt-3" @submit.prevent="confirmPeriodFilter()" aria-labelledby="task-period-filter-title">
+    <div class="mb-2 flex flex-wrap items-start justify-between gap-2">
+        <div>
+            <h2 id="task-period-filter-title" class="text-sm font-semibold text-ink">Filter Periode</h2>
+            <p class="mt-0.5 text-xs text-muted">Pilih tanggal mulai atau deadline. Rentang mencakup tanggal awal dan akhir. Filter belum diterapkan ke data karena backend belum tersedia.</p>
+        </div>
+        <span class="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">Tampilan UI saja</span>
+    </div>
+
+    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <label class="block min-w-0">
+            <span class="mb-1 block text-xs font-medium text-label">Dasar Tanggal</span>
+            <select id="task-period-basis" x-model="periodFilter.basis" class="{{ $periodControlClass }}">
+                <option value="start_date">Tanggal Mulai</option>
+                <option value="deadline">Deadline</option>
+            </select>
+        </label>
+
+        <label class="block min-w-0">
+            <span class="mb-1 block text-xs font-medium text-label">Jenis Periode</span>
+            <select id="task-period-mode" x-model="periodFilter.mode" class="{{ $periodControlClass }}">
+                <option value="">Tanpa filter periode</option>
+                <option value="date">Tanggal tertentu</option>
+                <option value="month">Bulan tertentu</option>
+                <option value="year">Tahun tertentu</option>
+                <option value="range">Rentang tanggal</option>
+            </select>
+        </label>
+
+        <label x-show="periodFilter.mode === 'date'" x-cloak class="block min-w-0">
+            <span class="mb-1 block text-xs font-medium text-label">Tanggal</span>
+            <input id="task-period-date" type="date" max="9999-12-31" x-model="periodFilter.date" class="{{ $periodControlClass }}">
+        </label>
+
+        <label x-show="periodFilter.mode === 'month'" x-cloak class="block min-w-0">
+            <span class="mb-1 block text-xs font-medium text-label">Bulan dan Tahun</span>
+            <input id="task-period-month" type="month" max="9999-12" x-model="periodFilter.month" class="{{ $periodControlClass }}">
+        </label>
+
+        <label x-show="periodFilter.mode === 'year'" x-cloak class="block min-w-0">
+            <span class="mb-1 block text-xs font-medium text-label">Tahun</span>
+            <input id="task-period-year" type="number" inputmode="numeric" min="1000" max="9999" step="1" placeholder="Contoh: 2009"
+                x-model="periodFilter.year" :aria-invalid="Boolean(periodYearError)" aria-describedby="task-period-year-error" class="{{ $periodControlClass }}">
+            <p id="task-period-year-error" x-show="periodYearError" x-cloak class="mt-1 text-xs text-red-600" role="alert" x-text="periodYearError"></p>
+        </label>
+
+        <template x-if="periodFilter.mode === 'range'">
+            <div class="grid min-w-0 grid-cols-2 gap-2 sm:col-span-2">
+                <label class="block min-w-0">
+                    <span class="mb-1 block text-xs font-medium text-label">Dari Tanggal</span>
+                    <input id="task-period-start" type="date" max="9999-12-31" x-model="periodFilter.startDate" class="{{ $periodControlClass }}">
+                </label>
+                <label class="block min-w-0">
+                    <span class="mb-1 block text-xs font-medium text-label">Sampai Tanggal</span>
+                    <input id="task-period-end" type="date" max="9999-12-31" x-model="periodFilter.endDate" class="{{ $periodControlClass }}">
+                </label>
+            </div>
+        </template>
+
+        <div class="flex flex-col justify-end gap-1">
+            <button type="submit" class="{{ $button }} w-full" :disabled="!canConfirmPeriodFilter">Terapkan Periode</button>
+            <p x-show="periodRangeError" x-cloak class="text-xs text-red-600" role="alert" x-text="periodRangeError"></p>
+        </div>
+    </div>
+</form>
