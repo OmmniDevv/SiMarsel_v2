@@ -53,6 +53,7 @@ Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend h
   "evidence_required": true,
   "evidence_count": 0,
   "can_view_detail": true,
+  "can_change_status": true,
   "version": 1,
   "updated_at": "2026-10-21T03:00:00Z"
 }
@@ -61,6 +62,7 @@ Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend h
 - `priority`: `low` | `medium` | `high` | `urgent`.
 - `status`: `backlog` | `todo` | `in_progress` | `ready_review` | `on_review` | `done` (label: Back Log, To Do, On Process, Ready Review, On Review, Done).
 - `pics`: semua PIC aktif, urut nama; `[]` bila belum ada PIC. Tidak ada Lead PIC. Field `pic` (satu PIC) sudah dihapus.
+- `can_change_status`: `true` bila user boleh memindahkan status tugas ini sekarang lewat endpoint status (permission `task.change_status` serta PIC aktif atau pengelola sesuai status). Board hanya mengizinkan drag bila `true`; keputusan QA dari `on_review` mengikuti `can_review`.
 - `can_assign`: `true` bila user boleh mengatur PIC tugas ini sekarang.
 - `can_delete`: `true` bila user boleh menghapus tugas ini sekarang (Admin dan Manajer semua divisi, Supervisor divisinya; bukan untuk tugas Done).
 - `start_date` dan `deadline` boleh `null`.

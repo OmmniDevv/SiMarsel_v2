@@ -1432,6 +1432,26 @@ test('Tasks outside the account authority are read-only: no drag, a clear mark, 
     assert.equal(board.picNames(shared), 'Staff Baru, Staff Marketing');
 });
 
+test('An active PIC without the status permission cannot drag the card, and a drop sends no request', async () => {
+    const revoked = task({ can_edit: false, can_change_status: false, can_assign: false, can_delete: false });
+    const { board, requests, toasts } = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [revoked], meta: { status_counts: {} } } }),
+    }, PIC);
+    await board.load();
+
+    assert.equal(board.canDrag(revoked), false, 'still the active PIC, but the backend does not allow the status change');
+    assert.equal(board.canDrag({ ...revoked, can_change_status: true }), true);
+
+    board.draggingId = 7;
+    assert.equal(board.dropState('in_progress'), 'denied');
+    assert.equal(board.dropReason('in_progress'), 'Anda tidak memiliki izin untuk mengubah status tugas ini.');
+
+    await board.drop('in_progress');
+    assert.deepEqual(statusRequests(requests), []);
+    assert.equal(toasts.at(-1).title, 'Perpindahan ditolak');
+    assert.deepEqual(board.tasksIn('todo').map(({ id }) => id), [7]);
+});
+
 test('The detail explains a read-only task, and a PIC keeps evidence access while no longer read-only', async () => {
     let current = task({ pics: [{ id: 11, fullname: 'Staff Baru' }], ...readOnly, can_review: false, editable_fields: [], next_statuses: [] });
     const { board, detail: createDetail } = await tasklistPage({

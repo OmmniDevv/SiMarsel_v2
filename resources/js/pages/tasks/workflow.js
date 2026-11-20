@@ -96,6 +96,8 @@ export function transitionRule(task, to, user) {
 
     if (rule.actor === 'pic' && !isTaskPic(task, user)) return { ok: false, reason: 'Hanya PIC tugas ini yang dapat mengubah status tersebut.' };
     if (rule.actor === 'manager' && !managesTask(task, user)) return { ok: false, reason: 'Hanya Admin, Manajer, atau Supervisor divisi ini yang dapat mengubah status tersebut.' };
+    // Permission ubah status ditentukan backend (can_change_status); keputusan QA mengikuti can_review di detail.
+    if (!rule.review && task.can_change_status === false) return { ok: false, reason: 'Anda tidak memiliki izin untuk mengubah status tugas ini.' };
 
     if (rule.when === 'requires_review' && !task.requires_review) return { ok: false, reason: 'Tugas ini tidak wajib QA. Gunakan status Done.' };
     if (rule.when === 'no_review' && task.requires_review) return { ok: false, reason: 'Tugas ini wajib QA. Kirim ke Ready Review terlebih dahulu.' };
