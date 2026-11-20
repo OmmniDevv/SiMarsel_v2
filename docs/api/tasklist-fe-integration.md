@@ -33,7 +33,7 @@ lintas divisi, dan tampilan read-only untuk tugas di luar kewenangan. Calendar d
 | Pilihan PIC (buat & atur) | `create-options.pics`, `assignment-options.pics` | `[{ id, fullname, role, division: { id, code_division, name } \| null }]` dari semua divisi |
 | Status | `Task.status`, `meta.statuses` | `backlog`, `todo`, `in_progress`, `ready_review`, `on_review`, `done` |
 | Hak akses umum | `meta.role`, `meta.role_code`, `meta.permissions`, `meta.can_create` | `role` tetap `admin`/`manager`/`staff`; `role_code` = `ADM`/`MGR`/`SPV`/`EMP`/`FRL`; `permissions` = kode `task.*` |
-| Hak akses per tugas | `can_view_detail`, `can_edit`, `can_assign`, `can_delete`, `can_review`, `editable_fields`, `next_statuses`; `can_delete` per Evidence | Dihitung backend; FE tidak perlu menghitung ulang |
+| Hak akses per tugas | `can_view_detail`, `can_edit`, `can_assign`, `can_delete`, `can_review`, `can_comment`, `editable_fields`, `next_statuses`; `can_delete` per Evidence | Dihitung backend; FE tidak perlu menghitung ulang |
 | Versi (optimistic locking) | `Task.version` | Kirim di setiap `PATCH`/`POST` perubahan; `409 { current_version }` bila usang |
 | Cakupan daftar | `GET /api/tasks?scope=` | `all_tasks` (default, semua divisi) atau `my_tasks` (PIC aktif) |
 
@@ -96,7 +96,7 @@ lintas divisi, dan tampilan read-only untuk tugas di luar kewenangan. Calendar d
 | Review Approve / Request Revision, self-approval Manajer/Supervisor | ✅ Siap | Ikuti `can_review` |
 | Monitoring | ✅ Siap | Kunci metrik status berganti nama |
 | Calendar & Timeline | ✅ Siap | Tidak perlu perubahan FE; tombol tugas terkait di pop-up agenda tidak muncul lagi |
-| Komentar & balasan | ⏳ Tabel siap | Endpoint dibuat di TASK-16 |
+| Komentar & balasan | ✅ Siap (TASK-16) | `GET`/`POST /api/tasks/{id}/comments`; form tampil bila `can_comment`. Tampilkan `content` dengan `x-text`, kunci tombol kirim selama request berjalan, tampilkan komentar setelah respons sukses (`201`, atau `200` untuk kiriman ulang), dan error `422` di field terkait |
 | Hapus Task Card | ✅ Siap (TASK-12) | `DELETE /api/tasks/{id}` dengan `version`; tampilkan tombol bila `can_delete`; tugas Done tidak bisa dihapus (`422`) |
 | Pop-up Calendar | ✅ Siap (TASK-12) | `GET /api/tasks/{id}/preview`: ringkasan terbaru dan flag akses untuk satu tugas |
 | Hapus evidence sendiri | ✅ Siap (TASK-13) | `DELETE /api/tasks/{id}/evidences/{evidence}`; tombol bila `can_delete` pada Evidence |

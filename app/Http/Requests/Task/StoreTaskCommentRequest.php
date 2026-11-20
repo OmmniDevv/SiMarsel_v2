@@ -1,0 +1,45 @@
+<?php
+
+namespace App\Http\Requests\Task;
+
+use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Foundation\Http\FormRequest;
+
+class StoreTaskCommentRequest extends FormRequest
+{
+    /**
+     * Authorization is handled by TaskPolicy on the route.
+     */
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    /**
+     * A comment made only of spaces is trimmed to nothing, so it counts as missing. Whether the parent comment belongs
+     * to the same task, and whether the task still accepts comments, is checked by TaskCommentService.
+     *
+     * @return array<string, ValidationRule|array<mixed>|string>
+     */
+    public function rules(): array
+    {
+        return [
+            'content' => ['required', 'string', 'max:2000'],
+            'parent_comment_id' => ['nullable', 'integer', 'min:1'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'content.required' => 'Komentar tidak boleh kosong.',
+            'content.string' => 'Komentar tidak valid.',
+            'content.max' => 'Komentar maksimal 2000 karakter.',
+            'parent_comment_id.integer' => 'Komentar yang dibalas tidak valid.',
+            'parent_comment_id.min' => 'Komentar yang dibalas tidak valid.',
+        ];
+    }
+}

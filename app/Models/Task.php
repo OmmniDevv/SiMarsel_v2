@@ -280,6 +280,23 @@ class Task extends Model
     }
 
     /**
+     * Who takes part in the task's discussion: Admin and Managers for every division, the Supervisor of its division,
+     * and its active PICs. A PIC who was released, and anyone else, only reads it.
+     */
+    public function commentableBy(Account $account): bool
+    {
+        return $this->managedBy($account) || $this->assignedTo($account);
+    }
+
+    /**
+     * Whether the account may add a comment right now: a Done task keeps its discussion read-only.
+     */
+    public function acceptsCommentFrom(Account $account): bool
+    {
+        return $this->status !== TaskStatus::Done && $this->commentableBy($account);
+    }
+
+    /**
      * Whether the account may approve the task or request a revision right now.
      */
     public function awaitsDecisionFrom(Account $account): bool

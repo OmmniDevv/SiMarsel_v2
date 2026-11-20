@@ -44,6 +44,7 @@ class TaskDetailResource extends TaskResource
             'reviews' => TaskReviewResource::collection($this->whenLoaded('reviews', fn () => $this->reviews, [])),
             'last_review' => $this->whenLoaded('reviews', fn () => $this->reviews->isEmpty() ? null : TaskReviewResource::make($this->reviews->first()), null),
             'can_review' => $this->resource->awaitsDecisionFrom($request->user()),
+            'can_comment' => $this->resource->acceptsCommentFrom($request->user()),
             'editable_fields' => $editableFields,
             'next_statuses' => in_array('status', $editableFields, true)
                 ? collect($this->resource->nextStatusesFor($request->user()))

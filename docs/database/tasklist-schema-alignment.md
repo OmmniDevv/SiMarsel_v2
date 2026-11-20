@@ -221,11 +221,11 @@ kedua.
 
 - **FE** masih memakai kontrak lama (`pic_id`/`pic`, status QA lama) dan perlu disesuaikan **sebelum** perubahan ini
   dipakai pengguna. Lihat [../api/tasklist-fe-integration.md](../api/tasklist-fe-integration.md).
-- **Komentar, ubah evidence, endpoint tulis agenda, nonaktifkan akun, pulihkan task terhapus, baca audit role**: tabel/kolom
+- **Ubah evidence, endpoint tulis agenda, nonaktifkan akun, pulihkan task terhapus, baca audit role**: tabel/kolom
   siap, endpoint di ticket lain.
 - **Drop `schedule_events` dan `tasks.pic_id`**: setelah verifikasi production dan FE tidak lagi memakai kontrak lama.
 - **Laporan pekerjaan PIC**: memakai `task_comments` yang sudah ada (keputusan review PR #124), tanpa kolom baru di
-  `task_assignments`. Endpoint komentar dikerjakan di ticket lain.
+  `task_assignments`. Endpoint komentar dan balasan: `GET`/`POST /api/tasks/{id}/comments` (TASK-16).
 - **Divisi yang dikelola Supervisor**: sementara memakai `accounts.division_id`.
 
 ## 7. Migration dari branch lama yang belum di-merge
