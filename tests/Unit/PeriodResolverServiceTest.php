@@ -120,9 +120,60 @@ class PeriodResolverServiceTest extends TestCase
         $this->assertSame('2026-03-31T14:00:00+07:00', $period['active']['cutoff_at']);
         $this->assertSame(['2026-02-01', '2026-02-28'], [$period['comparison']['date_from'], $period['comparison']['date_to']]);
         $this->assertTrue($period['change_basis']['is_trimmed']);
-        $this->assertSame(['2026-03-01', '2026-03-28'], [$period['change_basis']['active']['date_from'], $period['change_basis']['active']['date_to']]);
-        $this->assertSame('2026-03-29T00:00:00+07:00', $period['change_basis']['active']['end_at']);
-        $this->assertSame(['2026-02-01', '2026-02-28'], [$period['change_basis']['comparison']['date_from'], $period['change_basis']['comparison']['date_to']]);
+        $this->assertSame([['2026-03-01', '2026-03-28']], $this->basisDates($period['change_basis']['active']));
+        $this->assertSame('2026-03-29T00:00:00+07:00', $period['change_basis']['active'][0]['end_at']);
+        $this->assertSame([['2026-02-01', '2026-02-28']], $this->basisDates($period['change_basis']['comparison']));
+    }
+
+    public function test_dates_without_an_equivalent_in_the_middle_of_the_range_are_left_out_of_the_change(): void
+    {
+        $coverage = (new InMemoryPeriodCoverage)
+            ->record('2026-03-20', '2026-04-10', '2026-04-11T00:00:00+07:00')
+            ->record('2026-02-20', '2026-03-10', '2026-03-11T00:00:00+07:00');
+
+        $period = $this->resolve(
+            $coverage,
+            $this->dateRange('2026-03-20', '2026-04-10', PeriodComparison::SamePeriodLastMonth),
+            '2026-04-15T10:00:00+07:00',
+        )->toArray();
+
+        $this->assertSame(22, $period['active']['days']);
+        $this->assertSame(['2026-02-20', '2026-03-10'], [$period['comparison']['date_from'], $period['comparison']['date_to']]);
+        $this->assertSame(19, $period['comparison']['days']);
+
+        $this->assertTrue($period['change_basis']['is_trimmed']);
+        $this->assertSame(19, $period['change_basis']['active_days']);
+        $this->assertSame(19, $period['change_basis']['comparison_days']);
+        $this->assertSame([['2026-03-20', '2026-03-28'], ['2026-04-01', '2026-04-10']], $this->basisDates($period['change_basis']['active']));
+        $this->assertSame([['2026-02-20', '2026-03-10']], $this->basisDates($period['change_basis']['comparison']));
+    }
+
+    public function test_comparison_days_that_no_active_day_maps_to_are_left_out_of_the_change(): void
+    {
+        $coverage = (new InMemoryPeriodCoverage)
+            ->record('2026-02-28', '2026-04-01', '2026-04-02T00:00:00+07:00')
+            ->record('2026-01-28', '2026-03-01', '2026-03-02T00:00:00+07:00');
+
+        $period = $this->resolve(
+            $coverage,
+            $this->dateRange('2026-02-28', '2026-04-01', PeriodComparison::SamePeriodLastMonth),
+            '2026-04-15T10:00:00+07:00',
+        )->toArray();
+
+        $this->assertSame(33, $period['comparison']['days']);
+        $this->assertSame(30, $period['change_basis']['active_days']);
+        $this->assertSame(30, $period['change_basis']['comparison_days']);
+        $this->assertSame([['2026-02-28', '2026-03-28'], ['2026-04-01', '2026-04-01']], $this->basisDates($period['change_basis']['active']));
+        $this->assertSame([['2026-01-28', '2026-01-28'], ['2026-02-01', '2026-03-01']], $this->basisDates($period['change_basis']['comparison']));
+    }
+
+    /**
+     * @param  list<array{date_from: string, date_to: string}>  $ranges
+     * @return list<array{0: string, 1: string}>
+     */
+    private function basisDates(array $ranges): array
+    {
+        return array_map(fn (array $range) => [$range['date_from'], $range['date_to']], $ranges);
     }
 
     public function test_leap_year_february_has_the_29th_as_an_equivalent_date(): void
@@ -147,7 +198,7 @@ class PeriodResolverServiceTest extends TestCase
 
         $this->assertSame('2028-02-29', $period['active']['date_to']);
         $this->assertSame('2027-02-28', $period['comparison']['date_to']);
-        $this->assertSame('2028-02-28', $period['change_basis']['active']['date_to']);
+        $this->assertSame('2028-02-28', $period['change_basis']['active'][0]['date_to']);
         $this->assertTrue($period['change_basis']['is_trimmed']);
     }
 
@@ -162,8 +213,8 @@ class PeriodResolverServiceTest extends TestCase
         $this->assertSame(31, $period->active->days());
         $this->assertSame(28, $period->comparison->days());
         $this->assertTrue($period->durationsDiffer());
-        $this->assertFalse($period->changeBasis['is_trimmed']);
-        $this->assertSame('2026-03-31', $period->changeBasis['active']['date_to']);
+        $this->assertFalse($period->changeBasis->isTrimmed);
+        $this->assertSame('2026-03-31', $period->toArray()['change_basis']['active'][0]['date_to']);
     }
 
     /**
