@@ -269,6 +269,7 @@ class TaskDetailTest extends TestCase
                 'url' => 'https://www.figma.com/file/banner',
                 'note' => null,
                 'submitter' => ['id' => $this->staff->id, 'fullname' => 'mkt.staff'],
+                'can_delete' => true,
                 'created_at' => $link->created_at->toIso8601ZuluString(),
             ])
             ->assertJsonPath('data.evidence.1.id', $file->id)

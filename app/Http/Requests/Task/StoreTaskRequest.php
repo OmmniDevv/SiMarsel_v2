@@ -123,7 +123,9 @@ class StoreTaskRequest extends FormRequest
     }
 
     /**
-     * A PIC must be an active Staff, Freelance, or Supervisor account; it may belong to any division.
+     * A PIC must be an active Staff, Freelance, or Supervisor account. Admin and Managers may pick PICs from every
+     * division; a Supervisor only adds PICs from the division they manage, but may keep a current PIC of another
+     * division.
      */
     protected function assignablePic(): Closure
     {
@@ -134,7 +136,27 @@ class StoreTaskRequest extends FormRequest
 
             if (! Account::query()->assignableAsPic()->whereKey($value)->exists()) {
                 $fail('PIC harus akun aktif dengan role Staff, Freelance, atau Supervisor.');
+
+                return;
+            }
+
+            if (in_array((int) $value, $this->currentPicIds(), true)) {
+                return;
+            }
+
+            if (! Account::query()->assignableAsPicBy($this->user())->whereKey($value)->exists()) {
+                $fail('Supervisor hanya dapat menugaskan PIC dari divisinya sendiri.');
             }
         };
+    }
+
+    /**
+     * Active PICs the task already has; a new task has none.
+     *
+     * @return array<int, int>
+     */
+    protected function currentPicIds(): array
+    {
+        return [];
     }
 }

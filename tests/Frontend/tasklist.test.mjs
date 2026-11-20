@@ -24,6 +24,7 @@ const ADMIN = { id: 1, role: { code_role: 'ADM' }, division: null };
 async function tasklistPage(routes, sessionUser = PIC, apiReady = 'false') {
     const requests = [];
     const toasts = [];
+    const alerts = [];
     const components = {};
 
     const fetch = async (url, options = {}) => {
@@ -54,6 +55,7 @@ async function tasklistPage(routes, sessionUser = PIC, apiReady = 'false') {
         URLSearchParams,
         setTimeout,
         console,
+        alert: (message) => alerts.push(message),
         document: { querySelector: (selector) => (selector === 'meta[name="csrf-token"]' ? { content: 'csrf-test' } : null) },
         location: { search: '', href: 'http://localhost/tasks' },
         history: { replaceState() {} },
@@ -115,7 +117,7 @@ async function tasklistPage(routes, sessionUser = PIC, apiReady = 'false') {
     const board = instance(components.tasklist);
     const detail = () => instance(components.taskDetail, board);
 
-    return { board, detail, requests, toasts, instance: (name) => instance(components[name], board) };
+    return { board, detail, requests, toasts, alerts, instance: (name) => instance(components[name], board) };
 }
 
 const task = (overrides = {}) => ({
@@ -845,6 +847,128 @@ test('With the default config, the summary comes from the monitoring API with th
     board.resetFilters();
     await board.load();
     assert.equal(monitoringRequests(requests).at(-1).url, '/api/tasks/monitoring?scope=tasklist&division=MKT');
+});
+
+test('Period filter validates its configuration and alerts that the backend is unavailable without sending requests', async () => {
+    const { board, requests, alerts } = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [], meta: { status_counts: {} } } }),
+        'GET /api/tasks/monitoring': () => ({ json: { data: monitoringOf({}) } }),
+    }, ADMIN);
+    await board.load();
+
+    board.periodFilter.mode = 'range';
+    board.periodFilter.basis = 'start_date';
+    board.periodFilter.startDate = '2026-11-20';
+    board.periodFilter.endDate = '2026-11-10';
+    assert.equal(board.canConfirmPeriodFilter, false);
+
+    board.periodFilter.endDate = '2026-11-20';
+    assert.equal(board.canConfirmPeriodFilter, true);
+    const requestCount = requests.length;
+    board.confirmPeriodFilter();
+
+    assert.deepEqual(alerts, ['backend belum tersedia']);
+    assert.equal(requests.length, requestCount, 'period filters are not sent to an unavailable backend');
+
+    board.view = 'table';
+    assert.equal(board.periodFilter.mode, 'range', 'the period selection is shared between views');
+    board.resetFilters();
+    assert.equal(board.periodFilter.mode, '');
+    assert.equal(board.hasPeriodConfiguration, false);
+});
+
+test('Atur Ulang Filter resets the period and every Tasklist filter in the Board and the Table, keeping Tugas Saya', async () => {
+    const { board, requests } = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [], meta: { status_counts: {} } } }),
+        'GET /api/tasks/monitoring': () => ({ json: { data: monitoringOf({}) } }),
+    }, ADMIN);
+
+    for (const view of ['board', 'table']) {
+        board.view = view;
+        board.taskScope = 'my_tasks';
+        board.filters = { search: 'promo', division: 'FIN', priority: 'urgent', status: 'todo' };
+        board.periodFilter.mode = 'month';
+        board.periodFilter.basis = 'start_date';
+        board.periodFilter.month = '2026-11';
+        board.sort = { key: 'priority', dir: 'desc' };
+        assert.equal(board.hasActiveFilter, true, view);
+
+        board.resetFilters();
+        await board.load();
+
+        assert.equal(board.hasActiveFilter, false, view);
+        assert.equal(board.hasPeriodConfiguration, false, view);
+        assert.deepEqual({ ...board.sort }, { key: 'deadline', dir: 'asc' }, view);
+        assert.equal(board.taskScope, 'my_tasks', `${view}: the Semua Tugas / Tugas Saya tab is not a filter`);
+        assert.equal(listRequests(requests).at(-1).url, '/api/tasks?scope=my_tasks', view);
+
+        // Only a period configuration still enables the button.
+        board.periodFilter.basis = 'start_date';
+        assert.equal(board.hasActiveFilter || board.hasPeriodConfiguration, true, view);
+        board.resetFilters();
+        assert.equal(board.hasPeriodConfiguration, false, view);
+    }
+});
+
+test('Period filter rejects a date with a year beyond four digits, whose text order would pass as a valid range', async () => {
+    const { board, alerts } = await tasklistPage({}, ADMIN);
+
+    board.periodFilter.mode = 'range';
+    board.periodFilter.startDate = '12026-01-01';
+    board.periodFilter.endDate = '2026-12-31';
+    assert.equal(board.canConfirmPeriodFilter, false, 'year 12026 is after 2026 although its text sorts first');
+    assert.equal(board.periodRangeError, 'Format tanggal tidak valid.');
+    board.confirmPeriodFilter();
+    assert.deepEqual(alerts, []);
+
+    board.periodFilter.startDate = '2026-12-31';
+    board.periodFilter.endDate = '2026-01-01';
+    assert.equal(board.periodRangeError, 'Tanggal akhir harus sama dengan atau setelah tanggal awal.');
+
+    board.periodFilter.endDate = '2026-12-31';
+    assert.equal(board.periodRangeError, '', 'a one-day range includes both ends');
+    assert.equal(board.canConfirmPeriodFilter, true);
+
+    board.periodFilter.mode = 'date';
+    board.periodFilter.date = '12026-01-01';
+    assert.equal(board.canConfirmPeriodFilter, false);
+    board.periodFilter.date = '2026-11-18';
+    assert.equal(board.canConfirmPeriodFilter, true);
+});
+
+test('Period filter accepts any four-digit year, including years older than the previous ten-year list', async () => {
+    const { board, requests, alerts } = await tasklistPage({}, ADMIN);
+    const currentYear = Number(board.periodFilter.year);
+
+    board.periodFilter.mode = 'year';
+
+    for (const year of [String(currentYear - 11), '2009', '1998', '1000', '9999', 1998]) {
+        board.periodFilter.year = year;
+        assert.equal(board.periodYearError, '', `${year} is a selectable year`);
+        assert.equal(board.canConfirmPeriodFilter, true, `${year} can be confirmed`);
+    }
+
+    const requestCount = requests.length;
+    board.periodFilter.year = '1998';
+    board.confirmPeriodFilter();
+    assert.deepEqual(alerts, ['backend belum tersedia']);
+    assert.equal(requests.length, requestCount, 'an older year is not sent to an unavailable backend');
+
+    for (const year of ['', '199', '0999', '12026', '-199', '1e3', '2026.5']) {
+        board.periodFilter.year = year;
+        assert.equal(board.periodYearError, 'Masukkan tahun 4 digit, misalnya 2009.', `"${year}" is rejected`);
+        assert.equal(board.canConfirmPeriodFilter, false, `"${year}" cannot be confirmed`);
+    }
+
+    board.periodFilter.year = '1998';
+    assert.equal(board.hasPeriodConfiguration, true, 'an older year can be reset');
+    board.resetFilters();
+    assert.equal(board.periodFilter.year, String(currentYear));
+
+    board.periodFilter.year = currentYear;
+    board.periodFilter.mode = '';
+    assert.equal(board.hasPeriodConfiguration, false, 'a numeric input value for the current year is still the default');
+    assert.equal(board.periodYearError, '', 'the year is only validated while the year mode is selected');
 });
 
 test('Without tasks the summary shows zero, a failed summary shows its own error with a retry, and an older response is ignored', async () => {
