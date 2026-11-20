@@ -51,6 +51,9 @@ Total aktif tetap memakai seluruh periode aktif, sedangkan perubahan memakai bag
 | `this_month` pada 31 Maret 2026 | 1–31 Mar | 1–28 Feb | 1–28 Mar dibanding 1–28 Feb, `is_trimmed = true` |
 | `last_year` pada 29 Februari 2028 | 1 Jan–29 Feb 2028 | 1 Jan–28 Feb 2027 | Aktif sampai 28 Feb 2028, `is_trimmed = true` |
 | 31 Maret saja dengan `same_period_last_month` | 31 Mar | `null` | `null` |
+| 20 Mar–10 Apr dengan `same_period_last_month` | 20 Mar–10 Apr (22 hari) | 20 Feb–10 Mar (19 hari) | 20–28 Mar dan 1–10 Apr (19 hari) dibanding 20 Feb–10 Mar (19 hari) |
+
+Setiap hari aktif diperiksa satu per satu, sehingga tanggal tanpa padanan di tengah rentang (29–31 Maret pada contoh di atas) juga dikeluarkan dari dasar perubahan. Karena itu `change_basis.active` dan `change_basis.comparison` berupa daftar rentang. Hari pembanding yang tidak menjadi padanan hari aktif mana pun juga dikeluarkan, misalnya 29–31 Januari untuk aktif 28 Februari–1 April.
 
 `last_month` dengan `auto` selalu membandingkan dua bulan kalender penuh, sehingga tidak dipotong walaupun panjang bulannya berbeda.
 
@@ -102,18 +105,24 @@ Objek `period` ada di dalam `filter` pada response yang memakai `preset`.
     },
     "change_basis": {
         "is_trimmed": true,
-        "active": {
-            "date_from": "2026-03-01",
-            "date_to": "2026-03-28",
-            "start_at": "2026-03-01T00:00:00+07:00",
-            "end_at": "2026-03-29T00:00:00+07:00"
-        },
-        "comparison": {
-            "date_from": "2026-02-01",
-            "date_to": "2026-02-28",
-            "start_at": "2026-02-01T00:00:00+07:00",
-            "end_at": "2026-03-01T00:00:00+07:00"
-        }
+        "active_days": 28,
+        "comparison_days": 28,
+        "active": [
+            {
+                "date_from": "2026-03-01",
+                "date_to": "2026-03-28",
+                "start_at": "2026-03-01T00:00:00+07:00",
+                "end_at": "2026-03-29T00:00:00+07:00"
+            }
+        ],
+        "comparison": [
+            {
+                "date_from": "2026-02-01",
+                "date_to": "2026-02-28",
+                "start_at": "2026-02-01T00:00:00+07:00",
+                "end_at": "2026-03-01T00:00:00+07:00"
+            }
+        ]
     },
     "durations_differ": true
 }
@@ -121,7 +130,17 @@ Objek `period` ada di dalam `filter` pada response yang memakai `preset`.
 
 `end_at` bersifat eksklusif: kejadian dihitung jika `start_at ≤ waktu < end_at`. `change_basis` bernilai `null` jika salah satu periode `unavailable` atau tidak ada tanggal padanan.
 
+## Ringkasan KPI
+
+| Keadaan pembanding | `value` | `previous_value` | `change_percentage`, `trend` |
+|---|---|---|---|
+| `availability = unavailable`, atau tidak ada tanggal padanan | Seluruh periode aktif | `null` | `null` |
+| `state_basis = at_cutoff` | Seluruh periode aktif | `null` | `null` |
+| `state_basis = latest` dan tersedia | Seluruh periode aktif | Seluruh periode pembanding | Dihitung dari `change_basis.active` dibanding `change_basis.comparison` |
+
+Pembanding jam setara dikosongkan karena query Ringkasan membaca data transaksi terbaru, bukan catatan `dashboard_snapshots` pada jam tersebut. Angka dari data terbaru tidak mewakili kondisi pada jam setara, sehingga tidak ditampilkan sebagai pembanding. Frontend menampilkan `trend = null` sebagai "Tanpa Pembanding".
+
 ## Batasan saat ini
 
-- Tabel `dashboard_snapshots` belum dimigrasikan (FIX-15). Sampai tabel tersedia, resolver melaporkan `availability = unavailable`.
-- Query komponen yang ada masih menghitung per hari penuh dan belum membaca `cutoff_at`, `state_basis`, atau `change_basis`. Penyambungan angka ke kontrak ini milik agregasi FIX-02-BE-02.
+- Tabel `dashboard_snapshots` belum ada di `dev`. Sampai tabel tersedia, resolver melaporkan `availability = unavailable`.
+- Query komponen masih menghitung per hari penuh. Pembacaan nilai catatan untuk pembanding jam setara milik agregasi FIX-02-BE-02.
