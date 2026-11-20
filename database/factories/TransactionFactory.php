@@ -103,13 +103,13 @@ class TransactionFactory extends Factory
     }
 
     /**
-     * @return array{markaz_transaction_id: string, trx_id: string}
+     * @return array{markaz_transaction_id: int, trx_id: string}
      */
     private function markazIdentity(string $prefix): array
     {
         $markazId = $this->markazId();
 
-        return ['markaz_transaction_id' => (string) $markazId, 'trx_id' => $prefix.'-'.$markazId];
+        return ['markaz_transaction_id' => $markazId, 'trx_id' => $prefix.'-'.$markazId];
     }
 
     private function markazId(): int

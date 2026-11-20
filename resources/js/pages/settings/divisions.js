@@ -23,6 +23,8 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
     search: '',
 
     modal: null,
+    discardConfirmation: false,
+    formBaseline: null,
     form: emptyForm(),
     errors: {},
     formError: '',
@@ -77,6 +79,7 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
 
     openCreate() {
         this.resetDraft();
+        this.formBaseline = { ...this.draft };
         this.modal = 'create';
     },
 
@@ -85,6 +88,7 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
         this.editingId = division.id;
         this.errors = {};
         this.formError = '';
+        this.formBaseline = { ...this.form };
         this.modal = 'edit';
     },
 
@@ -94,9 +98,23 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
         this.modal = 'delete';
     },
 
+    get hasUnsavedChanges() {
+        const form = this.modal === 'create' ? this.draft : this.modal === 'edit' ? this.form : null;
+        return Boolean(form && this.formBaseline
+            && Object.keys(this.formBaseline).some((key) => form[key] !== this.formBaseline[key]));
+    },
+
+    requestClose() {
+        if (this.saving || this.creating || this.discardConfirmation) return;
+        if (this.hasUnsavedChanges) this.discardConfirmation = true;
+        else this.closeModal();
+    },
+
     closeModal() {
         if (this.saving || this.creating) return;
 
+        this.discardConfirmation = false;
+        this.formBaseline = null;
         this.modal = null;
         this.editingId = null;
         this.deletingDivision = null;
@@ -106,6 +124,18 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
 
     payload(form) {
         return { code_division: form.code_division.trim(), name: form.name.trim() };
+    },
+
+    focusFirstError(mode, errors) {
+        this.$nextTick(() => {
+            for (const field of Object.keys(errors)) {
+                const input = this.$root.querySelector(`#${mode}-division-${field}`);
+                if (input && !input.disabled) {
+                    input.focus();
+                    break;
+                }
+            }
+        });
     },
 
     async save(request) {
@@ -118,6 +148,7 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
         } catch (error) {
             if (error.status === 422 && error.data?.errors) {
                 this.errors = validationErrors(error);
+                this.focusFirstError('edit', this.errors);
             } else {
                 this.formError = errorMessage(error);
             }
@@ -142,6 +173,7 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
         } catch (error) {
             if (error.status === 422 && error.data?.errors) {
                 this.draftErrors = validationErrors(error);
+                this.focusFirstError('create', this.draftErrors);
             } else {
                 this.draftError = errorMessage(error);
             }
@@ -169,6 +201,7 @@ Alpine.data('divisionManagement', (canManage = false, initiallyActive = false) =
 
         this.divisions = this.divisions.filter((item) => item.id !== division.id);
         this.closeModal();
+        this.$nextTick(() => this.$refs.divisionCreateButton?.focus());
         showToast({ title: 'Divisi Dihapus', text: `${division.name} sudah dihapus.` });
     },
 }));

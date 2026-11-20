@@ -33,7 +33,24 @@ class DashboardTransactionMigrationTest extends TestCase
     {
         $this->assertTrue(Schema::hasColumns('transactions', self::NEW_COLUMNS));
         $this->assertTrue($this->column('paid_date')['nullable']);
+        $this->assertTrue($this->column('markaz_user_id')['nullable']);
         $this->assertFalse($this->column('is_claim_coupon')['nullable']);
+    }
+
+    public function test_clean_schema_stores_pending_and_keys_source_ids_per_platform(): void
+    {
+        $platformA = $this->legacyPlatform();
+        $platformB = $this->legacyPlatform('jadiasn');
+        $source = ['markaz_transaction_id' => 476770, 'markaz_user_id' => null, 'paid_date' => null, 'paid_time' => null, 'source_status' => 0];
+
+        $pendingId = $this->legacyTransaction($platformA, 'TRX-476770', $source);
+        $this->legacyTransaction($platformB, 'TRX-476770', $source);
+
+        $this->assertNull(DB::table('transactions')->find($pendingId)->paid_date);
+        $this->assertSame(2, DB::table('transactions')->where('markaz_transaction_id', 476770)->count());
+
+        $this->expectException(UniqueConstraintViolationException::class);
+        $this->legacyTransaction($platformA, 'TRX-OTHER', ['markaz_transaction_id' => 476770]);
     }
 
     public function test_ac03_existing_transactions_and_promo_usages_survive_the_migration(): void
@@ -58,6 +75,7 @@ class DashboardTransactionMigrationTest extends TestCase
 
         $stored = DB::table('transactions')->find($transactionId);
         $this->assertSame('cerebrum-476770', $stored->trx_id);
+        $this->assertSame(445566, (int) $stored->markaz_user_id);
         $this->assertSame('2026-11-10', $stored->paid_date);
         $this->assertSame('09:05:00', $stored->paid_time);
         $this->assertSame(2, DB::table('transactions')->count());
@@ -71,6 +89,13 @@ class DashboardTransactionMigrationTest extends TestCase
 
         $usage = DB::table('transaction_promo_codes')->find($usageId);
         $this->assertSame($transactionId, (int) $usage->transaction_id);
+
+        // A Pending row without paid_date can join the migrated history, next to its promo usages.
+        $pendingId = $this->legacyTransaction($platformId, 'cerebrum-476772', [
+            'markaz_transaction_id' => 476772, 'markaz_user_id' => null, 'paid_date' => null, 'paid_time' => null, 'source_status' => 0,
+        ]);
+        $this->assertNull(DB::table('transactions')->find($pendingId)->paid_date);
+        $this->assertSame(1, DB::table('transaction_promo_codes')->where('transaction_id', $transactionId)->count());
 
         $foreignKey = collect(Schema::getForeignKeys('transaction_promo_codes'))->firstWhere('columns', ['transaction_id']);
         $this->assertSame('transactions', $foreignKey['foreign_table']);
@@ -106,10 +131,19 @@ class DashboardTransactionMigrationTest extends TestCase
         $this->assertNull(DB::table('transactions')->find($pendingId)->paid_date);
     }
 
+    public function test_rollback_is_refused_while_a_transaction_has_no_legacy_user_id(): void
+    {
+        $this->legacyTransaction($this->legacyPlatform(), 'TRX-2', ['markaz_user_id' => null]);
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('markaz_user_id');
+        $this->rollBack();
+    }
+
     public function test_rollback_is_refused_while_a_trx_id_is_shared_by_two_platforms(): void
     {
-        $this->legacyTransaction($this->legacyPlatform(), 'TRX-1', ['markaz_transaction_id' => '1']);
-        $this->legacyTransaction($this->legacyPlatform('jadiasn'), 'TRX-1', ['markaz_transaction_id' => '1']);
+        $this->legacyTransaction($this->legacyPlatform(), 'TRX-1', ['markaz_transaction_id' => 1]);
+        $this->legacyTransaction($this->legacyPlatform('jadiasn'), 'TRX-1', ['markaz_transaction_id' => 1]);
 
         $this->expectException(LogicException::class);
         $this->expectExceptionMessage('trx_id');
@@ -119,12 +153,13 @@ class DashboardTransactionMigrationTest extends TestCase
     public function test_rollback_restores_the_previous_schema_when_the_data_allows_it(): void
     {
         $platformId = $this->legacyPlatform();
-        $transactionId = $this->legacyTransaction($platformId, 'cerebrum-600001', ['markaz_transaction_id' => '600001']);
+        $transactionId = $this->legacyTransaction($platformId, 'cerebrum-600001', ['markaz_transaction_id' => 600001]);
 
         $this->rollBack();
 
         $this->assertFalse(Schema::hasColumns('transactions', ['markaz_transaction_id']));
         $this->assertFalse($this->column('paid_date')['nullable']);
+        $this->assertFalse($this->column('markaz_user_id')['nullable']);
         $this->assertSame('cerebrum-600001', DB::table('transactions')->find($transactionId)->trx_id);
 
         $this->expectException(UniqueConstraintViolationException::class);
