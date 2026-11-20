@@ -905,7 +905,7 @@ Alpine.data('taskDetail', () => ({
     },
 
     reset() {
-        Object.assign(this, { task: null, state: 'idle', editing: false, confirmingDelete: false, assigneeState: 'idle', reviewMode: null, reviewNote: '', reviewError: '', evidences: [], confirmingEvidenceId: null, activities: [], activityState: 'idle', activityError: '' });
+        Object.assign(this, { task: null, state: 'idle', editing: false, confirmingDelete: false, assigneeState: 'idle', reviewMode: null, reviewNote: '', reviewError: '', evidences: [], evidenceErrors: {}, confirmingEvidenceId: null, activities: [], activityState: 'idle', activityError: '' });
         this.activityRequest += 1;
     },
 

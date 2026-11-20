@@ -1855,6 +1855,9 @@ test('A rejected evidence deletion explains why and reloads the evidence with th
     assert.equal(panel.evidenceErrors.evidence, 'Evidence hanya dapat dihapus saat tugas berstatus To Do atau On Process, bukan Ready Review.');
     assert.equal(panel.evidences[0].can_delete, false);
     assert.equal(board.tasks[0].evidence_count, 1);
+    panel.reset();
+    assert.deepEqual({ ...panel.evidenceErrors }, {}, 'the reason does not carry over to the next task opened');
+    await panel.open(7);
 
     // The PIC was released meanwhile.
     evidence = [ownEvidence(2, 'banner-v2.png')];
