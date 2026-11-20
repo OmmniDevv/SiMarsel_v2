@@ -124,19 +124,46 @@ class DashboardSnapshotSchemaTest extends TestCase
         $this->assertTrue($stored->is_complete);
     }
 
-    public function test_the_common_complete_cutoff_skips_incomplete_snapshots_of_any_selected_platform(): void
+    public function test_the_shared_boundary_is_the_earliest_latest_complete_cutoff_of_the_selected_platforms(): void
     {
         [$a, $b] = Platform::factory()->count(2)->create();
+        $this->downloaderSnapshot($a, self::CUTOFF_14, 85);
+        $this->downloaderSnapshot($b, self::CUTOFF_13, 30);
+
+        $this->assertSame('14:00', $this->completeCutoff([$a->id]));
+        $this->assertSame('13:00', $this->completeCutoff([$b->id]));
+        $this->assertSame('13:00', $this->completeCutoff([$a->id, $b->id]));
+        $this->assertSame('13:00', $this->completeCutoff([$b->id, $a->id, $a->id]));
+    }
+
+    public function test_the_latest_complete_cutoff_is_picked_when_every_platform_has_several_cutoffs(): void
+    {
+        [$a, $b] = Platform::factory()->count(2)->create();
+
+        // Inserted out of order so the result never depends on row or group order.
+        foreach ([[$b, self::CUTOFF_14], [$a, self::CUTOFF_13], [$b, self::CUTOFF_13], [$a, self::CUTOFF_14]] as [$platform, $cutoffAt]) {
+            $this->downloaderSnapshot($platform, $cutoffAt, 50);
+        }
+        $this->downloaderSnapshot($a, '2026-11-15 12:00:00', 40);
+
+        $this->assertSame('14:00', $this->completeCutoff([$a->id]));
+        $this->assertSame('14:00', $this->completeCutoff([$a->id, $b->id]));
+    }
+
+    public function test_incomplete_snapshots_and_platforms_without_a_complete_snapshot_never_set_the_boundary(): void
+    {
+        [$a, $b, $partialOnly, $missing] = Platform::factory()->count(4)->create();
         $this->downloaderSnapshot($a, self::CUTOFF_13, 70);
         $this->downloaderSnapshot($a, self::CUTOFF_14, 85);
         $this->downloaderSnapshot($b, self::CUTOFF_13, 30);
-        $this->downloaderSnapshot($b, self::CUTOFF_14, 40, isComplete: false);
+        $this->downloaderSnapshot($b, '2026-11-15 15:00:00', 40, isComplete: false);
+        $this->downloaderSnapshot($partialOnly, self::CUTOFF_14, 12, isComplete: false);
 
-        $cutoff = fn (array $ids) => DashboardSnapshot::latestCompleteCutoff($ids, DashboardDataset::Downloaders, self::DAY, self::DAY)?->format('H:i');
-
-        $this->assertSame('14:00', $cutoff([$a->id]));
-        $this->assertSame('13:00', $cutoff([$b->id]));
-        $this->assertSame('13:00', $cutoff([$a->id, $b->id]));
+        $this->assertSame('13:00', $this->completeCutoff([$b->id]));
+        $this->assertSame('13:00', $this->completeCutoff([$a->id, $b->id]));
+        $this->assertNull($this->completeCutoff([$a->id, $partialOnly->id]));
+        $this->assertNull($this->completeCutoff([$a->id, $missing->id]));
+        $this->assertNull($this->completeCutoff([]));
         $this->assertNull(DashboardSnapshot::latestCompleteCutoff([$a->id, $b->id], DashboardDataset::Transactions, self::DAY, self::DAY));
         $this->assertNull(DashboardSnapshot::latestCompleteCutoff([$a->id], DashboardDataset::Downloaders, '2026-11-16', '2026-11-16'));
     }
@@ -165,6 +192,14 @@ class DashboardSnapshotSchemaTest extends TestCase
         $this->assertFalse($this->snapshotAt($partialOnly, self::CUTOFF_13, DashboardDataset::Downloaders)->is_complete);
         $this->assertNull(DashboardSnapshot::latestCompleteCutoff([$partialOnly->id], DashboardDataset::Downloaders, self::DAY, self::DAY));
         $this->assertNull(DashboardSnapshot::latestCompleteCutoff([$withData->id, $missing->id], DashboardDataset::Downloaders, self::DAY, self::DAY));
+    }
+
+    /**
+     * @param  list<int>  $platformIds
+     */
+    private function completeCutoff(array $platformIds): ?string
+    {
+        return DashboardSnapshot::latestCompleteCutoff($platformIds, DashboardDataset::Downloaders, self::DAY, self::DAY)?->format('H:i');
     }
 
     private function downloaderSnapshot(Platform $platform, string $cutoffAt, int $total, bool $isComplete = true): DashboardSnapshot
