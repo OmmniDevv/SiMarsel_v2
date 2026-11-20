@@ -15,7 +15,6 @@ final class ResolvedPeriod
 {
     /**
      * @param  list<string>  $platforms
-     * @param  array{is_trimmed: bool, active: array<string, string>, comparison: array<string, string>}|null  $changeBasis
      */
     public function __construct(
         public readonly PeriodPreset $preset,
@@ -24,7 +23,7 @@ final class ResolvedPeriod
         public readonly string $dataset,
         public readonly PeriodWindow $active,
         public readonly ?PeriodWindow $comparison,
-        public readonly ?array $changeBasis,
+        public readonly ?ChangeBasis $changeBasis,
     ) {}
 
     public function durationsDiffer(): bool
@@ -45,7 +44,7 @@ final class ResolvedPeriod
             'dataset' => $this->dataset,
             'active' => $this->active->toArray(),
             'comparison' => $this->comparison?->toArray(),
-            'change_basis' => $this->changeBasis,
+            'change_basis' => $this->changeBasis?->toArray(),
             'durations_differ' => $this->durationsDiffer(),
         ];
     }

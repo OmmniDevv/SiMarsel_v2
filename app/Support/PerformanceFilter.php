@@ -2,8 +2,11 @@
 
 namespace App\Support;
 
+use App\Enums\DataAvailability;
 use App\Enums\PeriodPreset;
+use App\Enums\PeriodStateBasis;
 use App\Enums\TrendPeriod;
+use App\Support\Period\ChangeBasis;
 use App\Support\Period\ResolvedPeriod;
 use Carbon\CarbonImmutable;
 
@@ -53,6 +56,41 @@ final class PerformanceFilter
             $period->preset === PeriodPreset::LastYear ? TrendPeriod::Monthly : TrendPeriod::Daily,
             period: $period,
         );
+    }
+
+    /**
+     * Whether previous values and the change may be shown. A resolved comparison must be available and read
+     * from the latest state; an equivalent-hour comparison needs its recorded snapshot, which these queries
+     * do not read, so the latest data is never shown in its place.
+     */
+    public function canCompare(): bool
+    {
+        if ($this->period === null) {
+            return $this->hasComparison();
+        }
+
+        return $this->period->comparison?->availability !== null
+            && $this->period->comparison->availability !== DataAvailability::Unavailable
+            && $this->period->comparison->stateBasis === PeriodStateBasis::Latest
+            && $this->period->changeBasis !== null;
+    }
+
+    /**
+     * The active and comparison days used for the change when some days have no equivalent date.
+     *
+     * @return array{0: self, 1: self}|null
+     */
+    public function changeBasisFilters(): ?array
+    {
+        $basis = $this->period?->changeBasis;
+
+        if ($basis === null || ! $basis->isTrimmed) {
+            return null;
+        }
+
+        $filter = fn (array $ranges) => new self($this->mode, $this->platforms, ChangeBasis::dateRanges($ranges), [], $this->defaultPeriod);
+
+        return [$filter($basis->activeRanges), $filter($basis->comparisonRanges)];
     }
 
     /**

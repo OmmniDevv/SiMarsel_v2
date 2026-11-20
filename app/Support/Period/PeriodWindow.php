@@ -22,6 +22,16 @@ final class PeriodWindow
     ) {}
 
     /**
+     * The last calendar day that an exclusive end reaches.
+     */
+    public static function lastDay(CarbonImmutable $endAt): CarbonImmutable
+    {
+        $day = $endAt->startOfDay();
+
+        return $endAt->eq($day) ? $day->subDay() : $day;
+    }
+
+    /**
      * Number of calendar days in the inclusive date range.
      */
     public function days(): int

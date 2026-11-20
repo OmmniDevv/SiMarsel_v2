@@ -114,8 +114,8 @@ class PerformanceExportService
         ];
 
         if ($period['change_basis']['is_trimmed'] ?? false) {
-            $rows[] = ['Dasar Perubahan Aktif', $this->periodText([$period['change_basis']['active']])];
-            $rows[] = ['Dasar Perubahan Pembanding', $this->periodText([$period['change_basis']['comparison']])];
+            $rows[] = ['Dasar Perubahan Aktif', $this->periodText($period['change_basis']['active'])];
+            $rows[] = ['Dasar Perubahan Pembanding', $this->periodText($period['change_basis']['comparison'])];
         }
 
         return $rows;
@@ -222,9 +222,10 @@ class PerformanceExportService
         return implode(', ', array_map(fn (array $range) => "{$range['date_from']} s/d {$range['date_to']}", $ranges));
     }
 
-    private function trendText(string $trend): string
+    private function trendText(?string $trend): string
     {
         return match ($trend) {
+            null => 'Tanpa Pembanding',
             PerformanceSummaryService::TREND_UP => 'Naik',
             PerformanceSummaryService::TREND_DOWN => 'Turun',
             default => 'Sama',

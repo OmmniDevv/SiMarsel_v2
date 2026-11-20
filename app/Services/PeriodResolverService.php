@@ -6,6 +6,7 @@ use App\Enums\DataAvailability;
 use App\Enums\PeriodComparison;
 use App\Enums\PeriodPreset;
 use App\Enums\PeriodStateBasis;
+use App\Support\Period\ChangeBasis;
 use App\Support\Period\PeriodCoverageSource;
 use App\Support\Period\PeriodSelection;
 use App\Support\Period\PeriodWindow;
@@ -139,43 +140,79 @@ class PeriodResolverService
     }
 
     /**
-     * @return array{0: PeriodWindow, 1: array<string, mixed>|null}
+     * @return array{0: PeriodWindow, 1: ChangeBasis|null}
      */
     private function fullPreviousMonth(PeriodSelection $selection, PeriodWindow $active): array
     {
         $comparison = $this->comparisonWindow($selection, $active, $active->dateFrom->subMonth(), $active->dateFrom);
 
-        return [$comparison, $this->changeBasis($active, $comparison, $active->startAt, $active->endAt, false)];
+        return [$comparison, $this->wholePeriodsBasis($active, $comparison)];
     }
 
     /**
-     * Maps the active period onto its equivalent dates. Active days without an equivalent date stay in
-     * the active total, but the change only uses the part that exists on both sides.
+     * Maps every active day onto its equivalent date. Active days without an equivalent date, at either end or
+     * in the middle of the range, stay in the active total but are left out of the change on both sides.
      *
-     * @return array{0: PeriodWindow|null, 1: array<string, mixed>|null}
+     * @return array{0: PeriodWindow|null, 1: ChangeBasis|null}
      */
     private function equivalentComparison(PeriodSelection $selection, PeriodWindow $active): array
     {
         $equivalent = $this->equivalentDay($selection, $active);
-        $lastActiveDay = $this->lastDay($active->endAt);
+        $lastActiveDay = PeriodWindow::lastDay($active->endAt);
+        $activeDays = [];
+        $comparisonDays = [];
 
-        $firstDay = $this->firstMappedDay($active->dateFrom, $lastActiveDay, $equivalent, 1);
-        $lastDay = $this->firstMappedDay($lastActiveDay, $active->dateFrom, $equivalent, -1);
+        for ($day = $active->dateFrom; $day->lte($lastActiveDay); $day = $day->addDay()) {
+            if (($mapped = $equivalent($day)) !== null) {
+                $activeDays[] = $day;
+                $comparisonDays[] = $mapped;
+            }
+        }
 
-        if ($firstDay === null || $lastDay === null) {
+        if ($activeDays === []) {
             return [null, null];
         }
 
-        $keepsHour = $lastDay->eq($lastActiveDay) && ! $this->isMidnight($active->endAt);
-        $basisEnd = $keepsHour ? $active->endAt : $lastDay->addDay();
+        $keepsHour = end($activeDays)->eq($lastActiveDay) && ! $this->isMidnight($active->endAt);
         $comparisonEnd = $keepsHour
-            ? $equivalent($lastDay)->setTimeFrom($active->endAt)
-            : $equivalent($lastDay)->addDay();
+            ? end($comparisonDays)->setTimeFrom($active->endAt)
+            : end($comparisonDays)->addDay();
 
-        $comparison = $this->comparisonWindow($selection, $active, $equivalent($firstDay), $comparisonEnd);
-        $isTrimmed = ! $firstDay->eq($active->dateFrom) || ! $basisEnd->eq($active->endAt);
+        $comparison = $this->comparisonWindow($selection, $active, $comparisonDays[0], $comparisonEnd);
 
-        return [$comparison, $this->changeBasis($active, $comparison, $firstDay, $basisEnd, $isTrimmed)];
+        return [$comparison, $this->changeBasis(
+            $active,
+            $comparison,
+            $this->ranges($activeDays, $keepsHour ? $active->endAt : null),
+            $this->ranges($comparisonDays, $keepsHour ? $comparisonEnd : null),
+        )];
+    }
+
+    /**
+     * Joins consecutive days into [start, exclusive end) ranges; $lastEnd replaces the end of the last range.
+     *
+     * @param  list<CarbonImmutable>  $days
+     * @return list<array{0: CarbonImmutable, 1: CarbonImmutable}>
+     */
+    private function ranges(array $days, ?CarbonImmutable $lastEnd): array
+    {
+        $ranges = [];
+
+        foreach ($days as $day) {
+            $last = array_key_last($ranges);
+
+            if ($last !== null && $ranges[$last][1]->eq($day)) {
+                $ranges[$last][1] = $day->addDay();
+            } else {
+                $ranges[] = [$day, $day->addDay()];
+            }
+        }
+
+        if ($lastEnd !== null) {
+            $ranges[array_key_last($ranges)][1] = $lastEnd;
+        }
+
+        return $ranges;
     }
 
     /**
@@ -201,30 +238,12 @@ class PeriodResolverService
     }
 
     /**
-     * Walks from $day towards $limit until a day has an equivalent date.
-     *
-     * @param  Closure(CarbonImmutable): ?CarbonImmutable  $equivalent
-     */
-    private function firstMappedDay(CarbonImmutable $day, CarbonImmutable $limit, Closure $equivalent, int $step): ?CarbonImmutable
-    {
-        while ($step > 0 ? $day->lte($limit) : $day->gte($limit)) {
-            if ($equivalent($day) !== null) {
-                return $day;
-            }
-
-            $day = $day->addDays($step);
-        }
-
-        return null;
-    }
-
-    /**
      * An equivalent hour needs a complete record at exactly that cutoff for every platform, because a missing
      * record is never rebuilt from the latest status. A full period reads the latest state.
      */
     private function comparisonWindow(PeriodSelection $selection, PeriodWindow $active, CarbonImmutable $from, CarbonImmutable $endAt): PeriodWindow
     {
-        $to = $this->lastDay($endAt);
+        $to = PeriodWindow::lastDay($endAt);
         $isEquivalentHour = ! $this->isMidnight($endAt);
 
         if ($active->availability === DataAvailability::Unavailable) {
@@ -268,7 +287,7 @@ class PeriodResolverService
     }
 
     /**
-     * @return array{0: PeriodWindow, 1: array<string, mixed>|null}
+     * @return array{0: PeriodWindow, 1: ChangeBasis|null}
      */
     private function customComparison(PeriodSelection $selection, PeriodWindow $active): array
     {
@@ -289,44 +308,43 @@ class PeriodResolverService
             $this->isMidnight($endAt) ? PeriodStateBasis::Latest : PeriodStateBasis::AtCutoff,
         );
 
-        return [$comparison, $this->changeBasis($active, $comparison, $active->startAt, $active->endAt, false)];
+        return [$comparison, $this->wholePeriodsBasis($active, $comparison)];
     }
 
     /**
-     * @return array{is_trimmed: bool, active: array<string, string>, comparison: array<string, string>}|null
+     * Compares both periods in full, even when their lengths differ.
      */
-    private function changeBasis(PeriodWindow $active, PeriodWindow $comparison, CarbonImmutable $activeStart, CarbonImmutable $activeEnd, bool $isTrimmed): ?array
+    private function wholePeriodsBasis(PeriodWindow $active, PeriodWindow $comparison): ?ChangeBasis
+    {
+        return $this->changeBasis(
+            $active,
+            $comparison,
+            [[$active->startAt, $active->endAt]],
+            [[$comparison->startAt, $comparison->endAt]],
+        );
+    }
+
+    /**
+     * Null when either side is unavailable, so no change is calculated.
+     *
+     * @param  list<array{0: CarbonImmutable, 1: CarbonImmutable}>  $activeRanges
+     * @param  list<array{0: CarbonImmutable, 1: CarbonImmutable}>  $comparisonRanges
+     */
+    private function changeBasis(PeriodWindow $active, PeriodWindow $comparison, array $activeRanges, array $comparisonRanges): ?ChangeBasis
     {
         if ($active->availability === DataAvailability::Unavailable || $comparison->availability === DataAvailability::Unavailable) {
             return null;
         }
 
-        return [
-            'is_trimmed' => $isTrimmed,
-            'active' => $this->bounds($activeStart, $activeEnd),
-            'comparison' => $this->bounds($comparison->startAt, $comparison->endAt),
-        ];
-    }
+        $coversWhole = fn (array $ranges, PeriodWindow $window) => count($ranges) === 1
+            && $ranges[0][0]->eq($window->startAt)
+            && $ranges[0][1]->eq($window->endAt);
 
-    /**
-     * @return array{date_from: string, date_to: string, start_at: string, end_at: string}
-     */
-    private function bounds(CarbonImmutable $start, CarbonImmutable $end): array
-    {
-        return [
-            'date_from' => $start->toDateString(),
-            'date_to' => $this->lastDay($end)->toDateString(),
-            'start_at' => $start->toIso8601String(),
-            'end_at' => $end->toIso8601String(),
-        ];
-    }
-
-    /**
-     * The last calendar day that an exclusive end reaches.
-     */
-    private function lastDay(CarbonImmutable $endAt): CarbonImmutable
-    {
-        return $this->isMidnight($endAt) ? $endAt->subDay()->startOfDay() : $endAt->startOfDay();
+        return new ChangeBasis(
+            $activeRanges,
+            $comparisonRanges,
+            ! $coversWhole($activeRanges, $active) || ! $coversWhole($comparisonRanges, $comparison),
+        );
     }
 
     private function isMidnight(CarbonImmutable $moment): bool
