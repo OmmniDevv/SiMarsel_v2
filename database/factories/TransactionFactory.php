@@ -45,7 +45,6 @@ class TransactionFactory extends Factory
         return [
             'platform_id' => Platform::factory(),
             ...$this->markazIdentity('markaz'),
-            'markaz_user_id' => fake()->numberBetween(100000, 999999),
             'paid_date' => fake()->dateTimeBetween('-6 months')->format('Y-m-d'),
             'paid_time' => fake()->time(),
             'payment_method' => fake()->randomElement(self::PAYMENT_METHODS),

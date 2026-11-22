@@ -16,6 +16,8 @@ class DashboardTransactionMigrationTest extends TestCase
 {
     private const MIGRATION = 'database/migrations/2026_11_17_135819_add_dashboard_fields_and_source_identity_to_transactions_table.php';
 
+    private const LEGACY_ID_REMOVAL_MIGRATION = 'database/migrations/2026_11_22_232126_drop_markaz_user_id_from_transactions_table.php';
+
     private const NEW_COLUMNS = [
         'markaz_transaction_id', 'markaz_customer_id', 'markaz_ref_id', 'markaz_created_at', 'markaz_paid_at',
         'source_status', 'effective_status', 'is_claim_coupon', 'product_price', 'voucher_discount',
@@ -27,6 +29,7 @@ class DashboardTransactionMigrationTest extends TestCase
         parent::setUp();
 
         $this->artisan('migrate:fresh')->assertSuccessful();
+        $this->artisan('migrate:rollback', ['--path' => self::LEGACY_ID_REMOVAL_MIGRATION])->assertSuccessful();
     }
 
     public function test_clean_schema_has_the_dashboard_fields_and_optional_payment_date(): void

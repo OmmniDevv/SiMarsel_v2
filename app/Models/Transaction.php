@@ -16,7 +16,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable([
     'platform_id',
     'markaz_transaction_id',
-    'markaz_user_id',
     'markaz_customer_id',
     'trx_id',
     'markaz_ref_id',
@@ -63,7 +62,6 @@ class Transaction extends Model
     {
         return [
             'markaz_transaction_id' => 'integer',
-            'markaz_user_id' => 'integer',
             'markaz_customer_id' => 'integer',
             'markaz_ref_id' => 'integer',
             'markaz_created_at' => 'datetime',

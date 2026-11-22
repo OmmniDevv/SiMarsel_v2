@@ -83,7 +83,6 @@ Skema `transactions` mengikuti [kontrak tanggal transaksi](transaction-dates-cov
 |---|---|---|
 | `markaz_transaction_id` | Ya | ID transaksi Markaz (`bigint`). Key sumber bersama `platform_id` |
 | `markaz_customer_id` | Ya | ID akun pembayar dari API |
-| `markaz_user_id` | Ya | Legacy. Nilai lama dipertahankan, tetapi belum dipakai sebagai akun pembayar karena pemetaannya belum terverifikasi. Tidak diisi dari ID transaksi atau `markaz_customer_id`. Penghapusan kolom dikerjakan terpisah |
 | `markaz_ref_id` | Ya | `ref_id` dari API apa adanya. Nilai terisi **tidak selalu** berarti anggota grup, karena transaksi biasa dapat memiliki `ref_id` yang sama dengan ID-nya sendiri |
 | `markaz_created_at` | Ya | Waktu transaksi dibuat di Markaz (WIB) |
 | `markaz_paid_at` | Ya | `paid_date` terbaru dari API apa adanya |
@@ -97,7 +96,8 @@ Skema `transactions` mengikuti [kontrak tanggal transaksi](transaction-dates-cov
 - Kolom sumber bernilai NULL pada transaksi lama. Migration tidak mengisinya dari `created_at`, `updated_at`, atau nilai lokal lain; pengisian histori di luar FIX-15.
 - Index: `(platform_id, markaz_transaction_id)` unik, `trx_id`, `(platform_id, markaz_ref_id)`, `(platform_id, markaz_created_at)` untuk dasar tanggal dibuat, dan `(platform_id, paid_date)` untuk dasar tanggal bayar.
 - PK `transactions.id` dan FK `transaction_promo_codes.transaction_id` tidak berubah.
-- Rollback migration ditolak selama ada transaksi tanpa `paid_date`, tanpa `markaz_user_id`, atau dengan `trx_id` yang sama di beberapa baris, agar data tersebut tidak hilang.
+- `markaz_user_id` sudah dihapus karena tidak mempunyai pemetaan sumber yang terverifikasi dan tidak digunakan oleh business logic. Identitas akun pembayar memakai `markaz_customer_id`.
+- Rollback migration Dashboard ditolak selama ada transaksi tanpa `paid_date` atau dengan `trx_id` yang sama di beberapa baris, agar data tersebut tidak hilang. Migration historis masih melindungi rollback menuju schema lama yang pernah mewajibkan `markaz_user_id`.
 
 ## Snapshot Dashboard (FIX-15-BE-03)
 

@@ -162,7 +162,6 @@ class PromoCodeUsageNormalizationTest extends TestCase
         Transaction::insert([
             [
                 'platform_id' => $this->platformA->id,
-                'markaz_user_id' => 1,
                 'trx_id' => 'jadiasn-1',
                 'paid_date' => '2026-09-10',
                 'nominal' => 100000,
@@ -171,7 +170,6 @@ class PromoCodeUsageNormalizationTest extends TestCase
             ],
             [
                 'platform_id' => $this->platformA->id,
-                'markaz_user_id' => 2,
                 'trx_id' => 'jadiasn-2',
                 'paid_date' => '2026-09-10',
                 'nominal' => 100000,
