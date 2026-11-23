@@ -62,7 +62,10 @@ class Transaction extends Model
     protected function casts(): array
     {
         return [
+            'markaz_transaction_id' => 'integer',
+            'markaz_user_id' => 'integer',
             'markaz_customer_id' => 'integer',
+            'markaz_ref_id' => 'integer',
             'markaz_created_at' => 'datetime',
             'markaz_paid_at' => 'datetime',
             'paid_date' => 'date',

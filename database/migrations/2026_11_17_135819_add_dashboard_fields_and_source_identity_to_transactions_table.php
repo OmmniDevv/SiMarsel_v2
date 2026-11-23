@@ -16,12 +16,14 @@ return new class extends Migration
     {
         Schema::table('transactions', function (Blueprint $table) {
             $table->date('paid_date')->nullable()->change();
+            // Legacy: its mapping to the paying account is unverified. Existing values stay; new rows may leave it empty.
+            $table->unsignedBigInteger('markaz_user_id')->nullable()->change();
         });
 
         Schema::table('transactions', function (Blueprint $table) {
-            $table->string('markaz_transaction_id', 64)->nullable()->after('platform_id');
+            $table->unsignedBigInteger('markaz_transaction_id')->nullable()->after('platform_id');
             $table->unsignedBigInteger('markaz_customer_id')->nullable()->after('markaz_user_id');
-            $table->string('markaz_ref_id', 64)->nullable()->after('trx_id');
+            $table->unsignedBigInteger('markaz_ref_id')->nullable()->after('trx_id');
             $table->dateTime('markaz_created_at')->nullable()->after('markaz_ref_id');
             $table->dateTime('markaz_paid_at')->nullable()->after('markaz_created_at');
             $table->unsignedTinyInteger('source_status')->nullable()->after('paid_time');
@@ -32,7 +34,7 @@ return new class extends Migration
             $table->decimal('admin_fee', 15, 2)->nullable()->after('voucher_discount');
             $table->decimal('net_nominal', 15, 2)->nullable()->after('nominal');
             $table->string('customer_name')->nullable()->after('product_type');
-            $table->string('customer_phone', 30)->nullable()->after('customer_email');
+            $table->string('customer_phone', 50)->nullable()->after('customer_email');
             $table->dateTime('synced_at')->nullable()->after('status_message');
         });
 
@@ -43,8 +45,8 @@ return new class extends Migration
 
             $table->unique(['platform_id', 'markaz_transaction_id']);
             $table->index(['platform_id', 'markaz_ref_id']);
-            $table->index('markaz_created_at');
-            $table->index(['paid_date', 'paid_time']);
+            $table->index(['platform_id', 'markaz_created_at']);
+            $table->index(['platform_id', 'paid_date']);
         });
     }
 
@@ -52,6 +54,10 @@ return new class extends Migration
     {
         if (DB::table('transactions')->whereNull('paid_date')->exists()) {
             throw new LogicException('Cannot roll back while transactions without paid_date exist: paid_date would become required again. Keep the Pending history.');
+        }
+
+        if (DB::table('transactions')->whereNull('markaz_user_id')->exists()) {
+            throw new LogicException('Cannot roll back while transactions without markaz_user_id exist: markaz_user_id would become required again.');
         }
 
         if (DB::table('transactions')->select('trx_id')->groupBy('trx_id')->havingRaw('COUNT(*) > 1')->exists()) {
@@ -66,8 +72,8 @@ return new class extends Migration
         }
 
         Schema::table('transactions', function (Blueprint $table) {
-            $table->dropIndex(['paid_date', 'paid_time']);
-            $table->dropIndex(['markaz_created_at']);
+            $table->dropIndex(['platform_id', 'paid_date']);
+            $table->dropIndex(['platform_id', 'markaz_created_at']);
             $table->dropIndex(['platform_id', 'markaz_ref_id']);
             $table->dropUnique(['platform_id', 'markaz_transaction_id']);
             $table->dropIndex(['trx_id']);
@@ -96,6 +102,7 @@ return new class extends Migration
 
         Schema::table('transactions', function (Blueprint $table) {
             $table->date('paid_date')->nullable(false)->change();
+            $table->unsignedBigInteger('markaz_user_id')->nullable(false)->change();
         });
     }
 };

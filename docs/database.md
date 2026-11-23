@@ -81,9 +81,10 @@ Skema `transactions` mengikuti [kontrak tanggal transaksi](transaction-dates-cov
 
 | Kolom | Null | Isi |
 |---|---|---|
-| `markaz_transaction_id` | Ya | ID transaksi Markaz. Key sumber bersama `platform_id` |
-| `markaz_customer_id` | Ya | ID akun pembayar dari API. `markaz_user_id` lama belum dipakai sebagai akun pembayar sampai pemetaannya terverifikasi |
-| `markaz_ref_id` | Ya | Terisi berarti anggota grup; nilainya `markaz_transaction_id` pembeli pada platform yang sama |
+| `markaz_transaction_id` | Ya | ID transaksi Markaz (`bigint`). Key sumber bersama `platform_id` |
+| `markaz_customer_id` | Ya | ID akun pembayar dari API |
+| `markaz_user_id` | Ya | Legacy. Nilai lama dipertahankan, tetapi belum dipakai sebagai akun pembayar karena pemetaannya belum terverifikasi. Tidak diisi dari ID transaksi atau `markaz_customer_id`. Penghapusan kolom dikerjakan terpisah |
+| `markaz_ref_id` | Ya | `ref_id` dari API apa adanya. Nilai terisi **tidak selalu** berarti anggota grup, karena transaksi biasa dapat memiliki `ref_id` yang sama dengan ID-nya sendiri |
 | `markaz_created_at` | Ya | Waktu transaksi dibuat di Markaz (WIB) |
 | `markaz_paid_at` | Ya | `paid_date` terbaru dari API apa adanya |
 | `paid_date`, `paid_time` | Ya | Tanggal dan jam bayar valid terakhir untuk laporan. Pending boleh kosong |
@@ -94,9 +95,9 @@ Skema `transactions` mengikuti [kontrak tanggal transaksi](transaction-dates-cov
 | `customer_name`, `customer_phone` | Ya | Kontak pembeli. Email tetap di `customer_email` |
 
 - Kolom sumber bernilai NULL pada transaksi lama. Migration tidak mengisinya dari `created_at`, `updated_at`, atau nilai lokal lain; pengisian histori di luar FIX-15.
-- Index: `(platform_id, markaz_transaction_id)` unik, `trx_id`, `(platform_id, markaz_ref_id)` untuk anggota grup, `markaz_created_at` untuk dasar tanggal dibuat, dan `(paid_date, paid_time)` untuk dasar tanggal bayar.
+- Index: `(platform_id, markaz_transaction_id)` unik, `trx_id`, `(platform_id, markaz_ref_id)`, `(platform_id, markaz_created_at)` untuk dasar tanggal dibuat, dan `(platform_id, paid_date)` untuk dasar tanggal bayar.
 - PK `transactions.id` dan FK `transaction_promo_codes.transaction_id` tidak berubah.
-- Rollback migration ditolak selama ada transaksi tanpa `paid_date` atau `trx_id` yang sama di beberapa baris, agar data Pending dan transaksi lintas platform tidak hilang.
+- Rollback migration ditolak selama ada transaksi tanpa `paid_date`, tanpa `markaz_user_id`, atau dengan `trx_id` yang sama di beberapa baris, agar data tersebut tidak hilang.
 
 ## Snapshot Dashboard (FIX-15-BE-03)
 
@@ -116,7 +117,11 @@ Skema `transactions` mengikuti [kontrak tanggal transaksi](transaction-dates-cov
 - `downloaders.total` tetap satu total harian terbaru per `(platform_id, date)` dan dibaca terpisah dari snapshot. Snapshot tidak menggantikan dan tidak mengubah tabel itu.
 - `payload` transaksi memuat metrik dasar tanggal dibuat dan dasar tanggal bayar, termasuk pembayaran dalam periode dari transaksi yang dibuat sebelum `date_from`. `payload` Downloader memuat total kumulatif per tanggal yang tercakup.
 - `payload` adalah salinan saat dicatat: perubahan status atau tanggal bayar transaksi setelahnya tidak mengubah isinya.
-- Batas data lengkap = `cutoff_at` terakhir yang punya snapshot `is_complete = true` di **semua** platform terpilih untuk dataset dan periode yang sama (`DashboardSnapshot::latestCompleteCutoff()`). Snapshot `is_complete = false` tetap tersimpan, tetapi tidak pernah dipakai sebagai batas lengkap.
+- Batas data lengkap gabungan (`DashboardSnapshot::latestCompleteCutoff()`) untuk dataset dan periode yang sama adalah `cutoff_at` **terakhir yang punya snapshot `is_complete = true` di semua platform terpilih**, sehingga angka pembanding pada jam itu selalu bisa dibaca di seluruh platform.
+  - A dan B sama-sama lengkap pada 13.00 dan 14.00 → 14.00.
+  - 14.00 hanya lengkap di A, sedangkan 13.00 lengkap di A dan B → 13.00. Jika 13.00 juga belum lengkap di semua platform, pemeriksaan mundur ke jam sebelumnya.
+  - A hanya lengkap pada 14.00 dan B hanya pada 13.00 → `null`.
+- Hasil `null` berarti pembanding belum tersedia. Snapshot `is_complete = false` tetap tersimpan, tetapi tidak pernah dipakai sebagai batas lengkap.
 - `sync_logs.finished_at` hanya jam job selesai, bukan bukti kelengkapan.
 - `DashboardSnapshot::toComparisonRow()` mengeluarkan baris yang dibaca `ComparisonSnapshotService::read()`. Penerbitan snapshot oleh job dan rumus agregasi di luar FIX-15.
 

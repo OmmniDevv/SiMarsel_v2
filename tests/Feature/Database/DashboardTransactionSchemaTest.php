@@ -60,14 +60,14 @@ class DashboardTransactionSchemaTest extends TestCase
     {
         [$platformA, $platformB] = Platform::factory()->count(2)->create();
 
-        $first = Transaction::factory()->create(['platform_id' => $platformA->id, 'markaz_transaction_id' => '476770', 'trx_id' => 'TRX-476770']);
-        $second = Transaction::factory()->create(['platform_id' => $platformB->id, 'markaz_transaction_id' => '476770', 'trx_id' => 'TRX-476770']);
+        $first = Transaction::factory()->create(['platform_id' => $platformA->id, 'markaz_transaction_id' => 476770, 'trx_id' => 'TRX-476770']);
+        $second = Transaction::factory()->create(['platform_id' => $platformB->id, 'markaz_transaction_id' => 476770, 'trx_id' => 'TRX-476770']);
 
         $this->assertNotSame($first->id, $second->id);
         $this->assertSame(2, Transaction::where('trx_id', 'TRX-476770')->count());
 
         $this->expectException(UniqueConstraintViolationException::class);
-        Transaction::factory()->create(['platform_id' => $platformA->id, 'markaz_transaction_id' => '476770', 'trx_id' => 'TRX-OTHER']);
+        Transaction::factory()->create(['platform_id' => $platformA->id, 'markaz_transaction_id' => 476770, 'trx_id' => 'TRX-OTHER']);
     }
 
     public function test_ac02_history_without_a_verified_source_id_may_share_a_platform(): void
@@ -86,8 +86,30 @@ class DashboardTransactionSchemaTest extends TestCase
         $this->assertTrue($indexes['platform_id,markaz_transaction_id']['unique']);
         $this->assertFalse($indexes['trx_id']['unique']);
         $this->assertFalse($indexes['platform_id,markaz_ref_id']['unique']);
-        $this->assertFalse($indexes['markaz_created_at']['unique']);
-        $this->assertFalse($indexes['paid_date,paid_time']['unique']);
+        $this->assertFalse($indexes['platform_id,markaz_created_at']['unique']);
+        $this->assertFalse($indexes['platform_id,paid_date']['unique']);
+    }
+
+    public function test_source_ids_are_bigint_and_customer_phone_holds_fifty_characters(): void
+    {
+        $columns = collect(Schema::getColumns('transactions'))->keyBy('name');
+
+        foreach (['markaz_transaction_id', 'markaz_ref_id'] as $column) {
+            $this->assertContains($columns[$column]['type_name'], ['bigint', 'integer'], $column);
+        }
+
+        $phone = str_repeat('8', 50);
+        $this->assertSame($phone, Transaction::factory()->create(['customer_phone' => $phone])->fresh()->customer_phone);
+    }
+
+    public function test_legacy_markaz_user_id_is_optional_and_kept_when_present(): void
+    {
+        $withoutLegacyId = Transaction::factory()->create(['markaz_user_id' => null, 'markaz_customer_id' => 445566]);
+        $legacy = Transaction::factory()->create(['markaz_user_id' => 123456]);
+
+        $this->assertNull($withoutLegacyId->fresh()->markaz_user_id);
+        $this->assertSame(445566, $withoutLegacyId->fresh()->markaz_customer_id);
+        $this->assertSame(123456, $legacy->fresh()->markaz_user_id);
     }
 
     public function test_ac03_group_and_claim_fields_are_read_back(): void
@@ -95,7 +117,7 @@ class DashboardTransactionSchemaTest extends TestCase
         $platform = Platform::factory()->create();
         $buyer = Transaction::factory()->create([
             'platform_id' => $platform->id,
-            'markaz_transaction_id' => '900001',
+            'markaz_transaction_id' => 900001,
             'markaz_customer_id' => 445566,
             'markaz_ref_id' => null,
             'markaz_created_at' => '2026-11-10 09:00:00',
@@ -116,8 +138,14 @@ class DashboardTransactionSchemaTest extends TestCase
         ]);
         $member = Transaction::factory()->create([
             'platform_id' => $platform->id,
-            'markaz_transaction_id' => '900002',
-            'markaz_ref_id' => '900001',
+            'markaz_transaction_id' => 900002,
+            'markaz_ref_id' => 900001,
+        ]);
+        // A regular transaction may carry its own id as ref_id, so a filled value alone does not mean a group member.
+        $selfReferenced = Transaction::factory()->create([
+            'platform_id' => $platform->id,
+            'markaz_transaction_id' => 900003,
+            'markaz_ref_id' => 900003,
         ]);
         $claim = Transaction::factory()->create([
             'platform_id' => $platform->id,
@@ -130,7 +158,7 @@ class DashboardTransactionSchemaTest extends TestCase
         ]);
 
         $stored = $buyer->fresh();
-        $this->assertSame('900001', $stored->markaz_transaction_id);
+        $this->assertSame(900001, $stored->markaz_transaction_id);
         $this->assertSame(445566, $stored->markaz_customer_id);
         $this->assertNull($stored->markaz_ref_id);
         $this->assertSame('2026-11-10 09:05:00', $stored->markaz_paid_at->format('Y-m-d H:i:s'));
@@ -147,6 +175,7 @@ class DashboardTransactionSchemaTest extends TestCase
             [$member->id],
             Transaction::where('platform_id', $platform->id)->where('markaz_ref_id', $stored->markaz_transaction_id)->pluck('id')->all(),
         );
+        $this->assertSame(900003, $selfReferenced->fresh()->markaz_ref_id);
         $this->assertTrue($claim->fresh()->is_claim_coupon);
         $this->assertFalse(Transaction::factory()->create()->fresh()->is_claim_coupon);
     }
