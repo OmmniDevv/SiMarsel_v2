@@ -27,6 +27,7 @@ class PerformanceExportService
     public function __construct(
         private PerformanceSummaryService $performanceSummaryService,
         private PerformanceTrendService $performanceTrendService,
+        private DownloaderAggregationService $downloaderAggregationService,
         private PaymentMethodDistributionService $paymentMethodDistributionService,
         private PlatformContributionService $platformContributionService,
         private PurchaseTimeDistributionService $purchaseTimeDistributionService,
@@ -37,12 +38,13 @@ class PerformanceExportService
      * Write the export to a temporary file.
      *
      * @param  'xlsx'|'csv'  $format
+     * @param  PerformanceFilter|null  $downloaderFilter  The same preset resolved on the downloaders metadata.
      * @return array{path: string, filename: string}
      */
-    public function export(PerformanceFilter $filter, string $format): array
+    public function export(PerformanceFilter $filter, string $format, ?PerformanceFilter $downloaderFilter = null): array
     {
         $path = tempnam(sys_get_temp_dir(), 'performance-export-');
-        $sections = $this->sections($filter);
+        $sections = $this->sections($filter, $downloaderFilter);
 
         match ($format) {
             'xlsx' => $this->spreadsheetWriter->xlsx($sections, $path),
@@ -57,14 +59,16 @@ class PerformanceExportService
 
     /**
      * Section title => rows, the first row of each table being its header.
+     * The Downloader sheet is added when the shared period resolver chose the period.
      *
      * @return array<string, list<list<string|int|float|null>>>
      */
-    public function sections(PerformanceFilter $filter): array
+    public function sections(PerformanceFilter $filter, ?PerformanceFilter $downloaderFilter = null): array
     {
         return [
             'Ringkasan KPI' => $this->summaryRows($filter),
             'Tren' => $this->trendRows($filter),
+            ...($downloaderFilter?->period === null ? [] : ['Downloader' => $this->downloaderRows($downloaderFilter)]),
             'Metode Pembayaran' => $this->paymentMethodRows($filter),
             'Kontribusi Platform' => $this->platformContributionRows($filter),
             'Waktu Pembelian' => $this->purchaseTimeRows($filter),
@@ -151,6 +155,42 @@ class PerformanceExportService
                 $row['period_end'],
                 ...array_map(fn (array $trend) => $trend['rows'][$index]['value'], $trends),
             ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * The Lihat Rincian rows of the Downloader chart at its default granularity, then the period totals and the
+     * platform shares. An unknown value is written as Belum tersedia; a stored 0 stays 0.
+     *
+     * @return list<list<string|int|float|null>>
+     */
+    private function downloaderRows(PerformanceFilter $filter): array
+    {
+        $trend = $this->downloaderAggregationService->trend($filter, TrendPeriod::defaultFor($filter->period));
+        $value = fn (?array $side) => $side['value'] ?? 'Belum tersedia';
+        $period = fn (?array $side) => $side === null ? 'Belum tersedia' : $side['label'];
+
+        $rows = [['Periode Aktif', 'Downloader', 'Periode Pembanding', 'Downloader Pembanding', 'Perubahan (%)']];
+
+        foreach ($trend['buckets'] as $bucket) {
+            $rows[] = [
+                $period($bucket['active']),
+                $value($bucket['active']),
+                $period($bucket['comparison']),
+                $value($bucket['comparison']),
+                $bucket['change']['change_percentage'],
+            ];
+        }
+
+        $rows[] = [];
+        $rows[] = ['Total', $value($trend['totals']['active']), '', $value($trend['totals']['comparison']), $trend['totals']['change']['change_percentage']];
+        $rows[] = [];
+        $rows[] = ['Platform', 'Downloader', 'Persentase (%)'];
+
+        foreach ($trend['platforms'] as $platform) {
+            $rows[] = [$platform['name'], $value($platform), $platform['share_percentage'] ?? 'N/A'];
         }
 
         return $rows;
