@@ -5,6 +5,7 @@ namespace Tests\Feature\Task;
 use App\Enums\TaskStatus;
 use App\Models\Account;
 use App\Models\Division;
+use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Task;
 use App\Models\TaskActivity;
@@ -98,6 +99,37 @@ class TaskRoleCompatibilityTest extends TestCase
             ->postJson("/api/tasks/{$task->id}/reviews", ['decision' => 'approve', 'version' => 1])
             ->assertOk()
             ->assertJsonPath('data.status', 'done');
+    }
+
+    public function test_the_board_list_tells_a_manager_or_supervisor_without_the_review_permission_that_they_cannot_decide(): void
+    {
+        $task = $this->task(['status' => TaskStatus::OnReview], ['staff']);
+
+        foreach (['manager', 'supervisor'] as $role) {
+            $this->actingAs($this->accounts[$role])->getJson('/api/tasks')
+                ->assertJsonPath('data.0.id', $task->id)
+                ->assertJsonPath('data.0.can_review', true);
+        }
+
+        foreach ([Role::MANAGER, Role::SUPERVISOR] as $code) {
+            Role::where('code_role', $code)->first()->permissions()
+                ->detach(Permission::where('code', Permission::TASK_REVIEW)->value('id'));
+        }
+
+        foreach (['manager', 'supervisor'] as $role) {
+            $account = $this->accounts[$role]->fresh();
+
+            $this->actingAs($account)->getJson('/api/tasks')
+                ->assertJsonPath('data.0.id', $task->id)
+                ->assertJsonPath('data.0.can_review', false);
+            $this->actingAs($account)->getJson("/api/tasks/{$task->id}")->assertOk()->assertJsonPath('data.can_review', false);
+            $this->actingAs($account)
+                ->postJson("/api/tasks/{$task->id}/reviews", ['decision' => 'approve', 'version' => 1])
+                ->assertForbidden();
+        }
+
+        $this->assertSame(TaskStatus::OnReview, $task->fresh()->status);
+        $this->assertDatabaseMissing('task_reviews', ['task_id' => $task->id]);
     }
 
     public function test_a_supervisor_who_is_pic_approves_their_own_work_in_their_division(): void
