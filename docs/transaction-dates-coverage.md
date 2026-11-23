@@ -72,8 +72,6 @@ Contoh lintas hari: transaksi dibuat 10 November 23.50 dan dibayar 11 November 0
 
 Status laporan = `effective_status` jika terisi (**termasuk nilai 0**), lalu `source_status`. Diimplementasikan di `App\Enums\MarkazTransactionStatus::forReport()`.
 
-`status_message` hanya label sumber untuk presentasi dan penelusuran. Query, agregasi, dan keputusan bisnis tidak membacanya sebagai fallback. Data lama yang mempunyai label status standar dipetakan satu kali ke `source_status` melalui migration.
-
 | Kode | Label | Kelompok |
 |---|---|---|
 | `0` | Pending | Pending |

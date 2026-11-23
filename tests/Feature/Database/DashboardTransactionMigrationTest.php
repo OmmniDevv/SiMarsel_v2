@@ -38,6 +38,7 @@ class DashboardTransactionMigrationTest extends TestCase
         $this->assertTrue($this->column('paid_date')['nullable']);
         $this->assertTrue($this->column('markaz_user_id')['nullable']);
         $this->assertFalse($this->column('is_claim_coupon')['nullable']);
+        $this->assertFalse(Schema::hasColumn('transactions', 'status_message'));
     }
 
     public function test_clean_schema_stores_pending_and_keys_source_ids_per_platform(): void
@@ -213,7 +214,6 @@ class DashboardTransactionMigrationTest extends TestCase
             'product' => 'Bimbel Persiapan UTBK SNBT 2027 - Masa Aktif 1 Tahun',
             'product_type' => 'Perdana',
             'customer_email' => 'amahs7391@gmail.com',
-            'status_message' => 'Success',
             'created_at' => now(),
             'updated_at' => now(),
             ...$overrides,

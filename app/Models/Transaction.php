@@ -39,7 +39,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'customer_name',
     'customer_email',
     'customer_phone',
-    'status_message',
     'synced_at',
 ])]
 #[ObservedBy(TransactionObserver::class)]

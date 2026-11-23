@@ -55,7 +55,6 @@ class TransactionFactory extends Factory
             'customer_email' => self::customerEmail(),
             'source_status' => MarkazTransactionStatus::Success->value,
             'effective_status' => null,
-            'status_message' => MarkazTransactionStatus::Success->label(),
         ];
     }
 
@@ -89,7 +88,6 @@ class TransactionFactory extends Factory
         return $this->state(fn () => [
             'source_status' => MarkazTransactionStatus::Failed->value,
             'effective_status' => null,
-            'status_message' => MarkazTransactionStatus::Failed->label(),
         ]);
     }
 
@@ -103,7 +101,6 @@ class TransactionFactory extends Factory
             'paid_time' => null,
             'markaz_paid_at' => null,
             'source_status' => MarkazTransactionStatus::Pending->value,
-            'status_message' => MarkazTransactionStatus::Pending->label(),
         ]);
     }
 

@@ -73,17 +73,15 @@ class PromoCodeUsageNormalizationTest extends TestCase
         $this->assertSame(0, TransactionPromoCode::count());
     }
 
-    public function test_normalization_uses_report_status_and_ignores_the_status_label(): void
+    public function test_normalization_uses_effective_status_then_source_status(): void
     {
         $sourceSuccess = $this->transaction(['SUCCESS'], attributes: [
             'source_status' => MarkazTransactionStatus::Success->value,
             'effective_status' => null,
-            'status_message' => MarkazTransactionStatus::Failed->label(),
         ]);
         $effectiveFailed = $this->transaction(['FAILED'], attributes: [
             'source_status' => MarkazTransactionStatus::Success->value,
             'effective_status' => MarkazTransactionStatus::Failed->value,
-            'status_message' => MarkazTransactionStatus::Success->label(),
         ]);
 
         $this->assertCount(1, $sourceSuccess->promoCodeUsages);

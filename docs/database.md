@@ -61,8 +61,6 @@ php artisan migrate --seed
 - Password disimpan dalam bentuk hash (bcrypt) dan tidak pernah dikembalikan oleh API.
 - Username: 4-25 karakter, hanya huruf, angka, titik, dan underscore.
 - Semua status transaksi Markaz disimpan. Status laporan memakai `effective_status` jika tersedia, kemudian `source_status` sebagai fallback; nilai `0` tetap berarti Pending.
-- `status_message` dipertahankan sebagai label sumber untuk tampilan atau penelusuran, tetapi tidak menjadi dasar filtering, agregasi, atau business logic.
-- Saat refactor status diterapkan, label lama `Pending`, `Success`, `Expired`, `Failed`, dan `Canceled` dipetakan satu kali ke `source_status` secara case-insensitive. Label yang tidak dikenali tetap menghasilkan status kosong; runtime tidak memakai `status_message` sebagai fallback.
 - Penggunaan promo, alert, dan backfill pendaftaran hanya memproses transaksi sukses. `transactions.promo_code_anomaly` menandai payload promo invalid: detail ada di file log, histori penggunaan tetap disimpan, dan seluruh query analisis promo/alert mengecualikannya. Ringkasan Performa umum tetap menghitung fakta transaksi sukses tersebut.
 - Snapshot promo memakai master saat pertama diproses, tanpa melihat tanggal bayar; snapshot yang sudah terhubung tetap, termasuk hasil kosong. Rename menggunakan label master terbaru tanpa mengubah snapshot tersimpan.
 - Satu transaksi Markaz tersimpan sekali per platform: `(platform_id, markaz_transaction_id)` unik. `markaz_transaction_id` boleh NULL pada histori yang belum punya ID sumber terverifikasi.
