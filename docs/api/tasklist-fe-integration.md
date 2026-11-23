@@ -100,6 +100,7 @@ lintas divisi, dan tampilan read-only untuk tugas di luar kewenangan. Calendar d
 | Hapus Task Card | ✅ Siap (TASK-12) | `DELETE /api/tasks/{id}` dengan `version`; tampilkan tombol bila `can_delete`; tugas Done tidak bisa dihapus (`422`) |
 | Pop-up Calendar | ✅ Siap (TASK-12, TASK-15) | Item `deadlines` membawa `task_id`; `GET /api/tasks/{id}/preview`: ringkasan terbaru, seluruh PIC aktif, dan flag akses untuk satu tugas |
 | Hapus evidence sendiri | ✅ Siap (TASK-13) | `DELETE /api/tasks/{id}/evidences/{evidence}`; tombol bila `can_delete` pada Evidence |
+| Evidence dokumen, gambar, tautan | ✅ Siap (TASK-18) | Format hanya PDF, DOC, DOCX, JPG, JPEG, PNG (perbarui `EVIDENCE_EXTENSIONS`); pakai `kind` untuk ikon dan `preview_url` untuk thumbnail gambar; evidence dapat dikirim juga saat Back Log |
 | PIC & divisi untuk Supervisor | ✅ Siap (TASK-13) | `pics` di create/assignment-options sudah dibatasi ke divisi Supervisor; `can_change_division` `false` dan `division_id` tidak ada di `editable_fields` untuk Supervisor |
 | Kelola agenda (buat/ubah/hapus) | ⏳ Tabel siap | Endpoint belum ada |
 | Nonaktifkan akun | ⏳ Kolom `is_active` dan penolakan login siap | Endpoint belum ada |

@@ -144,6 +144,11 @@ class TaskController extends Controller
         return $service->download($task, $evidence);
     }
 
+    public function previewEvidence(Task $task, TaskEvidence $evidence, TaskEvidenceService $service): StreamedResponse
+    {
+        return $service->preview($task, $evidence);
+    }
+
     public function update(UpdateTaskRequest $request, Task $task): TaskDetailResource
     {
         $task = $this->taskService->update($request->user(), $task, $request->validated());

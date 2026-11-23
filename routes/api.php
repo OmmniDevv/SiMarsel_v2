@@ -219,6 +219,10 @@ Route::middleware('auth')->group(function () {
             ->whereNumber(['task', 'evidence'])
             ->can('view', 'task')
             ->name('evidences.download');
+        Route::get('/{task}/evidences/{evidence}/preview', [TaskController::class, 'previewEvidence'])
+            ->whereNumber(['task', 'evidence'])
+            ->can('view', 'task')
+            ->name('evidences.preview');
         Route::get('/{task}/reviews', [TaskController::class, 'reviews'])
             ->whereNumber('task')
             ->can('view', 'task')
