@@ -269,7 +269,7 @@ test('Detail status change based on an outdated version is rejected with a clear
 });
 
 test('Dragging On QA back to On Process opens the revision note form instead of changing the status', async () => {
-    const reviewed = task({ status: 'on_review', requires_review: true });
+    const reviewed = task({ status: 'on_review', requires_review: true, can_review: true });
     const { board, requests } = await tasklistPage({
         'GET /api/tasks': () => ({ json: { data: [reviewed], meta: { status_counts: {} } } }),
     }, ADMIN);
@@ -301,7 +301,7 @@ test('Create button follows meta.can_create, falling back to Admin and Manager w
 });
 
 test('QA decisions send { decision, note, version } to the review endpoint, from the Board and from the detail', async () => {
-    const reviewed = task({ status: 'on_review', requires_review: true, version: 8 });
+    const reviewed = task({ status: 'on_review', requires_review: true, can_review: true, version: 8 });
     const { board, detail: createDetail, requests } = await tasklistPage({
         'GET /api/tasks': () => ({ json: { data: [reviewed], meta: { status_counts: {} } } }),
         'GET /api/tasks/7': () => ({ json: { data: reviewed } }),
@@ -686,9 +686,25 @@ test('Review rejections show a clear message: a missing note stays in the form, 
 
 test('Dragging On QA to On Process does not open the revision form when the backend does not send can_review', async () => {
     const reviewed = task({ status: 'on_review', requires_review: true, can_review: false, next_statuses: [] });
-    const { board, detail: createDetail, requests, toasts } = await tasklistPage({
+    const { board, requests, toasts } = await tasklistPage({
         'GET /api/tasks': () => ({ json: { data: [reviewed], meta: { status_counts: {} } } }),
-        'GET /api/tasks/7': () => ({ json: { data: reviewed } }),
+    }, ADMIN);
+    await board.load();
+
+    board.draggingId = 7;
+    await board.drop('in_progress');
+
+    assert.equal(board.detailId, null, 'the Board does not open the revision form');
+    assert.equal(toasts.at(-1).title, 'Perpindahan ditolak');
+    assert.deepEqual(board.tasksIn('on_review').map(({ id }) => id), [7]);
+    assert.equal(requests.some(({ method }) => method !== 'GET'), false);
+});
+
+test('A revision dragged on a list that still allowed it is refused when the fresh detail no longer sends can_review', async () => {
+    const listed = task({ status: 'on_review', requires_review: true, can_review: true, next_statuses: [] });
+    const { board, detail: createDetail, requests, toasts } = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [listed], meta: { status_counts: {} } } }),
+        'GET /api/tasks/7': () => ({ json: { data: { ...listed, can_review: false } } }),
     }, ADMIN);
     await board.load();
 
@@ -699,7 +715,6 @@ test('Dragging On QA to On Process does not open the revision form when the back
 
     assert.equal(detail.reviewMode, null);
     assert.equal(toasts.at(-1).title, 'Revisi tidak dapat diminta');
-    assert.deepEqual(board.tasksIn('on_review').map(({ id }) => id), [7]);
     assert.equal(requests.some(({ method }) => method !== 'GET'), false);
 });
 
@@ -1574,6 +1589,35 @@ test('An active PIC without the status permission cannot drag the card, and a dr
     assert.deepEqual(statusRequests(requests), []);
     assert.equal(toasts.at(-1).title, 'Perpindahan ditolak');
     assert.deepEqual(board.tasksIn('todo').map(({ id }) => id), [7]);
+});
+
+test('A Manager or Supervisor who sees an On QA task without the review permission cannot drag it to Approve or Revision, and no review is sent', async () => {
+    for (const user of [MANAGER, SUPERVISOR]) {
+        const reviewed = task({ status: 'on_review', requires_review: true, can_edit: true, can_change_status: false, can_review: false });
+        const { board, requests, toasts } = await tasklistPage({
+            'GET /api/tasks': () => ({ json: { data: [reviewed], meta: { status_counts: {} } } }),
+        }, user);
+        await board.load();
+
+        assert.equal(board.canDrag(reviewed), false, `${user.role.code_role}: no QA decision is offered on the Board`);
+        assert.equal(board.canDrag({ ...reviewed, can_review: true }), true, `${user.role.code_role}: the review permission allows the drag`);
+
+        board.draggingId = 7;
+        for (const status of ['done', 'in_progress']) {
+            assert.equal(board.dropState(status), 'denied');
+            assert.equal(board.dropReason(status), 'Anda tidak memiliki izin untuk memberi keputusan QA pada tugas ini.');
+        }
+
+        await board.drop('done');
+        board.draggingId = 7;
+        await board.drop('in_progress');
+
+        assert.equal(requests.some(({ url }) => url.includes('/reviews')), false, `${user.role.code_role}: no review request`);
+        assert.equal(requests.some(({ method }) => method !== 'GET'), false);
+        assert.equal(board.detailId, null, 'the revision form is not opened');
+        assert.equal(toasts.at(-1).title, 'Perpindahan ditolak');
+        assert.deepEqual(board.tasksIn('on_review').map(({ id }) => id), [7]);
+    }
 });
 
 test('The detail explains a read-only task, and a PIC keeps evidence access while no longer read-only', async () => {
