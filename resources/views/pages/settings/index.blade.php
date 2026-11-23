@@ -18,11 +18,11 @@
 
         @include('pages.settings.components.organization-tabs')
 
-        <div id="panel-accounts" role="tabpanel" aria-labelledby="tab-accounts" tabindex="0" x-show="tab === 'accounts'" x-cloak class="focus-visible:outline-none">
+        <div id="panel-accounts" role="tabpanel" aria-labelledby="tab-accounts" tabindex="0" x-show="tab === 'accounts'" x-cloak class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-hover">
             @include('pages.settings.accounts')
         </div>
 
-        <div id="panel-divisions" role="tabpanel" aria-labelledby="tab-divisions" tabindex="0" x-show="tab === 'divisions'" x-cloak class="focus-visible:outline-none">
+        <div id="panel-divisions" role="tabpanel" aria-labelledby="tab-divisions" tabindex="0" x-show="tab === 'divisions'" x-cloak class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-hover">
             @include('pages.settings.divisions')
         </div>
     </div>

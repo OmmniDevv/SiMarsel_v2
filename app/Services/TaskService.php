@@ -325,7 +325,9 @@ class TaskService
             $divisionId = (int) ($data['division_id'] ?? $locked->division_id);
             $forwarded = $divisionId !== $locked->division_id;
 
-            // The policy already checked the actor manages the task; forwarding needs no extra scope at the destination.
+            if ($forwarded && ! $locked->forwardableBy($actor)) {
+                throw ValidationException::withMessages(['division_id' => 'Hanya Admin dan Manajer yang dapat memindahkan tugas ke divisi lain.']);
+            }
 
             if (! $forwarded && $added->isEmpty() && $released->isEmpty()) {
                 throw ValidationException::withMessages(['pic_ids' => 'Tidak ada perubahan PIC.']);
@@ -382,8 +384,9 @@ class TaskService
     }
 
     /**
-     * Choices for the Assign PIC form: the current PICs, the divisions the task may be forwarded to, every account
-     * that may be PIC (from any division), and the reason the PICs cannot be changed right now, if any.
+     * Choices for the Assign PIC form: the current PICs, the divisions the task may be forwarded to (every division
+     * for Admin and Managers, otherwise only its own), the accounts the actor may add as PIC, and the reason the PICs
+     * cannot be changed right now, if any.
      *
      * @return array<string, mixed>
      */
@@ -394,21 +397,21 @@ class TaskService
         return [
             'current_pics' => $task->pics->map(fn (Account $pic) => $pic->only(['id', 'fullname']))->values()->all(),
             'current_division' => $task->division->only(['id', 'code_division', 'name']),
-            'can_change_division' => $task->assignableBy($actor),
+            'can_change_division' => $task->forwardableBy($actor),
             'locked_reason' => $task->assignmentLockFor($actor),
             'divisions' => Division::query()
-                ->unless($task->assignableBy($actor), fn (Builder $query) => $query->whereKey($task->division_id))
+                ->unless($task->forwardableBy($actor), fn (Builder $query) => $query->whereKey($task->division_id))
                 ->orderBy('name')
                 ->get(['id', 'code_division', 'name'])
                 ->map(fn (Division $division) => $division->only(['id', 'code_division', 'name']))
                 ->all(),
-            'pics' => $this->picOptions(),
+            'pics' => $this->picOptions($actor),
         ];
     }
 
     /**
-     * Options for the Create Task form: the divisions the account may create tasks for, every account that may be
-     * PIC (from any division), task categories with their QA configuration, platforms, and enums.
+     * Options for the Create Task form: the divisions the account may create tasks for, the accounts it may assign as
+     * PIC, task categories with their QA configuration, platforms, and enums.
      *
      * @return array<string, mixed>
      */
@@ -421,7 +424,7 @@ class TaskService
                 ->get(['id', 'code_division', 'name'])
                 ->map(fn (Division $division) => $division->only(['id', 'code_division', 'name']))
                 ->all(),
-            'pics' => $this->picOptions(),
+            'pics' => $this->picOptions($account),
             'categories' => TaskCategory::query()
                 ->orderBy('name')
                 ->get(['id', 'name', 'requires_review', 'evidence_required'])
@@ -446,14 +449,15 @@ class TaskService
     }
 
     /**
-     * Every account that may be PIC, from any division, with its role and division so the form can group them.
+     * Every account the assigner may add as PIC (Admin and Managers: every division; a Supervisor: their own), with
+     * its role and division so the form can group them.
      *
      * @return array<int, array<string, mixed>>
      */
-    private function picOptions(): array
+    private function picOptions(Account $assigner): array
     {
         return Account::query()
-            ->assignableAsPic()
+            ->assignableAsPicBy($assigner)
             ->with(['role', 'division'])
             ->orderBy('fullname')
             ->orderBy('id')

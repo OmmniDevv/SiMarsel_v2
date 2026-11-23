@@ -323,7 +323,7 @@ class TaskAssignmentTest extends TestCase
         $this->assertSame(0, $this->task->collaboratingDivisions()->count());
     }
 
-    public function test_managers_and_the_division_supervisor_may_forward_but_staff_and_other_supervisors_may_not(): void
+    public function test_only_admin_and_managers_forward_to_another_division(): void
     {
         foreach ([$this->staff, $this->freelancer, $this->financeSupervisor] as $account) {
             $this->actingAs($account)
@@ -331,9 +331,16 @@ class TaskAssignmentTest extends TestCase
                 ->assertForbidden();
         }
 
-        $this->assertSame($this->marketing->id, $this->task->fresh()->division_id);
-
+        // The division's own Supervisor manages its PICs but does not hand the task to another division (TASK-13).
         $this->actingAs($this->supervisor)
+            ->patchJson($this->url(), $this->payload([$this->otherStaff->id], ['division_id' => $this->finance->id]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['division_id' => 'Hanya Admin dan Manajer yang dapat memindahkan tugas ke divisi lain.']);
+
+        $this->assertSame($this->marketing->id, $this->task->fresh()->division_id);
+        $this->assertActivePics($this->task->fresh(), [$this->staff]);
+
+        $this->actingAs($this->manager)
             ->patchJson($this->url(), $this->payload([$this->financeStaff->id], ['division_id' => $this->finance->id]))
             ->assertOk()
             ->assertJsonPath('data.division.code_division', 'FIN');

@@ -14,8 +14,8 @@
                 aria-controls="panel-{{ $key }}"
                 :aria-selected="tab === @js($key)"
                 :tabindex="tab === @js($key) ? 0 : -1"
-                class="border-b-2 px-1 pb-3 text-sm font-semibold whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                :class="tab === @js($key) ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-ink'"
+                class="border-b-2 px-1 pb-3 text-sm font-semibold whitespace-nowrap transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                :class="tab === @js($key) ? 'border-primary text-primary-hover' : 'border-transparent text-muted hover:text-ink'"
                 @click="select(@js($key))"
             >{{ $label }}</button>
         @endforeach
