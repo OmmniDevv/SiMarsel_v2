@@ -15,7 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * TASK-12 (STEAM-241): deleting a Task Card and the Calendar task preview.
+ * TASK-12 (STEAM-241): deleting a Task Card and the Calendar task preview. TASK-15 (STEAM-253): what the preview shows.
  */
 class TaskDeletionAndPreviewTest extends TestCase
 {
@@ -226,6 +226,60 @@ class TaskDeletionAndPreviewTest extends TestCase
         $this->actingAs($this->accounts['admin'])->getJson($url)
             ->assertJsonPath('data.status', 'in_progress')
             ->assertJsonPath('data.version', 2);
+    }
+
+    public function test_the_preview_lists_every_active_pic_once_and_leaves_released_ones_out(): void
+    {
+        $task = $this->task(['status' => TaskStatus::Todo], ['supervisor', 'staff', 'freelance']);
+        $task->activeAssignments()->where('account_id', $this->accounts['freelance']->id)
+            ->update(['unassigned_at' => now(), 'unassigned_by' => $this->accounts['admin']->id]);
+
+        $this->actingAs($this->accounts['freelance'])
+            ->getJson("/api/tasks/{$task->id}/preview")
+            ->assertOk()
+            ->assertJsonPath('data.pics', [
+                ['id' => $this->accounts['staff']->id, 'fullname' => 'staff'],
+                ['id' => $this->accounts['supervisor']->id, 'fullname' => 'supervisor'],
+            ]);
+    }
+
+    public function test_the_preview_of_a_task_without_dates_or_pics_reports_them_as_empty(): void
+    {
+        $task = $this->task(['status' => TaskStatus::Todo]);
+
+        $this->actingAs($this->accounts['staff'])
+            ->getJson("/api/tasks/{$task->id}/preview")
+            ->assertOk()
+            ->assertJsonPath('data.start_date', null)
+            ->assertJsonPath('data.deadline', null)
+            ->assertJsonPath('data.pics', [])
+            ->assertJsonPath('data.is_overdue', false);
+    }
+
+    public function test_the_preview_shows_every_workflow_status(): void
+    {
+        foreach (TaskStatus::cases() as $status) {
+            $task = $this->task(['status' => $status]);
+
+            $this->actingAs($this->accounts['staff'])
+                ->getJson("/api/tasks/{$task->id}/preview")
+                ->assertOk()
+                ->assertJsonPath('data.status', $status->value);
+        }
+    }
+
+    public function test_opening_the_preview_changes_nothing(): void
+    {
+        $task = $this->task(['status' => TaskStatus::InProgress, 'deadline' => '2026-11-20'], ['staff']);
+        $before = $task->fresh()->getAttributes();
+        $this->travel(1)->hour();
+
+        foreach (['admin', 'staff', 'freelance'] as $role) {
+            $this->actingAs($this->accounts[$role])->getJson("/api/tasks/{$task->id}/preview")->assertOk();
+        }
+
+        $this->assertSame($before, $task->fresh()->getAttributes());
+        $this->assertSame(0, $task->activities()->count());
     }
 
     public function test_an_inactive_account_cannot_preview_and_an_unknown_task_is_not_found(): void
