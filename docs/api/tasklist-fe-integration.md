@@ -91,9 +91,9 @@ lintas divisi, dan tampilan read-only untuk tugas di luar kewenangan. Calendar d
 | Task Detail (pics, assignments, history, evidence, reviews, version) | ✅ Siap | |
 | Buat tugas dengan banyak PIC | ✅ Siap | Supervisor untuk divisinya |
 | Atur PIC dan meneruskan (lintas divisi) | ✅ Siap | |
-| Workflow status bersama oleh semua PIC | ✅ Siap | |
+| Workflow status bersama oleh semua PIC | ✅ Siap (diperbarui TASK-17) | PIC dan pengelola memindahkan Back Log sampai Ready Review; hanya pengelola dengan `task.review` ke On Review dan Done (termasuk Done tanpa review). Ikuti `next_statuses` untuk drag-and-drop |
 | Evidence (kirim, unduh) | ✅ Siap | Hapus evidence (TASK-18): tabel siap, endpoint belum ada |
-| Review Approve / Request Revision, self-approval Manajer/Supervisor | ✅ Siap | Ikuti `can_review` |
+| Review Approve / Request Revision, self-approval Manajer/Supervisor | ✅ Siap (diperbarui TASK-17) | Ikuti `can_review`; Request Revision kini mengembalikan tugas ke Back Log, bukan On Process |
 | Monitoring | ✅ Siap | Kunci metrik status berganti nama |
 | Calendar & Timeline | ✅ Siap | Tidak perlu perubahan FE; tombol tugas terkait di pop-up agenda tidak muncul lagi |
 | Komentar & balasan | ⏳ Tabel siap | Endpoint dibuat di TASK-16 |

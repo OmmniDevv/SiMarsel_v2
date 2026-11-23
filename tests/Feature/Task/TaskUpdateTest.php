@@ -129,13 +129,13 @@ class TaskUpdateTest extends TestCase
         $this->actingAs($this->staff)
             ->patchJson($this->url(), $this->payload(['status' => 'done']))
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['status' => 'Status tidak dapat diubah dari To Do ke Done. Tugas ini wajib melalui QA sebelum Done.']);
+            ->assertJsonValidationErrors(['status' => 'Status tidak dapat diubah dari To Do ke Done. Tugas ini wajib melalui Ready Review dan On Review sebelum Done.']);
 
         $this->task->forceFill(['status' => TaskStatus::InProgress])->save();
 
         $this->patchJson($this->url(), $this->payload(['status' => 'done']))
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['status' => 'Status tidak dapat diubah dari On Process ke Done. Tugas ini wajib melalui QA sebelum Done.']);
+            ->assertJsonValidationErrors(['status' => 'Status tidak dapat diubah dari On Process ke Done. Tugas ini wajib melalui Ready Review dan On Review sebelum Done.']);
     }
 
     public function test_staff_only_moves_their_work_forward(): void
@@ -157,14 +157,13 @@ class TaskUpdateTest extends TestCase
         }
     }
 
-    public function test_staff_cannot_update_a_task_waiting_for_or_in_qa_or_done(): void
+    public function test_staff_cannot_update_a_task_waiting_for_or_in_review_or_done(): void
     {
         $cases = [
-            [TaskStatus::Backlog, 'todo'],
             [TaskStatus::ReadyReview, 'on_review'],
             [TaskStatus::ReadyReview, 'in_progress'],
             [TaskStatus::OnReview, 'done'],
-            [TaskStatus::OnReview, 'in_progress'],
+            [TaskStatus::OnReview, 'backlog'],
             [TaskStatus::Done, 'in_progress'],
         ];
 
@@ -181,7 +180,17 @@ class TaskUpdateTest extends TestCase
         $this->assertDatabaseCount('task_activities', 0);
     }
 
-    public function test_qa_decisions_stay_with_admin_or_manager(): void
+    public function test_staff_moves_a_backlog_task_to_todo(): void
+    {
+        $this->task->forceFill(['status' => TaskStatus::Backlog])->save();
+
+        $this->actingAs($this->staff)
+            ->patchJson($this->url(), $this->payload(['status' => 'todo']))
+            ->assertOk()
+            ->assertJsonPath('data.status', 'todo');
+    }
+
+    public function test_review_decisions_stay_with_admin_or_manager(): void
     {
         $this->task->forceFill(['status' => TaskStatus::ReadyReview])->save();
 
@@ -192,14 +201,18 @@ class TaskUpdateTest extends TestCase
         $this->actingAs($this->admin)
             ->patchJson($this->url(), ['version' => 2, 'status' => 'done'])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['status' => 'Keputusan QA diberikan melalui review tugas (Approve atau Request Revision).']);
+            ->assertJsonValidationErrors(['status' => 'Keputusan review diberikan melalui Approve atau Request Revision.']);
     }
 
-    public function test_staff_can_finish_a_task_without_qa(): void
+    public function test_only_a_reviewer_finishes_a_task_without_review(): void
     {
         $task = $this->task(['category_id' => $this->unreviewed->id, 'requires_review' => false, 'status' => TaskStatus::InProgress]);
 
         $this->actingAs($this->staff)
+            ->patchJson("/api/tasks/{$task->id}", ['version' => 1, 'status' => 'done'])
+            ->assertForbidden();
+
+        $this->actingAs($this->manager)
             ->patchJson("/api/tasks/{$task->id}", ['version' => 1, 'status' => 'done'])
             ->assertOk()
             ->assertJsonPath('data.status', 'done')
@@ -429,17 +442,19 @@ class TaskUpdateTest extends TestCase
             ->assertJsonPath('data.status', 'todo');
     }
 
-    public function test_admin_and_manager_cannot_make_the_pic_steps(): void
+    public function test_admin_and_manager_may_make_the_pic_steps(): void
     {
         foreach ([$this->admin, $this->manager] as $account) {
+            $task = $this->task(['status' => TaskStatus::Todo]);
+
             $this->actingAs($account)
-                ->patchJson($this->url(), $this->payload(['status' => 'in_progress']))
-                ->assertUnprocessable()
-                ->assertJsonValidationErrors(['status' => 'Hanya PIC tugas yang dapat mengubah status dari To Do ke On Process.']);
+                ->patchJson("/api/tasks/{$task->id}", ['version' => 1, 'status' => 'in_progress'])
+                ->assertOk()
+                ->assertJsonPath('data.status', 'in_progress');
         }
     }
 
-    public function test_task_that_requires_qa_cannot_skip_qa(): void
+    public function test_task_that_requires_review_cannot_skip_review(): void
     {
         $this->task->forceFill(['status' => TaskStatus::InProgress])->save();
 
@@ -447,18 +462,18 @@ class TaskUpdateTest extends TestCase
             ->patchJson($this->url(), $this->payload(['status' => 'done']))
             ->assertUnprocessable()
             ->assertJsonValidationErrors([
-                'status' => 'Status tidak dapat diubah dari On Process ke Done. Tugas ini wajib melalui QA sebelum Done.',
+                'status' => 'Status tidak dapat diubah dari On Process ke Done. Tugas ini wajib melalui Ready Review dan On Review sebelum Done.',
             ]);
     }
 
-    public function test_qa_decision_cannot_be_made_through_the_edit_form(): void
+    public function test_review_decision_cannot_be_made_through_the_edit_form(): void
     {
         $task = $this->task(['status' => TaskStatus::OnReview]);
 
         $this->actingAs($this->manager)
-            ->patchJson("/api/tasks/{$task->id}", ['version' => 1, 'status' => 'in_progress'])
+            ->patchJson("/api/tasks/{$task->id}", ['version' => 1, 'status' => 'backlog'])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['status' => 'Keputusan QA diberikan melalui review tugas (Approve atau Request Revision).']);
+            ->assertJsonValidationErrors(['status' => 'Keputusan review diberikan melalui Approve atau Request Revision.']);
 
         $this->assertSame(TaskStatus::OnReview, $task->fresh()->status);
     }
@@ -486,7 +501,7 @@ class TaskUpdateTest extends TestCase
         $this->actingAs($this->admin)
             ->patchJson($this->url(), $this->payload(['requires_review' => false]))
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['requires_review' => 'Kategori tugas ini mewajibkan QA.']);
+            ->assertJsonValidationErrors(['requires_review' => 'Kategori tugas ini mewajibkan review.']);
     }
 
     public function test_choosing_a_category_that_requires_qa_turns_qa_on(): void
@@ -520,7 +535,7 @@ class TaskUpdateTest extends TestCase
         $this->actingAs($this->admin)
             ->patchJson("/api/tasks/{$task->id}", ['version' => 1, 'requires_review' => false])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['requires_review' => 'Kewajiban QA tidak dapat diubah setelah tugas masuk tahap QA.']);
+            ->assertJsonValidationErrors(['requires_review' => 'Kewajiban review tidak dapat diubah setelah tugas masuk tahap review.']);
     }
 
     // Histori

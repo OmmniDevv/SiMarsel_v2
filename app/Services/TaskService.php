@@ -71,7 +71,7 @@ class TaskService
 
     /**
      * Create a task from validated input. The creator is the logged-in account, the status starts at
-     * Back Log unless To Do is chosen, and QA is required whenever the category requires it. Each chosen PIC gets an
+     * Back Log unless To Do is chosen, and review is required whenever the category requires it. Each chosen PIC gets an
      * active assignment made by the creator.
      *
      * @param  array<string, mixed>  $data
@@ -138,7 +138,7 @@ class TaskService
      * @param  array<string, mixed>  $data  Validated input including version.
      *
      * @throws TaskVersionConflictException When the task was saved by someone else after the editor loaded it.
-     * @throws ValidationException When a change breaks the field, workflow, assignment, or QA rules.
+     * @throws ValidationException When a change breaks the field, workflow, assignment, or review rules.
      */
     public function update(Account $editor, Task $task, array $data): Task
     {
@@ -153,11 +153,11 @@ class TaskService
             }
 
             $lockedFields = $locked->lockedFieldsFor($editor);
-            // The move is judged on the task as it was loaded, before the edit changes its QA or PIC.
+            // The move is judged on the task as it was loaded, before the edit changes its review or PIC.
             $statusDenial = $this->statusDenial($editor, $locked, $data['status'] ?? null);
 
             $locked->fill($data);
-            // Report a locked field before the category's QA rule, which may also reject it.
+            // Report a locked field before the category's review rule, which may also reject it.
             $this->rejectLockedChanges($locked, $lockedFields);
             $this->applyCategoryReview($locked, $data);
             $this->applyCategoryEvidence($locked);
@@ -232,10 +232,10 @@ class TaskService
     }
 
     /**
-     * Move the task to another status following the transition matrix: the PIC starts the work and hands it
-     * to QA (or finishes it when QA is not required), and Admin or the division's Manager moves Back Log to
-     * To Do and starts the review (Ready Review → On Review). The decision that ends it is made through
-     * TaskReviewService. The change is appended to the history.
+     * Move the task to another status following the transition matrix: an active PIC, Admin, a Manager, or the
+     * division's Supervisor moves it from Back Log up to Ready Review; only those reviewers start the review
+     * (Ready Review → On Review) or finish a task that does not require review (On Process → Done). The decision
+     * that ends a review is made through TaskReviewService. The change is appended to the history.
      *
      * @param  array{version: int|string, status: string}  $data
      *
@@ -410,7 +410,7 @@ class TaskService
 
     /**
      * Options for the Create Task form: the divisions the account may create tasks for, the accounts it may assign as
-     * PIC, task categories with their QA configuration, platforms, and enums.
+     * PIC, task categories with their review configuration, platforms, and enums.
      *
      * @return array<string, mixed>
      */
@@ -522,7 +522,7 @@ class TaskService
     }
 
     /**
-     * A category that requires QA always does; otherwise QA is required only when the creator asks for it.
+     * A category that requires review always does; otherwise review is required only when the creator asks for it.
      *
      * @param  array<string, mixed>  $data
      */
@@ -560,7 +560,7 @@ class TaskService
     }
 
     /**
-     * A category that requires QA keeps QA required: choosing such a category turns it on, and it cannot be
+     * A category that requires review keeps review required: choosing such a category turns it on, and it cannot be
      * turned off while the task has one.
      *
      * @param  array<string, mixed>  $data
@@ -574,7 +574,7 @@ class TaskService
         }
 
         if (array_key_exists('requires_review', $data) && ! $data['requires_review']) {
-            throw ValidationException::withMessages(['requires_review' => 'Kategori tugas ini mewajibkan QA.']);
+            throw ValidationException::withMessages(['requires_review' => 'Kategori tugas ini mewajibkan review.']);
         }
 
         if ($task->isDirty('category_id')) {

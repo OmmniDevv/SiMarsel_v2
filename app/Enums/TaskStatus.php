@@ -22,9 +22,9 @@ enum TaskStatus: string
     }
 
     /**
-     * Statuses this one may move to. A task that requires QA reaches Done only through Ready Review and On Review;
-     * one that does not goes from On Process straight to Done. On Review goes back to On Process for revision,
-     * and a Done task stays done.
+     * Statuses this one may move to. A task that requires review reaches Done only through Ready Review and On Review;
+     * one that does not goes from On Process straight to Done. On Review goes back to Back Log for revision, and a
+     * Done task stays done.
      *
      * @return array<int, self>
      */
@@ -35,7 +35,7 @@ enum TaskStatus: string
             self::Todo => [self::InProgress],
             self::InProgress => [$requiresReview ? self::ReadyReview : self::Done],
             self::ReadyReview => [self::OnReview],
-            self::OnReview => [self::InProgress, self::Done],
+            self::OnReview => [self::Backlog, self::Done],
             self::Done => [],
         };
     }
@@ -46,16 +46,16 @@ enum TaskStatus: string
     }
 
     /**
-     * Whether moving out of this status is the PIC's step: starting the work, then handing it to QA or
-     * finishing it. Every other move is made by Admin or the Manager of the task's division.
+     * Whether moving into this status is a reviewer's step: starting the review (On Review) or finishing the task
+     * (Done). The PIC's steps end at Ready Review, so a PIC never makes these moves.
      */
-    public function movedByPic(): bool
+    public function reachedByReviewer(): bool
     {
-        return $this === self::Todo || $this === self::InProgress;
+        return $this === self::OnReview || $this === self::Done;
     }
 
     /**
-     * Whether leaving this status is a QA decision, which is made through a review (Approve or Request
+     * Whether leaving this status is a review decision, which is made through a review (Approve or Request
      * Revision) so it is recorded with its reason, not through a plain status change.
      */
     public function decidedByReview(): bool
@@ -63,7 +63,7 @@ enum TaskStatus: string
         return $this === self::OnReview;
     }
 
-    public function inQa(): bool
+    public function inReview(): bool
     {
         return $this === self::ReadyReview || $this === self::OnReview;
     }

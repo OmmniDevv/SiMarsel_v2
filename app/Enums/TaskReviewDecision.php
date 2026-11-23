@@ -10,13 +10,14 @@ enum TaskReviewDecision: string
     case Revision = 'revision';
 
     /**
-     * Approval finishes the task; a revision sends it back to its PIC.
+     * Approval finishes the task; a revision sends it back to Back Log, from where its PICs work through the
+     * workflow again until Ready Review.
      */
     public function nextStatus(): TaskStatus
     {
         return match ($this) {
             self::Approve => TaskStatus::Done,
-            self::Revision => TaskStatus::InProgress,
+            self::Revision => TaskStatus::Backlog,
         };
     }
 

@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * One QA decision on a task. Reviews are never edited once recorded. Their cycle (the first review is 1, each
+ * One review decision on a task. Reviews are never edited once recorded. Their cycle (the first review is 1, each
  * resubmission after a revision the next number) is not stored but counted with withCycle().
  */
 #[Fillable(['task_id', 'reviewer_id', 'decision', 'note'])]

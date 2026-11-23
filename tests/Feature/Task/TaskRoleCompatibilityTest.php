@@ -241,12 +241,14 @@ class TaskRoleCompatibilityTest extends TestCase
         $this->move($task, 'manager', 'on_review')->assertOk();
         $this->actingAs($this->accounts['manager'])->postJson("/api/tasks/{$task->id}/reviews", ['decision' => 'revision', 'note' => 'Perbaiki.', 'version' => $task->fresh()->version])->assertOk();
         $this->actingAs($this->accounts['manager'])->patchJson("/api/tasks/{$task->id}/assignment", ['version' => $task->fresh()->version, 'pic_ids' => [$this->accounts['staff']->id, $this->accounts['freelance']->id]])->assertOk();
+        $this->move($task, 'freelance', 'todo')->assertOk();
+        $this->move($task, 'staff', 'in_progress')->assertOk();
         $this->move($task, 'freelance', 'ready_review')->assertOk();
         $this->move($task, 'manager', 'on_review')->assertOk();
         $this->actingAs($this->accounts['manager'])->postJson("/api/tasks/{$task->id}/reviews", ['decision' => 'approve', 'version' => $task->fresh()->version])->assertOk();
 
         $this->assertSame([
-            TaskActivity::APPROVED, TaskActivity::STATUS_CHANGED, TaskActivity::RESUBMITTED, TaskActivity::ASSIGNED,
+            TaskActivity::APPROVED, TaskActivity::STATUS_CHANGED, TaskActivity::RESUBMITTED, TaskActivity::STATUS_CHANGED, TaskActivity::STATUS_CHANGED, TaskActivity::ASSIGNED,
             TaskActivity::REVISION_REQUESTED, TaskActivity::STATUS_CHANGED, TaskActivity::STATUS_CHANGED, TaskActivity::STATUS_CHANGED,
         ], $task->activities()->pluck('action')->all());
         $this->assertSame(['approve', 'revision'], $task->reviews()->get()->map(fn ($review) => $review->decision->value)->all());
