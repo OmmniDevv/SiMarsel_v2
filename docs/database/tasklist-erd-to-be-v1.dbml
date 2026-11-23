@@ -5,7 +5,7 @@
 // Tabel baru/field tambahan bersifat rancangan hingga diaudit terhadap database dan migration existing.
 //
 // Salinan ERD acuan PR #115 (17 Nov 2026). Kecocokan skema fisik diuji otomatis di
-// tests/Feature/Database/TasklistErdConformanceTest.php; hasilnya ada di tasklist-migration-validation-report.md.
+// tests/Feature/Database/TasklistErdConformanceTest.php.
 
 Project SimMarsel_Tasklist_ToBe {
   database_type: 'MySQL'
@@ -104,7 +104,7 @@ Table tasks {
     start_date
     deleted_at
   }
-  Note: 'tasks.pic_id dimigrasikan ke task_assignments, lalu dihentikan sebagai source of truth setelah seluruh pembaca/penulis kompatibel. tasks.is_shared tidak diperlukan untuk global read. Catatan kerja per PIC perlu dipetakan dari schema existing atau dirancang tersendiri sebelum implementasi TASK-13.'
+  Note: 'Penugasan PIC disimpan di task_assignments. tasks.is_shared tidak diperlukan untuk global read. Catatan kerja per PIC perlu dipetakan dari schema existing atau dirancang tersendiri sebelum implementasi TASK-13.'
 }
 
 // Hanya apabila perlu divisi kolaborator independen dari assignment PIC.
