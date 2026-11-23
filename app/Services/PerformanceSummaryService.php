@@ -10,7 +10,10 @@ class PerformanceSummaryService
 {
     use ComparesWithPreviousValue;
 
-    public function __construct(private PerformanceRepository $performanceRepository) {}
+    public function __construct(
+        private PerformanceRepository $performanceRepository,
+        private SalesSummaryService $salesSummaryService,
+    ) {}
 
     /**
      * Build the KPI summary for the filter and compare it with the filter's previous period.
@@ -42,6 +45,7 @@ class PerformanceSummaryService
                         ...$this->changeFromPrevious($changeCurrent[$key], $changePrevious[$key]),
                     ])
                 ->all(),
+            'sales_summary' => $filter->period === null ? null : $this->salesSummaryService->summarize($filter->period),
         ];
     }
 
