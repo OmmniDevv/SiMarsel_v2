@@ -12,6 +12,7 @@ use App\Models\Task;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
@@ -285,6 +286,55 @@ class TaskCalendarTest extends TestCase
             ->assertExactJson(['data' => ['events' => [], 'deadlines' => []]]);
     }
 
+    // Preview tugas (TASK-15)
+
+    public function test_a_deadline_refers_to_its_task_while_an_agenda_refers_to_none(): void
+    {
+        $this->event(['is_shared' => true, 'start_at' => '2026-10-10 09:00:00']);
+
+        $data = $this->calendar($this->staff)->assertOk()->json('data');
+
+        $this->assertSame(
+            [$this->staffTask->id, $this->otherStaffTask->id, $this->financeTask->id],
+            array_column($data['deadlines'], 'task_id'),
+        );
+        $this->assertSame(array_column($data['deadlines'], 'id'), array_column($data['deadlines'], 'task_id'));
+        $this->assertSame([null], array_column($data['events'], 'task_id'));
+    }
+
+    public function test_tasks_on_one_date_stay_one_item_each_with_every_active_pic(): void
+    {
+        $multiPic = $this->multiPicTask('2026-10-25', $this->staff, $this->otherStaff, $this->manager);
+        $sameDate = $this->multiPicTask('2026-10-25', $this->staff);
+        $multiPic->activeAssignments()->where('account_id', $this->manager->id)->update(['unassigned_at' => now(), 'unassigned_by' => $this->admin->id]);
+
+        $items = collect($this->calendar($this->staff)->json('data.deadlines'))->where('deadline', '2026-10-25')->values();
+
+        $this->assertSame([$multiPic->id, $sameDate->id], $items->pluck('task_id')->all());
+        $this->assertSame(['Mkt Other', 'Mkt Staff'], array_column($items[0]['pics'], 'fullname'));
+    }
+
+    public function test_the_number_of_queries_does_not_grow_with_the_deadlines(): void
+    {
+        $queries = function (): int {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->calendar(Account::findOrFail($this->staff->id))->assertOk();
+            DB::disableQueryLog();
+
+            return count(DB::getQueryLog());
+        };
+
+        $before = $queries();
+
+        foreach (range(1, 10) as $day) {
+            $this->multiPicTask(sprintf('2026-10-%02d', $day), $this->staff, $this->otherStaff, $this->manager);
+        }
+
+        $this->assertCount(13, $this->calendar($this->staff)->json('data.deadlines'));
+        $this->assertSame($before, $queries());
+    }
+
     // Validasi
 
     public function test_the_month_is_required_and_validated(): void
@@ -302,6 +352,15 @@ class TaskCalendarTest extends TestCase
         $this->actingAs($this->admin)->getJson(self::MONTH.'&division=XXX')
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['division' => 'Divisi tidak ditemukan.']);
+    }
+
+    private function multiPicTask(string $deadline, Account ...$pics): Task
+    {
+        return Task::factory()->withPics(...$pics)->create([
+            'division_id' => $this->marketing->id,
+            'pic_id' => null,
+            'deadline' => $deadline,
+        ]);
     }
 
     private function calendar(Account $account): TestResponse
