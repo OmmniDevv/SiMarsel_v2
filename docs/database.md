@@ -22,6 +22,7 @@ php artisan migrate --seed
 | `transactions` | Transaksi pembelian per platform (`platform_id` + `markaz_transaction_id` unik) |
 | `downloaders` | Jumlah downloader per platform per tanggal |
 | `sync_logs` | Riwayat sinkronisasi data per platform |
+| `dashboard_snapshots` | Snapshot nilai Dashboard pada jam potong per platform, dataset, dan periode, beserta penanda kelengkapan |
 | `markaz_api_tokens` | Token API Markaz (hanya 1 token aktif) |
 | `funnels` | Master funnel kode promo (`name` unik) |
 | `promo_sources` | Master sumber kode promo (`name` unik) |
@@ -42,6 +43,7 @@ php artisan migrate --seed
 | `transactions.platform_id` → `platforms.id` | Ya | **Ditolak** selama platform masih punya transaksi |
 | `downloaders.platform_id` → `platforms.id` | Ya | **Ditolak** selama platform masih punya data downloader |
 | `sync_logs.platform_id` → `platforms.id` | Ya | **Ditolak** selama platform masih punya log sinkronisasi |
+| `dashboard_snapshots.platform_id` → `platforms.id` | Ya | **Ditolak** selama platform masih punya snapshot |
 | `promo_codes.platform_id`, `promo_code_versions.platform_id`, `transaction_promo_codes.platform_id_snapshot` → `platforms.id` | Ya | **Ditolak** selama platform masih dipakai |
 | `promo_codes.funnel_id` → `funnels.id`, `promo_codes.source_id` → `promo_sources.id` | Tidak | **Ditolak** selama funnel/source masih dipakai kode promo |
 | `promo_code_versions.promo_code_id` → `promo_codes.id` | Ya | Riwayat versi **ikut terhapus** |
@@ -96,6 +98,32 @@ Skema `transactions` mengikuti [kontrak tanggal transaksi](transaction-dates-cov
 - Index: `(platform_id, markaz_transaction_id)` unik, `trx_id`, `(platform_id, markaz_ref_id)`, `(platform_id, markaz_created_at)` untuk dasar tanggal dibuat, dan `(platform_id, paid_date)` untuk dasar tanggal bayar.
 - PK `transactions.id` dan FK `transaction_promo_codes.transaction_id` tidak berubah.
 - Rollback migration ditolak selama ada transaksi tanpa `paid_date`, tanpa `markaz_user_id`, atau dengan `trx_id` yang sama di beberapa baris, agar data tersebut tidak hilang.
+
+## Snapshot Dashboard (FIX-15-BE-03)
+
+`dashboard_snapshots` menyimpan nilai satu platform dan dataset pada jam potong (`cutoff_at`) untuk pembanding jam setara. DBML-nya, termasuk struktur `payload`, ada di [database/dashboard_snapshots.dbml](database/dashboard_snapshots.dbml). Model: `App\Models\DashboardSnapshot`.
+
+| Kolom | Null | Isi |
+|---|---|---|
+| `platform_id` | Tidak | Platform pemilik snapshot |
+| `dataset` | Tidak | `transactions` atau `downloaders` (`App\Enums\DashboardDataset`) |
+| `date_from`, `date_to` | Tidak | Periode rekap (WIB, inklusif) |
+| `cutoff_at` | Tidak | Jam rekap (WIB): kejadian sebelum jam ini |
+| `is_complete` | Tidak (default `false`) | Data lengkap sampai `cutoff_at` saat dicatat |
+| `payload` | Tidak | Salinan nilai pada `cutoff_at` |
+| `recorded_at` | Tidak | Waktu catatan disimpan, bukan jam rekap |
+
+- Unik per `(platform_id, dataset, date_from, date_to, cutoff_at)`. Dua jam potong pada platform dan tanggal yang sama (misalnya 13.00 dan 14.00 WIB) tersimpan sebagai dua baris.
+- `downloaders.total` tetap satu total harian terbaru per `(platform_id, date)` dan dibaca terpisah dari snapshot. Snapshot tidak menggantikan dan tidak mengubah tabel itu.
+- `payload` transaksi memuat metrik dasar tanggal dibuat dan dasar tanggal bayar, termasuk pembayaran dalam periode dari transaksi yang dibuat sebelum `date_from`. `payload` Downloader memuat total kumulatif per tanggal yang tercakup.
+- `payload` adalah salinan saat dicatat: perubahan status atau tanggal bayar transaksi setelahnya tidak mengubah isinya.
+- Batas data lengkap gabungan (`DashboardSnapshot::latestCompleteCutoff()`) untuk dataset dan periode yang sama adalah `cutoff_at` **terakhir yang punya snapshot `is_complete = true` di semua platform terpilih**, sehingga angka pembanding pada jam itu selalu bisa dibaca di seluruh platform.
+  - A dan B sama-sama lengkap pada 13.00 dan 14.00 → 14.00.
+  - 14.00 hanya lengkap di A, sedangkan 13.00 lengkap di A dan B → 13.00. Jika 13.00 juga belum lengkap di semua platform, pemeriksaan mundur ke jam sebelumnya.
+  - A hanya lengkap pada 14.00 dan B hanya pada 13.00 → `null`.
+- Hasil `null` berarti pembanding belum tersedia. Snapshot `is_complete = false` tetap tersimpan, tetapi tidak pernah dipakai sebagai batas lengkap.
+- `sync_logs.finished_at` hanya jam job selesai, bukan bukti kelengkapan.
+- `DashboardSnapshot::toComparisonRow()` mengeluarkan baris yang dibaca `ComparisonSnapshotService::read()`. Penerbitan snapshot oleh job dan rumus agregasi di luar FIX-15.
 
 ## Data awal (seeder)
 
