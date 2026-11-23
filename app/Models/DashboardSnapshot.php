@@ -83,9 +83,10 @@ class DashboardSnapshot extends Model
     }
 
     /**
-     * The shared complete-data boundary of the selected platforms for the period: the earliest of
-     * each platform's latest complete cutoff_at. Incomplete snapshots never count; null while any
-     * selected platform has no complete snapshot yet.
+     * The latest cutoff_at at which every selected platform has a complete snapshot for the period,
+     * so a comparison at that hour can be read on all of them. Earlier hours are checked when a later
+     * one is complete on only some platforms. Incomplete snapshots never count; null when no hour is
+     * complete on every selected platform, meaning the comparison is not available yet.
      *
      * @param  list<int>  $platformIds
      */
@@ -101,22 +102,17 @@ class DashboardSnapshot extends Model
             return null;
         }
 
-        $latestPerPlatform = static::query()
+        $cutoff = static::query()
             ->forPeriod($dataset, $dateFrom, $dateTo)
             ->complete()
             ->whereIn('platform_id', $platformIds)
-            ->groupBy('platform_id')
-            ->selectRaw('platform_id, MAX(cutoff_at) AS latest_cutoff_at')
-            ->toBase()
-            ->get();
+            ->groupBy('cutoff_at')
+            ->havingRaw('COUNT(DISTINCT platform_id) = ?', [count($platformIds)])
+            ->orderByDesc('cutoff_at')
+            ->limit(1)
+            ->value('cutoff_at');
 
-        if ($latestPerPlatform->count() !== count($platformIds)) {
-            return null;
-        }
-
-        return $latestPerPlatform
-            ->map(fn (object $row) => CarbonImmutable::parse($row->latest_cutoff_at))
-            ->reduce(fn (?CarbonImmutable $earliest, CarbonImmutable $cutoff) => $earliest === null || $cutoff->lt($earliest) ? $cutoff : $earliest);
+        return $cutoff === null ? null : CarbonImmutable::parse($cutoff);
     }
 
     /**

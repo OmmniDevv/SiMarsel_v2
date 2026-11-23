@@ -117,8 +117,11 @@ Skema `transactions` mengikuti [kontrak tanggal transaksi](transaction-dates-cov
 - `downloaders.total` tetap satu total harian terbaru per `(platform_id, date)` dan dibaca terpisah dari snapshot. Snapshot tidak menggantikan dan tidak mengubah tabel itu.
 - `payload` transaksi memuat metrik dasar tanggal dibuat dan dasar tanggal bayar, termasuk pembayaran dalam periode dari transaksi yang dibuat sebelum `date_from`. `payload` Downloader memuat total kumulatif per tanggal yang tercakup.
 - `payload` adalah salinan saat dicatat: perubahan status atau tanggal bayar transaksi setelahnya tidak mengubah isinya.
-- Batas data lengkap gabungan (`DashboardSnapshot::latestCompleteCutoff()`) untuk dataset dan periode yang sama: ambil `cutoff_at` terakhir dengan `is_complete = true` di setiap platform terpilih, lalu pakai jam **paling awal**. Contoh: A lengkap sampai 14.00 dan B sampai 13.00 menghasilkan 13.00. Jika A dan B sama-sama lengkap pada 13.00 dan 14.00, hasilnya 14.00.
-- Hasilnya `null` jika salah satu platform terpilih belum punya snapshot lengkap. Snapshot `is_complete = false` tetap tersimpan, tetapi tidak pernah dipakai sebagai batas lengkap.
+- Batas data lengkap gabungan (`DashboardSnapshot::latestCompleteCutoff()`) untuk dataset dan periode yang sama adalah `cutoff_at` **terakhir yang punya snapshot `is_complete = true` di semua platform terpilih**, sehingga angka pembanding pada jam itu selalu bisa dibaca di seluruh platform.
+  - A dan B sama-sama lengkap pada 13.00 dan 14.00 → 14.00.
+  - 14.00 hanya lengkap di A, sedangkan 13.00 lengkap di A dan B → 13.00. Jika 13.00 juga belum lengkap di semua platform, pemeriksaan mundur ke jam sebelumnya.
+  - A hanya lengkap pada 14.00 dan B hanya pada 13.00 → `null`.
+- Hasil `null` berarti pembanding belum tersedia. Snapshot `is_complete = false` tetap tersimpan, tetapi tidak pernah dipakai sebagai batas lengkap.
 - `sync_logs.finished_at` hanya jam job selesai, bukan bukti kelengkapan.
 - `DashboardSnapshot::toComparisonRow()` mengeluarkan baris yang dibaca `ComparisonSnapshotService::read()`. Penerbitan snapshot oleh job dan rumus agregasi di luar FIX-15.
 

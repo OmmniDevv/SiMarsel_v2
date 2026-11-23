@@ -12,6 +12,7 @@ use App\Models\Transaction;
 use App\Services\ComparisonSnapshotService;
 use App\Services\TransactionAggregationService;
 use App\Support\TransactionAggregation\AggregationFilter;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
@@ -26,6 +27,8 @@ class DashboardSnapshotSchemaTest extends TestCase
     use RefreshDatabase;
 
     private const DAY = '2026-11-15';
+
+    private const CUTOFF_12 = '2026-11-15 12:00:00';
 
     private const CUTOFF_13 = '2026-11-15 13:00:00';
 
@@ -124,47 +127,63 @@ class DashboardSnapshotSchemaTest extends TestCase
         $this->assertTrue($stored->is_complete);
     }
 
-    public function test_the_shared_boundary_is_the_earliest_latest_complete_cutoff_of_the_selected_platforms(): void
+    public function test_an_hour_complete_on_only_some_platforms_falls_back_to_the_latest_shared_complete_hour(): void
     {
-        [$a, $b] = Platform::factory()->count(2)->create();
+        [$a, $b, $c] = Platform::factory()->count(3)->create();
+        $this->downloaderSnapshot($a, self::CUTOFF_12, 50);
+        $this->downloaderSnapshot($a, self::CUTOFF_13, 70);
         $this->downloaderSnapshot($a, self::CUTOFF_14, 85);
+        $this->downloaderSnapshot($b, self::CUTOFF_12, 20);
         $this->downloaderSnapshot($b, self::CUTOFF_13, 30);
+        $this->downloaderSnapshot($b, self::CUTOFF_14, 40, isComplete: false);
+        $this->downloaderSnapshot($c, self::CUTOFF_12, 5);
+        $this->downloaderSnapshot($c, self::CUTOFF_13, 8, isComplete: false);
 
         $this->assertSame('14:00', $this->completeCutoff([$a->id]));
-        $this->assertSame('13:00', $this->completeCutoff([$b->id]));
+
+        // 14.00 is complete on A only, so A + B reads 13.00 where both are complete.
         $this->assertSame('13:00', $this->completeCutoff([$a->id, $b->id]));
-        $this->assertSame('13:00', $this->completeCutoff([$b->id, $a->id, $a->id]));
+        $this->assertCombinedTotal(100, [$a->id, $b->id], self::CUTOFF_13);
+        $this->assertUnavailable([$a->id, $b->id], self::CUTOFF_14);
+
+        // C is complete only at 12.00, so A + B + C goes back one more hour.
+        $this->assertSame('12:00', $this->completeCutoff([$c->id, $a->id, $b->id, $a->id]));
+        $this->assertCombinedTotal(75, [$a->id, $b->id, $c->id], self::CUTOFF_12);
+        $this->assertUnavailable([$a->id, $b->id, $c->id], self::CUTOFF_13);
     }
 
-    public function test_the_latest_complete_cutoff_is_picked_when_every_platform_has_several_cutoffs(): void
+    public function test_the_latest_hour_is_picked_when_every_platform_is_complete_on_several_hours(): void
     {
         [$a, $b] = Platform::factory()->count(2)->create();
 
         // Inserted out of order so the result never depends on row or group order.
-        foreach ([[$b, self::CUTOFF_14], [$a, self::CUTOFF_13], [$b, self::CUTOFF_13], [$a, self::CUTOFF_14]] as [$platform, $cutoffAt]) {
-            $this->downloaderSnapshot($platform, $cutoffAt, 50);
+        foreach ([[$b, self::CUTOFF_14, 40], [$a, self::CUTOFF_13, 70], [$b, self::CUTOFF_13, 30], [$a, self::CUTOFF_14, 85], [$a, self::CUTOFF_12, 50]] as [$platform, $cutoffAt, $total]) {
+            $this->downloaderSnapshot($platform, $cutoffAt, $total);
         }
-        $this->downloaderSnapshot($a, '2026-11-15 12:00:00', 40);
 
-        $this->assertSame('14:00', $this->completeCutoff([$a->id]));
         $this->assertSame('14:00', $this->completeCutoff([$a->id, $b->id]));
+        $this->assertCombinedTotal(125, [$a->id, $b->id], self::CUTOFF_14);
     }
 
-    public function test_incomplete_snapshots_and_platforms_without_a_complete_snapshot_never_set_the_boundary(): void
+    public function test_the_comparison_is_unavailable_when_no_hour_is_complete_on_every_selected_platform(): void
     {
         [$a, $b, $partialOnly, $missing] = Platform::factory()->count(4)->create();
-        $this->downloaderSnapshot($a, self::CUTOFF_13, 70);
         $this->downloaderSnapshot($a, self::CUTOFF_14, 85);
         $this->downloaderSnapshot($b, self::CUTOFF_13, 30);
-        $this->downloaderSnapshot($b, '2026-11-15 15:00:00', 40, isComplete: false);
         $this->downloaderSnapshot($partialOnly, self::CUTOFF_14, 12, isComplete: false);
 
-        $this->assertSame('13:00', $this->completeCutoff([$b->id]));
-        $this->assertSame('13:00', $this->completeCutoff([$a->id, $b->id]));
+        // Each platform is complete at its own hour, but no hour is complete on both.
+        $this->assertNull($this->completeCutoff([$a->id, $b->id]));
+        $this->assertUnavailable([$a->id, $b->id], self::CUTOFF_13);
+        $this->assertUnavailable([$a->id, $b->id], self::CUTOFF_14);
+
         $this->assertNull($this->completeCutoff([$a->id, $partialOnly->id]));
+        $this->assertUnavailable([$a->id, $partialOnly->id], self::CUTOFF_14);
         $this->assertNull($this->completeCutoff([$a->id, $missing->id]));
+        $this->assertUnavailable([$a->id, $missing->id], self::CUTOFF_14);
+
         $this->assertNull($this->completeCutoff([]));
-        $this->assertNull(DashboardSnapshot::latestCompleteCutoff([$a->id, $b->id], DashboardDataset::Transactions, self::DAY, self::DAY));
+        $this->assertNull(DashboardSnapshot::latestCompleteCutoff([$a->id], DashboardDataset::Transactions, self::DAY, self::DAY));
         $this->assertNull(DashboardSnapshot::latestCompleteCutoff([$a->id], DashboardDataset::Downloaders, '2026-11-16', '2026-11-16'));
     }
 
@@ -200,6 +219,45 @@ class DashboardSnapshotSchemaTest extends TestCase
     private function completeCutoff(array $platformIds): ?string
     {
         return DashboardSnapshot::latestCompleteCutoff($platformIds, DashboardDataset::Downloaders, self::DAY, self::DAY)?->format('H:i');
+    }
+
+    /**
+     * Reads the combined downloader comparison of the selected platforms at the given hour.
+     *
+     * @param  list<int>  $platformIds
+     * @return array<string, mixed>
+     */
+    private function readDownloaders(array $platformIds, string $cutoffAt): array
+    {
+        $rows = DashboardSnapshot::all()->map->toComparisonRow()->all();
+
+        return (new ComparisonSnapshotService(new TransactionAggregationService))
+            ->read($rows, $platformIds, 'downloaders', self::DAY, self::DAY, $cutoffAt);
+    }
+
+    /**
+     * @param  list<int>  $platformIds
+     */
+    private function assertCombinedTotal(int $total, array $platformIds, string $cutoffAt): void
+    {
+        $read = $this->readDownloaders($platformIds, $cutoffAt);
+
+        $this->assertSame('complete', $read['availability']);
+        $this->assertSame(CarbonImmutable::parse($cutoffAt)->toIso8601String(), $read['as_of']);
+        $this->assertSame($total, $read['values']['total']);
+        $this->assertSame([self::DAY => $total], $read['values']['daily']);
+    }
+
+    /**
+     * @param  list<int>  $platformIds
+     */
+    private function assertUnavailable(array $platformIds, string $cutoffAt): void
+    {
+        $read = $this->readDownloaders($platformIds, $cutoffAt);
+
+        $this->assertSame('unavailable', $read['availability']);
+        $this->assertNull($read['as_of']);
+        $this->assertNull($read['values']);
     }
 
     private function downloaderSnapshot(Platform $platform, string $cutoffAt, int $total, bool $isComplete = true): DashboardSnapshot
