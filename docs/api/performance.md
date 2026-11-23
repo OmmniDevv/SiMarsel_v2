@@ -29,7 +29,7 @@ Jika beberapa tahun dipilih, setiap KPI adalah **gabungan** semua tahun tersebut
 
 ### Rumus KPI
 
-Semua KPI hanya memakai transaksi dengan `status_message` = `Success`.
+KPI pembayaran hanya memakai transaksi dengan status laporan `Success`. Status laporan berasal dari `effective_status`, kemudian `source_status` jika `effective_status` kosong. `status_message` hanya label sumber dan tidak dipakai dalam perhitungan.
 
 | Key | KPI | Sumber | Rumus |
 |---|---|---|---|

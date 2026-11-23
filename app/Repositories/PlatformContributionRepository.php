@@ -2,6 +2,7 @@
 
 namespace App\Repositories;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Platform;
 use App\Models\Transaction;
 use App\Repositories\Concerns\AppliesPerformanceFilter;
@@ -26,7 +27,7 @@ class PlatformContributionRepository
             ->when($filter->platforms !== [], fn (Builder $query) => $query->whereIn('platforms.slug', $filter->platforms))
             ->leftJoin('transactions', function (JoinClause $join) use ($filter) {
                 $join->on('transactions.platform_id', '=', 'platforms.id')
-                    ->where('transactions.status_message', Transaction::STATUS_SUCCESS);
+                    ->whereRaw(Transaction::REPORT_STATUS_EXPRESSION.' = ?', [MarkazTransactionStatus::Success->value]);
 
                 $this->whereInPerformancePeriod($join, $filter, 'transactions.paid_date');
             })

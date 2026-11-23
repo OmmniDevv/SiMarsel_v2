@@ -43,7 +43,6 @@ class PerformanceExportTest extends TestCase
                 'payment_method' => $method,
                 'nominal' => $nominal,
                 'product_type' => Transaction::TYPE_FIRST,
-                'status_message' => Transaction::STATUS_SUCCESS,
             ]);
         }
 

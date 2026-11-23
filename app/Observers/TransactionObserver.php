@@ -10,11 +10,18 @@ class TransactionObserver
     public function __construct(private PromoCodeUsageService $promoCodeUsageService) {}
 
     /**
-     * Normalize the promo code usages whenever a Markaz transaction is stored or its codes, platform, or date change.
+     * Normalize promo usages whenever attribution input or the report status changes.
      */
     public function saved(Transaction $transaction): void
     {
-        if ($transaction->wasRecentlyCreated || $transaction->wasChanged(['promo_code', 'platform_id', 'paid_date', 'paid_time', 'status_message'])) {
+        if ($transaction->wasRecentlyCreated || $transaction->wasChanged([
+            'promo_code',
+            'platform_id',
+            'paid_date',
+            'paid_time',
+            'source_status',
+            'effective_status',
+        ])) {
             $this->promoCodeUsageService->normalize($transaction);
         }
     }

@@ -30,7 +30,7 @@ transaction_promo_codes (1 baris per posisi kode, dengan snapshot funnel/source)
 
 | Aturan | Perilaku |
 |---|---|
-| Kapan dijalankan | Saat transaksi dibuat atau `promo_code`, `platform_id`, `paid_date`, `paid_time`, `status_message` berubah (observer), dan lewat command backfill. Hanya transaksi `Success` yang dinormalisasi. |
+| Kapan dijalankan | Saat transaksi dibuat atau `promo_code`, `platform_id`, `paid_date`, `paid_time`, `source_status`, atau `effective_status` berubah (observer), dan lewat command backfill. Hanya transaksi dengan status laporan `Success` yang dinormalisasi. |
 | Bentuk `promo_code` | Array teks dari Markaz, misalnya `["CPNS26", "RESELLER01"]`. Satu teks (`"CPNS26"`) dianggap posisi 1. |
 | Posisi | Mengikuti urutan array Markaz: `1` = kode utama, `2` = kode kedua/reseller. Entri kosong tidak dibuatkan baris, tapi posisinya tetap dihitung (`["", "X"]` → `X` di posisi 2). |
 | Transaksi tanpa kode | Tidak dibuatkan baris |

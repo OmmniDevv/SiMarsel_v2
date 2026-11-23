@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Performance;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Account;
 use App\Models\Downloader;
 use App\Models\Platform;
@@ -40,14 +41,14 @@ class PerformanceSummaryTest extends TestCase
         ?string $email,
         float $nominal,
         string $type = Transaction::TYPE_FIRST,
-        string $status = Transaction::STATUS_SUCCESS,
+        MarkazTransactionStatus $status = MarkazTransactionStatus::Success,
     ): void {
         Transaction::factory()->for($platform)->create([
             'paid_date' => $date,
             'customer_email' => $email,
             'nominal' => $nominal,
             'product_type' => $type,
-            'status_message' => $status,
+            'source_status' => $status->value,
         ]);
     }
 
@@ -70,7 +71,7 @@ class PerformanceSummaryTest extends TestCase
         $this->transaction($this->platformA, '2026-09-10', ' ALICE@example.com ', 100000, Transaction::TYPE_RENEWAL);
         $this->transaction($this->platformA, '2026-09-30', 'bob@example.com', 300000);
         $this->transaction($this->platformA, '2026-09-15', null, 400000);
-        $this->transaction($this->platformA, '2026-09-12', 'carol@example.com', 999999, Transaction::TYPE_RENEWAL, 'failed');
+        $this->transaction($this->platformA, '2026-09-12', 'carol@example.com', 999999, Transaction::TYPE_RENEWAL, MarkazTransactionStatus::Failed);
         $this->downloader($this->platformA, '2026-09-01', 30);
         $this->downloader($this->platformA, '2026-09-30', 70);
 
@@ -170,8 +171,8 @@ class PerformanceSummaryTest extends TestCase
     public function test_renewals_and_first_purchases_without_success_status_are_not_counted(): void
     {
         $this->transaction($this->platformA, '2026-09-05', 'alice@example.com', 100000, Transaction::TYPE_RENEWAL);
-        $this->transaction($this->platformA, '2026-09-06', 'alice@example.com', 100000, Transaction::TYPE_RENEWAL, 'failed');
-        $this->transaction($this->platformA, '2026-09-07', 'bob@example.com', 100000, Transaction::TYPE_FIRST, 'pending');
+        $this->transaction($this->platformA, '2026-09-06', 'alice@example.com', 100000, Transaction::TYPE_RENEWAL, MarkazTransactionStatus::Failed);
+        $this->transaction($this->platformA, '2026-09-07', 'bob@example.com', 100000, Transaction::TYPE_FIRST, MarkazTransactionStatus::Pending);
         $this->downloader($this->platformA, '2026-09-05', 10);
 
         $this->actingAs($this->manager)

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Observers\TransactionObserver;
 use Carbon\CarbonImmutable;
 use Database\Factories\TransactionFactory;
@@ -47,7 +48,7 @@ class Transaction extends Model
     /** @use HasFactory<TransactionFactory> */
     use HasFactory;
 
-    public const STATUS_SUCCESS = 'Success';
+    public const REPORT_STATUS_EXPRESSION = 'COALESCE(transactions.effective_status, transactions.source_status)';
 
     public const TYPE_FIRST = 'Perdana';
 
@@ -114,7 +115,27 @@ class Transaction extends Model
      */
     public function scopeSuccessful(Builder $query): void
     {
-        $query->where('status_message', self::STATUS_SUCCESS);
+        $query->whereReportStatus(MarkazTransactionStatus::Success);
+    }
+
+    /**
+     * Filter by the status used for reports and business rules.
+     *
+     * @param  Builder<Transaction>  $query
+     */
+    public function scopeWhereReportStatus(Builder $query, MarkazTransactionStatus $status): void
+    {
+        $query->whereRaw(self::REPORT_STATUS_EXPRESSION.' = ?', [$status->value]);
+    }
+
+    public function reportStatus(): ?MarkazTransactionStatus
+    {
+        return MarkazTransactionStatus::forReport($this->effective_status, $this->source_status);
+    }
+
+    public function isSuccessful(): bool
+    {
+        return $this->reportStatus() === MarkazTransactionStatus::Success;
     }
 
     /** Successful transactions eligible for promo attribution, including genuine no-code transactions. */

@@ -38,7 +38,7 @@ Table transactions {
   customer_name varchar(255) [note: 'FIX-15-BE-02']
   customer_email varchar(255)
   customer_phone varchar(50) [note: 'FIX-15-BE-02']
-  status_message varchar(100)
+  status_message varchar(100) [note: 'Label status dari sumber untuk presentasi; bukan sumber business logic']
   synced_at datetime [note: 'FIX-15-BE-02. Waktu SiMarsel terakhir mengambil transaksi ini; bukan waktu kejadian']
   created_at timestamp
   updated_at timestamp

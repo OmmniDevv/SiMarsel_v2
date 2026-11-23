@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Performance;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Account;
 use App\Models\Platform;
 use App\Models\Transaction;
@@ -33,13 +34,13 @@ class PlatformContributionTest extends TestCase
         Platform::factory()->create(['slug' => 'app-c', 'name' => 'App C']);
     }
 
-    private function transaction(Platform $platform, string $date, ?string $email, float $nominal, string $status = Transaction::STATUS_SUCCESS): void
+    private function transaction(Platform $platform, string $date, ?string $email, float $nominal, MarkazTransactionStatus $status = MarkazTransactionStatus::Success): void
     {
         Transaction::factory()->for($platform)->create([
             'paid_date' => $date,
             'customer_email' => $email,
             'nominal' => $nominal,
-            'status_message' => $status,
+            'source_status' => $status->value,
         ]);
     }
 
@@ -54,7 +55,7 @@ class PlatformContributionTest extends TestCase
         $this->transaction($this->platformA, '2026-09-10', ' ALICE@example.com ', 100000);
         $this->transaction($this->platformA, '2026-09-30', 'bob@example.com', 300000);
         $this->transaction($this->platformA, '2026-09-15', null, 400000);
-        $this->transaction($this->platformA, '2026-09-12', 'carol@example.com', 999999, 'failed');
+        $this->transaction($this->platformA, '2026-09-12', 'carol@example.com', 999999, MarkazTransactionStatus::Failed);
 
         $this->transaction($this->platformB, '2026-09-10', 'erin@example.com', 50000);
         $this->transaction($this->platformB, '2026-09-11', 'alice@example.com', 100000);
@@ -125,6 +126,28 @@ class PlatformContributionTest extends TestCase
             ->getJson(self::URL.'?date_from=2026-09-01&date_to=2026-09-30')
             ->assertJsonPath('data.platforms.0.contribution_percentage', 66.7)
             ->assertJsonPath('data.platforms.1.contribution_percentage', 33.3);
+    }
+
+    public function test_effective_status_overrides_source_status_in_the_platform_join(): void
+    {
+        Transaction::factory()->for($this->platformA)->create([
+            'paid_date' => '2026-09-05',
+            'nominal' => 100000,
+            'source_status' => MarkazTransactionStatus::Success->value,
+            'effective_status' => MarkazTransactionStatus::Failed->value,
+        ]);
+        Transaction::factory()->for($this->platformA)->create([
+            'paid_date' => '2026-09-06',
+            'nominal' => 200000,
+            'source_status' => MarkazTransactionStatus::Failed->value,
+            'effective_status' => MarkazTransactionStatus::Success->value,
+        ]);
+
+        $this->actingAs($this->manager)
+            ->getJson(self::URL.'?date_from=2026-09-01&date_to=2026-09-30&platform=app-a')
+            ->assertOk()
+            ->assertJsonPath('data.totals.revenue', 200000)
+            ->assertJsonPath('data.totals.transactions', 1);
     }
 
     public function test_contribution_matches_the_performance_summary_totals(): void

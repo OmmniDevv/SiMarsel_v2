@@ -53,7 +53,9 @@ class TransactionFactory extends Factory
             'product' => $this->product(null),
             'product_type' => fake()->boolean(70) ? Transaction::TYPE_FIRST : Transaction::TYPE_RENEWAL,
             'customer_email' => self::customerEmail(),
-            'status_message' => Transaction::STATUS_SUCCESS,
+            'source_status' => MarkazTransactionStatus::Success->value,
+            'effective_status' => null,
+            'status_message' => MarkazTransactionStatus::Success->label(),
         ];
     }
 
@@ -84,7 +86,11 @@ class TransactionFactory extends Factory
 
     public function failed(): static
     {
-        return $this->state(fn () => ['status_message' => 'failed']);
+        return $this->state(fn () => [
+            'source_status' => MarkazTransactionStatus::Failed->value,
+            'effective_status' => null,
+            'status_message' => MarkazTransactionStatus::Failed->label(),
+        ]);
     }
 
     /**

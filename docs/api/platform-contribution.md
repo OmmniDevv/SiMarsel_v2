@@ -18,7 +18,7 @@ Contoh:
 
 ### Rumus per platform
 
-Hanya transaksi dengan `status_message` = `Success` yang dihitung.
+Hanya transaksi dengan status laporan `Success` yang dihitung. Status laporan memakai `effective_status`, kemudian `source_status` sebagai fallback.
 
 | Field | Rumus |
 |---|---|
