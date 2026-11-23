@@ -66,8 +66,9 @@ final readonly class TaskPeriod
 
     /**
      * Keep tasks whose date falls in the period. The upper bound is the start of the next day, so a stored time part
-     * cannot hide the last day, no timezone conversion can shift a date, and the column's index stays usable. A task
-     * without this date never matches.
+     * cannot hide the last day, no timezone conversion can shift a date, and the column's index stays usable. A period
+     * ending on 31 December 9999 has no upper bound, because no date comes after it and "10000-01-01" does not compare
+     * as a date. A task without this date never matches.
      *
      * @param  Builder<Task>  $query
      * @return Builder<Task>
@@ -75,10 +76,11 @@ final readonly class TaskPeriod
     public function apply(Builder $query): Builder
     {
         $column = $query->qualifyColumn($this->field);
+        $nextDay = $this->to->addDay();
 
         return $query
             ->where($column, '>=', $this->from->toDateString())
-            ->where($column, '<', $this->to->addDay()->toDateString());
+            ->when($nextDay->year <= 9999, fn (Builder $query) => $query->where($column, '<', $nextDay->toDateString()));
     }
 
     public function label(): string

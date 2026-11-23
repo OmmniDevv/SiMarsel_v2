@@ -121,8 +121,8 @@ Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend h
 | `filter_mode` | Parameter wajib | Periode |
 |---|---|---|
 | `date` | `date` (`YYYY-MM-DD`) | Satu hari |
-| `month` | `month` (1 sampai 12), `year` | Seluruh bulan pada tahun itu |
-| `year` | `year` (2000 sampai 2100) | 1 Januari sampai 31 Desember |
+| `month` | `month` (1 sampai 12), `year` (4 digit) | Seluruh bulan pada tahun itu |
+| `year` | `year` (4 digit, 1000 sampai 9999) | 1 Januari sampai 31 Desember |
 | `range` | `start_date`, `end_date` (`YYYY-MM-DD`) | Termasuk kedua tanggal; `end_date` tidak boleh sebelum `start_date` |
 
 - `date_field` (`start_date` atau `deadline`) wajib dikirim bersama `filter_mode`.

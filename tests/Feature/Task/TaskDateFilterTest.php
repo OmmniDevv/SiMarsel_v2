@@ -104,6 +104,29 @@ class TaskDateFilterTest extends TestCase
         $this->assertSame(['leap'], $this->titles(['filter_mode' => 'month', 'date_field' => 'deadline', 'month' => 3, 'year' => 2028]));
     }
 
+    public function test_any_four_digit_year_the_filter_accepts_is_accepted_by_the_api(): void
+    {
+        $this->task('old', '1998-01-01', '1998-12-31', ['staff']);
+        $this->task('far', '1000-01-01', '9999-12-31', ['staff']);
+
+        $this->assertSame(['old'], $this->titles(['filter_mode' => 'year', 'date_field' => 'start_date', 'year' => 1998]));
+        $this->assertSame(['old'], $this->titles(['filter_mode' => 'month', 'date_field' => 'deadline', 'month' => 12, 'year' => 1998]));
+        $this->assertSame(['far'], $this->titles(['filter_mode' => 'year', 'date_field' => 'start_date', 'year' => 1000]));
+        $this->assertSame(['far'], $this->titles(['filter_mode' => 'year', 'date_field' => 'deadline', 'year' => 9999]));
+        $this->assertSame(['far'], $this->titles(['filter_mode' => 'month', 'date_field' => 'deadline', 'month' => 12, 'year' => 9999]));
+
+        $this->actingAs($this->accounts['admin'])
+            ->getJson('/api/tasks/monitoring?'.http_build_query(['scope' => 'tasklist', 'filter_mode' => 'year', 'date_field' => 'start_date', 'year' => 1998]))
+            ->assertOk();
+    }
+
+    public function test_a_year_outside_four_digits_explains_the_expected_format(): void
+    {
+        $this->list(['filter_mode' => 'year', 'date_field' => 'deadline', 'year' => 999])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['year' => 'Tahun harus 4 digit, misalnya 2009.']);
+    }
+
     public function test_a_year_covers_the_first_and_last_day_of_that_year(): void
     {
         $this->assertSame(
@@ -175,7 +198,9 @@ class TaskDateFilterTest extends TestCase
             'year missing the month' => [['filter_mode' => 'month', 'date_field' => 'deadline', 'year' => 2026], ['month']],
             'month 13' => [['filter_mode' => 'month', 'date_field' => 'deadline', 'month' => 13, 'year' => 2026], ['month']],
             'month 0' => [['filter_mode' => 'month', 'date_field' => 'deadline', 'month' => 0, 'year' => 2026], ['month']],
-            'year out of bounds' => [['filter_mode' => 'year', 'date_field' => 'deadline', 'year' => 1999], ['year']],
+            'year with three digits' => [['filter_mode' => 'year', 'date_field' => 'deadline', 'year' => 999], ['year']],
+            'year with five digits' => [['filter_mode' => 'year', 'date_field' => 'deadline', 'year' => 10000], ['year']],
+            'month with a three-digit year' => [['filter_mode' => 'month', 'date_field' => 'deadline', 'month' => 11, 'year' => 999], ['year']],
             'year mode with a month' => [['filter_mode' => 'year', 'date_field' => 'deadline', 'year' => 2026, 'month' => 11], ['month']],
             'range without an end' => [['filter_mode' => 'range', 'date_field' => 'deadline', 'start_date' => '2026-11-01'], ['end_date']],
             'range without a start' => [['filter_mode' => 'range', 'date_field' => 'deadline', 'end_date' => '2026-11-01'], ['start_date']],

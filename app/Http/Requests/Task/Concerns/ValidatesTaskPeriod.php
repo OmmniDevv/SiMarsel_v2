@@ -23,7 +23,7 @@ trait ValidatesTaskPeriod
             'date_field' => ['nullable', 'required_with:filter_mode', Rule::in(TaskPeriod::FIELDS)],
             'date' => ['nullable', 'required_if:filter_mode,date', 'prohibited_unless:filter_mode,date', 'date_format:Y-m-d'],
             'month' => ['nullable', 'required_if:filter_mode,month', 'prohibited_unless:filter_mode,month', 'integer', 'between:1,12'],
-            'year' => ['nullable', 'required_if:filter_mode,month,year', 'prohibited_unless:filter_mode,month,year', 'integer', 'between:2000,2100'],
+            'year' => ['nullable', 'required_if:filter_mode,month,year', 'prohibited_unless:filter_mode,month,year', 'integer', 'between:1000,9999'],
             'start_date' => ['nullable', 'required_if:filter_mode,range', 'prohibited_unless:filter_mode,range', 'date_format:Y-m-d'],
             'end_date' => ['nullable', 'required_if:filter_mode,range', 'prohibited_unless:filter_mode,range', 'date_format:Y-m-d', 'after_or_equal:start_date'],
         ];
@@ -42,7 +42,7 @@ trait ValidatesTaskPeriod
             'filter_mode.required_with' => 'Mode filter periode wajib dipilih.',
             'date_field.required_with' => 'Dasar tanggal wajib dipilih.',
             'month.between' => ':attribute harus antara 1 sampai 12.',
-            'year.between' => ':attribute harus antara 2000 sampai 2100.',
+            'year.between' => ':attribute harus 4 digit, misalnya 2009.',
             'end_date.after_or_equal' => 'Tanggal akhir tidak boleh sebelum tanggal awal.',
         ];
     }
