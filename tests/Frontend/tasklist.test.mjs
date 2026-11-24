@@ -1074,6 +1074,98 @@ test('Atur Ulang Filter resets the period and every Tasklist filter in the Board
     }
 });
 
+const PIC_OPTIONS = [{ id: PIC.id, fullname: 'Staff Marketing' }, { id: 11, fullname: 'Staff Baru' }];
+
+const picPage = (list, user = ADMIN, meta = { data: { role: 'admin', divisions: [], pics: PIC_OPTIONS } }) => tasklistPage({
+    'GET /api/tasks/meta': () => ({ json: meta }),
+    'GET /api/tasks': (body, requests) => ({ json: { data: list(requests.at(-1).url), meta: { status_counts: {} } } }),
+    'GET /api/tasks/monitoring': () => ({ json: { data: monitoringOf({ total_tasks: 1 }) } }),
+}, user);
+
+test('The PIC options come from meta, and the PIC combines with the period, division, priority, and status in the list and the KPIs', async () => {
+    const { board, requests } = await picPage(() => []);
+    await board.loadMeta();
+    assert.deepEqual([...board.picOptions], PIC_OPTIONS, 'only the PICs the backend offers this account');
+
+    board.filters = { search: '', division: 'MKT', priority: 'high', status: 'todo', pic: '11' };
+    choosePeriod(board, { mode: 'month', basis: 'deadline', month: '2026-11' });
+    await board.confirmPeriodFilter();
+
+    const filters = 'division=MKT&priority=high&status=todo&pic_id=11&filter_mode=month&date_field=deadline&month=11&year=2026';
+    assert.equal(listRequests(requests).at(-1).url, `/api/tasks?scope=all_tasks&${filters}`);
+    assert.equal(monitoringRequests(requests).at(-1).url, `/api/tasks/monitoring?scope=tasklist&${filters}`, 'the KPIs count the same tasks');
+    assert.equal(board.hasActiveFilter, true);
+
+    // Without meta the filter has no options to offer and sends nothing.
+    const { board: fallback } = await picPage(() => [], ADMIN, null);
+    await fallback.loadMeta().catch(() => {});
+    assert.deepEqual([...fallback.picOptions], []);
+});
+
+test('The PIC filter stays across the Board, the Table, and Tugas Saya, where only tasks of the signed-in PIC are shown, each once', async () => {
+    const shared = task({ id: 1, status: 'todo', deadline: '2026-11-20', pics: PIC_OPTIONS });
+    const othersOnly = task({ id: 2, status: 'todo', deadline: '2026-11-21', pics: [{ id: 11, fullname: 'Staff Baru' }] });
+    const { board, requests } = await picPage((url) => (url.includes('my_tasks') ? [shared] : [shared, othersOnly]), PIC);
+    board.monitoring = { as_of: '2026-11-16' };
+
+    board.filters.pic = '11';
+    choosePeriod(board, { mode: 'month', basis: 'deadline', month: '2026-11' });
+    await board.confirmPeriodFilter();
+    assert.deepEqual(board.tasksIn('todo').map(({ id }) => id), [1, 2], 'Semua Tugas: every task of that PIC');
+    assert.equal(board.metric('total_tasks'), 1, 'Semua Tugas: the KPIs are the backend numbers for the same filters');
+
+    board.view = 'table';
+    assert.deepEqual([...board.pageRows].map(({ id }) => id), [1, 2], 'the Table shows the same tasks as the Board');
+
+    board.taskScope = 'my_tasks';
+    await board.load();
+    assert.equal(listRequests(requests).at(-1).url, '/api/tasks?scope=my_tasks&pic_id=11&filter_mode=month&date_field=deadline&month=11&year=2026');
+    assert.equal(board.filters.pic, '11');
+    assert.equal(board.appliedPeriodLabel, 'Deadline: November 2026');
+
+    // A task of the chosen PIC without the signed-in account as PIC stays out of Tugas Saya, even when synced in.
+    board.syncTask(othersOnly);
+    assert.deepEqual([...board.pageRows].map(({ id }) => id), [1], 'a Multi-PIC task is one row');
+    board.view = 'board';
+    assert.deepEqual(board.tasksIn('todo').map(({ id }) => id), [1]);
+    assert.equal(board.metric('total_tasks'), 1, 'Tugas Saya counts the Multi-PIC task once');
+
+    // Releasing the chosen PIC removes the card, together with the KPIs.
+    board.syncTask({ ...shared, pics: [{ id: PIC.id, fullname: 'Staff Marketing' }] });
+    assert.deepEqual(board.tasksIn('todo').map(({ id }) => id), []);
+    assert.equal(board.metric('total_tasks'), 0);
+});
+
+test('Atur Ulang Filter clears the PIC together with the period and the other filters', async () => {
+    const { board, requests } = await picPage(() => []);
+    board.filters = { search: '', division: '', priority: '', status: '', pic: '11' };
+    assert.equal(board.hasActiveFilter, true, 'a chosen PIC alone enables the button');
+    choosePeriod(board, { mode: 'year', basis: 'deadline', year: '2026' });
+    await board.confirmPeriodFilter();
+
+    board.resetFilters();
+    await board.load();
+
+    assert.equal(board.filters.pic, '');
+    assert.equal(board.hasActiveFilter, false);
+    assert.equal(listRequests(requests).at(-1).url, '/api/tasks?scope=all_tasks');
+    assert.equal(monitoringRequests(requests).at(-1).url, '/api/tasks/monitoring?scope=tasklist');
+});
+
+test('Opening a task hidden by the PIC filter removes the PIC so its card can be shown', async () => {
+    const { board } = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [task({ id: 7, pics: [{ id: PIC.id, fullname: 'Staff Marketing' }] })], meta: { status_counts: {} } } }),
+        'GET /api/tasks/monitoring': () => ({ json: { data: monitoringOf({}) } }),
+        'GET /api/tasks/7': () => ({ json: { data: task() } }),
+    }, ADMIN);
+    await board.load();
+    board.filters.pic = '11';
+
+    board.focusTask({ id: 7 });
+
+    assert.equal(board.filters.pic, '');
+});
+
 test('Period filter rejects a date with a year beyond four digits, whose text order would pass as a valid range', async () => {
     const { board } = await tasklistPage({}, ADMIN);
 

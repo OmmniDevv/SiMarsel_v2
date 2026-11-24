@@ -216,7 +216,7 @@ Alpine.data('tasklist', () => ({
     summarySequence: 0,
     summaryQueued: false,
 
-    filters: { search: '', division: '', priority: '', status: '' },
+    filters: { search: '', division: '', priority: '', status: '', pic: '' },
     periodFilter: emptyPeriodFilter(),
     appliedPeriod: null,
     periodError: '',
@@ -322,7 +322,7 @@ Alpine.data('tasklist', () => ({
     },
 
     get hasActiveFilter() {
-        return ['search', 'priority', 'status'].some((key) => this.filters[key] !== '')
+        return ['search', 'priority', 'status', 'pic'].some((key) => this.filters[key] !== '')
             || this.filters.division !== this.defaultDivision()
             || this.appliedPeriod !== null;
     },
@@ -390,7 +390,7 @@ Alpine.data('tasklist', () => ({
     },
 
     resetFilters() {
-        this.filters = { search: '', division: this.defaultDivision(), priority: '', status: '' };
+        this.filters = { search: '', division: this.defaultDivision(), priority: '', status: '', pic: '' };
         this.clearPeriod();
         this.sort = { key: 'deadline', dir: 'asc' };
     },
@@ -401,8 +401,19 @@ Alpine.data('tasklist', () => ({
             division: this.filters.division,
             priority: this.filters.priority,
             status: this.filters.status,
+            pic_id: this.filters.pic,
             ...this.appliedPeriod?.params,
         };
+    },
+
+    // PIC aktif dari tugas yang boleh dilihat akun ini (meta); kosong bila meta gagal dimuat.
+    get picOptions() {
+        return this.meta?.pics ?? [];
+    },
+
+    // Sama seperti pic_id di backend: tugas dengan akun itu sebagai salah satu PIC aktif.
+    matchesPic(task) {
+        return !this.filters.pic || (task.pics ?? []).some(({ id }) => String(id) === this.filters.pic);
     },
 
     // Tugas tanpa tanggal pada dasar tanggal yang dipilih tidak masuk periode, sama seperti backend.
@@ -503,6 +514,7 @@ Alpine.data('tasklist', () => ({
     // Tugas yang dibuka dari luar daftar atau PIC yang baru dilepas tidak tampil di Tugas Saya.
     get filteredTasks() {
         return this.tasks.filter((task) => this.matchesFilters(task)
+            && this.matchesPic(task)
             && this.matchesPeriod(task)
             && (this.taskScope !== 'my_tasks' || isTaskPic(task, this.user)));
     },
@@ -660,10 +672,11 @@ Alpine.data('tasklist', () => ({
         }
 
         const loaded = this.tasks.find((item) => item.id === task.id);
-        if (!loaded || !this.matchesFilters(loaded)) {
+        if (!loaded || !this.matchesFilters(loaded) || !this.matchesPic(loaded)) {
             this.filters.search = '';
             this.filters.priority = '';
             this.filters.status = '';
+            this.filters.pic = '';
         }
         // Item Calendar membawa tanggalnya sendiri; tautan ?task=ID hanya membawa ID, sehingga periode dilepas.
         if (this.appliedPeriod && !this.matchesPeriod(loaded ?? task)) {

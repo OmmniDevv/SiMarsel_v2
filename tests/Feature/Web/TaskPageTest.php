@@ -59,6 +59,8 @@ class TaskPageTest extends TestCase
                 ->assertSee("x-show=\"view === 'board' || view === 'table'\"", false)
                 ->assertSee('id="task-period-year" type="number"', false)
                 ->assertSee('data-applied-period', false)
+                ->assertSee('x-model="filters.pic"', false)
+                ->assertSee('Semua PIC')
                 ->assertSee('x-cloak novalidate', false)
                 ->assertDontSee('Tampilan UI saja')
                 ->assertDontSee('periodYears', false)

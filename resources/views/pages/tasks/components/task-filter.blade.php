@@ -52,6 +52,17 @@
             </select>
         </label>
 
+        {{-- PIC aktif dari tugas yang boleh dilihat akun ini; berlaku untuk Papan, Tabel, dan KPI. --}}
+        <label x-show="view === 'board' || view === 'table'" class="block min-w-0 basis-full sm:max-w-60 sm:flex-none sm:basis-auto">
+            <span class="sr-only">PIC</span>
+            <select id="task-pic" x-model="filters.pic" class="{{ $selectClass }}" title="PIC">
+                <option value="">Semua PIC</option>
+                <template x-for="pic in picOptions" :key="pic.id">
+                    <option :value="String(pic.id)" x-text="pic.fullname" :selected="filters.pic === String(pic.id)"></option>
+                </template>
+            </select>
+        </label>
+
         <label class="block min-w-36 flex-1 sm:min-w-0 sm:flex-none">
             <span class="sr-only">Prioritas</span>
             <select id="task-priority" x-model="filters.priority" class="{{ $selectClass }}" title="Prioritas">
