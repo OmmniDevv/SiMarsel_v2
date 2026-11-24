@@ -939,6 +939,27 @@ test('The applied period stays across the Board, the Table, and Tugas Saya until
     assert.equal(monitoringRequests(requests).length > 0, true);
 });
 
+test('A month with a year below 1000, which the browser month input accepts, is explained in the form and not sent', async () => {
+    const { board, requests } = await periodPage();
+    await board.load();
+    const before = requests.length;
+
+    choosePeriod(board, { mode: 'month', month: '0999-11' });
+    assert.equal(board.periodYearError, 'Masukkan tahun 4 digit, misalnya 2009.');
+    assert.equal(board.canConfirmPeriodFilter, false);
+    await board.confirmPeriodFilter();
+    assert.equal(requests.length, before);
+
+    choosePeriod(board, { month: '' });
+    assert.equal(board.periodYearError, '', 'an empty month is not an error yet');
+    assert.equal(board.canConfirmPeriodFilter, false);
+
+    for (const month of ['1000-01', '2026-11', '9999-12']) {
+        choosePeriod(board, { month });
+        assert.equal(board.canConfirmPeriodFilter, true, month);
+    }
+});
+
 test('A period rejected by the backend shows its reason in the period form', async () => {
     const { board } = await tasklistPage({
         'GET /api/tasks': () => ({ status: 422, json: { message: 'Tanggal akhir tidak boleh sebelum tanggal awal.', errors: { end_date: ['Tanggal akhir tidak boleh sebelum tanggal awal.'] } } }),

@@ -76,7 +76,8 @@
     </div>
 </div>
 
-<form x-show="view === 'board' || view === 'table'" x-cloak class="mt-3 border-t border-line pt-3" @submit.prevent="confirmPeriodFilter()" aria-labelledby="task-period-filter-title">
+{{-- Validasi periode ada di confirmPeriodFilter; validasi bawaan browser akan memblokir submit karena input mode lain yang tersembunyi. --}}
+<form x-show="view === 'board' || view === 'table'" x-cloak novalidate class="mt-3 border-t border-line pt-3" @submit.prevent="confirmPeriodFilter()" aria-labelledby="task-period-filter-title">
     <div class="mb-2 flex flex-wrap items-start justify-between gap-2">
         <div>
             <h2 id="task-period-filter-title" class="text-sm font-semibold text-ink">Filter Periode</h2>
@@ -112,7 +113,9 @@
 
         <label x-show="periodFilter.mode === 'month'" x-cloak class="block min-w-0">
             <span class="mb-1 block text-xs font-medium text-label">Bulan dan Tahun</span>
-            <input id="task-period-month" type="month" max="9999-12" x-model="periodFilter.month" class="{{ $periodControlClass }}">
+            <input id="task-period-month" type="month" min="1000-01" max="9999-12" x-model="periodFilter.month"
+                :aria-invalid="Boolean(periodYearError)" aria-describedby="task-period-month-error" class="{{ $periodControlClass }}">
+            <p id="task-period-month-error" x-show="periodYearError" x-cloak class="mt-1 text-xs text-red-600" role="alert" x-text="periodYearError"></p>
         </label>
 
         <label x-show="periodFilter.mode === 'year'" x-cloak class="block min-w-0">

@@ -92,6 +92,7 @@ function myTaskMetrics(tasks, asOf) {
 const BACKEND_PENDING = 'Menunggu pengerjaan Back End.';
 const PERIOD_DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
 const PERIOD_YEAR_FORMAT = /^[1-9]\d{3}$/;
+const PERIOD_MONTH_FORMAT = /^[1-9]\d{3}-(0[1-9]|1[0-2])$/;
 const PERIOD_FIELDS = ['filter_mode', 'date_field', 'date', 'month', 'year', 'start_date', 'end_date'];
 const PERIOD_MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
@@ -335,10 +336,15 @@ Alpine.data('tasklist', () => ({
             || String(year) !== String(new Date().getFullYear());
     },
 
+    // Tahun pada mode Tahun dan mode Bulan mengikuti batas backend (1000–9999); input bulan browser menerima tahun 0999.
     get periodYearError() {
-        const { mode, year } = this.periodFilter;
+        const { mode, year, month } = this.periodFilter;
+        const valid = {
+            year: () => PERIOD_YEAR_FORMAT.test(String(year)),
+            month: () => !month || PERIOD_MONTH_FORMAT.test(month),
+        }[mode]?.() ?? true;
 
-        return mode === 'year' && !PERIOD_YEAR_FORMAT.test(String(year)) ? 'Masukkan tahun 4 digit, misalnya 2009.' : '';
+        return valid ? '' : 'Masukkan tahun 4 digit, misalnya 2009.';
     },
 
     // Tanggal dibandingkan sebagai teks, sehingga tahun harus tepat 4 digit agar urutannya benar.
@@ -355,7 +361,7 @@ Alpine.data('tasklist', () => ({
         const { mode, date, month, year, startDate, endDate } = this.periodFilter;
 
         if (mode === 'date') return PERIOD_DATE_FORMAT.test(date);
-        if (mode === 'month') return /^\d{4}-(0[1-9]|1[0-2])$/.test(month);
+        if (mode === 'month') return Boolean(month) && !this.periodYearError;
         if (mode === 'year') return !this.periodYearError;
         if (mode === 'range') return Boolean(startDate && endDate) && !this.periodRangeError;
 
