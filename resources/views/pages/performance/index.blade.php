@@ -21,7 +21,7 @@
         ],
         'secondary' => [
             'metrics' => [
-                ['key' => 'unique_users', 'label' => 'Pengguna Unik', 'format' => 'number', 'hint' => 'Email pembeli unik'],
+                ['key' => 'unique_users', 'label' => 'Pembeli Unik', 'format' => 'number', 'hint' => 'Akun pembayar unik per platform'],
                 ['key' => 'average_order_value', 'label' => 'AOV', 'format' => 'currency', 'hint' => 'Total revenue ÷ jumlah transaksi'],
                 ['key' => 'repeat_orders', 'label' => 'Repeat Order', 'format' => 'number', 'hint' => 'Transaksi perpanjangan'],
                 ['key' => 'conversion_rate', 'label' => 'Konversi', 'format' => 'percent', 'hint' => 'Transaksi dibanding downloader', 'progress' => true],

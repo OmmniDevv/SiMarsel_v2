@@ -163,11 +163,7 @@ class Transaction extends Model
         $query->where('product_type', self::TYPE_RENEWAL);
     }
 
-    /**
-     * Only transactions that carry a customer email can identify a user.
-     *
-     * @param  Builder<Transaction>  $query
-     */
+    /** @param Builder<Transaction> $query */
     public function scopeWithCustomerEmail(Builder $query): void
     {
         $query->whereNotNull('customer_email')->where('customer_email', '!=', '');

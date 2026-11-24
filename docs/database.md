@@ -67,7 +67,7 @@ php artisan migrate --seed
 - `transactions.trx_id` tetap nomor untuk tampilan dan pencocokan, tetapi tidak lagi unik global: nilai yang sama boleh ada di platform berbeda.
 - `downloaders` unik per kombinasi `platform_id` + `date`: satu platform pada satu tanggal hanya punya satu baris, dan sinkronisasi memakai upsert.
 - `markaz_api_tokens.token` disimpan terenkripsi dan tidak pernah dikembalikan oleh API. Hanya boleh ada 1 token aktif; token lama diganti saat token baru disimpan.
-- Satu user diidentifikasi dari `customer_email` (huruf kecil, tanpa spasi di awal atau akhir). Transaksi tanpa email tetap dihitung di revenue dan jumlah transaksi, tapi tidak dihitung sebagai user.
+- Pembeli Unik diidentifikasi dari pasangan `(platform_id, markaz_customer_id)`. `customer_email` tetap disimpan sebagai informasi kontak dan tidak menjadi identifier.
 - Rumus KPI Ringkasan Performa ada di [api/performance.md](api/performance.md).
 - Kolom transaksi untuk Dashboard (FIX-15-BE-02) ada di bagian [Kolom transaksi Dashboard](#kolom-transaksi-dashboard-fix-15-be-02).
 - Kontrak baca tanggal transaksi, status laporan, dan metadata kelengkapan data untuk Analisis Performa ada di [transaction-dates-coverage.md](transaction-dates-coverage.md). Perubahan skemanya dimiliki FIX-15.

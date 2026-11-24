@@ -33,15 +33,16 @@ class PerformanceExportTest extends TestCase
         $platformB = Platform::factory()->create(['slug' => 'app-b', 'name' => 'App B']);
 
         foreach ([
-            [$platformA, '2026-09-05', '08:15:00', 'BNI', 300000],
-            [$platformA, '2026-09-20', '19:30:00', 'QRIS', 100000],
-            [$platformB, '2026-09-21', '13:00:00', 'BNI', 100000],
-        ] as [$platform, $date, $time, $method, $nominal]) {
+            [$platformA, '2026-09-05', '08:15:00', 'BNI', 300000, 101],
+            [$platformA, '2026-09-20', '19:30:00', 'QRIS', 100000, 102],
+            [$platformB, '2026-09-21', '13:00:00', 'BNI', 100000, 103],
+        ] as [$platform, $date, $time, $method, $nominal, $customerId]) {
             Transaction::factory()->for($platform)->create([
                 'paid_date' => $date,
                 'paid_time' => $time,
                 'payment_method' => $method,
                 'nominal' => $nominal,
+                'markaz_customer_id' => $customerId,
                 'product_type' => Transaction::TYPE_FIRST,
             ]);
         }
@@ -128,7 +129,7 @@ class PerformanceExportTest extends TestCase
         ], $sheets['Metode Pembayaran']);
 
         $this->assertEquals([
-            ['Peringkat', 'Platform', 'Revenue', 'Transaksi', 'User', 'Persentase Kontribusi (%)'],
+            ['Peringkat', 'Platform', 'Revenue', 'Transaksi', 'Pembeli Unik', 'Persentase Kontribusi (%)'],
             [1, 'App A', 400000, 2, 2, 80],
             [2, 'App B', 100000, 1, 1, 20],
         ], $sheets['Kontribusi Platform']);

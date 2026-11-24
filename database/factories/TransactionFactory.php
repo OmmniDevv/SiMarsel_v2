@@ -52,6 +52,7 @@ class TransactionFactory extends Factory
             'promo_code' => null,
             'product' => $this->product(null),
             'product_type' => fake()->boolean(70) ? Transaction::TYPE_FIRST : Transaction::TYPE_RENEWAL,
+            'markaz_customer_id' => fake()->numberBetween(10000, 9999999),
             'customer_email' => self::customerEmail(),
             'source_status' => MarkazTransactionStatus::Success->value,
             'effective_status' => null,

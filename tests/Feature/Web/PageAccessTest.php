@@ -192,7 +192,7 @@ class PageAccessTest extends TestCase
             ->get('/settings?tab=divisions')
             ->assertOk()
             ->assertViewHas('initialTab', 'divisions')
-            ->assertSeeInOrder(['Total Divisi', 'Anggota Divisi', 'Divisi Tanpa Anggota'])
+            ->assertSeeInOrder(['Total Divisi', 'Daftar Divisi'])
             ->assertSeeInOrder(['Daftar Divisi', 'Tambah Divisi'])
             ->assertSee('id="create-division-title"', false)
             ->assertSee('Hapus Divisi?');

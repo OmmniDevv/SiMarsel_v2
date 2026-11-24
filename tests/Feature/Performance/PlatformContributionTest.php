@@ -34,11 +34,12 @@ class PlatformContributionTest extends TestCase
         Platform::factory()->create(['slug' => 'app-c', 'name' => 'App C']);
     }
 
-    private function transaction(Platform $platform, string $date, ?string $email, float $nominal, MarkazTransactionStatus $status = MarkazTransactionStatus::Success): void
+    private function transaction(Platform $platform, string $date, ?string $email, ?int $customerId, float $nominal, MarkazTransactionStatus $status = MarkazTransactionStatus::Success): void
     {
         Transaction::factory()->for($platform)->create([
             'paid_date' => $date,
             'customer_email' => $email,
+            'markaz_customer_id' => $customerId,
             'nominal' => $nominal,
             'source_status' => $status->value,
         ]);
@@ -49,16 +50,16 @@ class PlatformContributionTest extends TestCase
      */
     private function seedContributionData(): void
     {
-        $this->transaction($this->platformA, '2026-08-20', 'dave@example.com', 500000);
+        $this->transaction($this->platformA, '2026-08-20', 'dave@example.com', 104, 500000);
 
-        $this->transaction($this->platformA, '2026-09-05', 'alice@example.com', 200000);
-        $this->transaction($this->platformA, '2026-09-10', ' ALICE@example.com ', 100000);
-        $this->transaction($this->platformA, '2026-09-30', 'bob@example.com', 300000);
-        $this->transaction($this->platformA, '2026-09-15', null, 400000);
-        $this->transaction($this->platformA, '2026-09-12', 'carol@example.com', 999999, MarkazTransactionStatus::Failed);
+        $this->transaction($this->platformA, '2026-09-05', 'alice@example.com', 101, 200000);
+        $this->transaction($this->platformA, '2026-09-10', ' ALICE@example.com ', 101, 100000);
+        $this->transaction($this->platformA, '2026-09-30', 'bob@example.com', 102, 300000);
+        $this->transaction($this->platformA, '2026-09-15', null, null, 400000);
+        $this->transaction($this->platformA, '2026-09-12', 'carol@example.com', 103, 999999, MarkazTransactionStatus::Failed);
 
-        $this->transaction($this->platformB, '2026-09-10', 'erin@example.com', 50000);
-        $this->transaction($this->platformB, '2026-09-11', 'alice@example.com', 100000);
+        $this->transaction($this->platformB, '2026-09-10', 'erin@example.com', 105, 50000);
+        $this->transaction($this->platformB, '2026-09-11', 'alice@example.com', 101, 100000);
     }
 
     public function test_guest_cannot_view_platform_contribution(): void
@@ -118,8 +119,8 @@ class PlatformContributionTest extends TestCase
 
     public function test_contribution_percentage_is_rounded_to_one_decimal(): void
     {
-        $this->transaction($this->platformA, '2026-09-05', 'alice@example.com', 100000);
-        $this->transaction($this->platformB, '2026-09-05', 'bob@example.com', 200000);
+        $this->transaction($this->platformA, '2026-09-05', 'alice@example.com', 101, 100000);
+        $this->transaction($this->platformB, '2026-09-05', 'bob@example.com', 102, 200000);
 
         // 100000 / 300000 = 33.333...%, 200000 / 300000 = 66.666...%.
         $this->actingAs($this->manager)

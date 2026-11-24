@@ -36,7 +36,10 @@ class TransactionSeeder extends Seeder
         }
 
         $days = CarbonPeriod::create(today()->subMonths(DownloaderSeeder::MONTHS), today());
-        $customers = array_map(fn () => TransactionFactory::customerEmail(), range(1, 1500));
+        $customers = array_map(fn (int $id) => [
+            'id' => $id,
+            'email' => TransactionFactory::customerEmail(),
+        ], range(1, 1500));
         $now = now();
 
         Platform::all()->each(function (Platform $platform) use ($days, $customers, $now) {
@@ -49,6 +52,7 @@ class TransactionSeeder extends Seeder
             foreach ($days as $day) {
                 foreach (range(1, fake()->numberBetween(2, 15)) as $ignored) {
                     $promoCode = $this->promoCode($codes, $day);
+                    $customer = fake()->randomElement($customers);
 
                     $rows[] = [
                         ...Transaction::factory()
@@ -57,7 +61,8 @@ class TransactionSeeder extends Seeder
                             ->when(fake()->boolean(3), fn (TransactionFactory $factory) => $factory->withoutPaymentMethod())
                             ->raw([
                                 'paid_date' => $day->toDateString(),
-                                'customer_email' => fake()->randomElement($customers),
+                                'markaz_customer_id' => $customer['id'],
+                                'customer_email' => $customer['email'],
                             ]),
                         'promo_code' => $promoCode === null ? null : json_encode($promoCode),
                         'created_at' => $now,

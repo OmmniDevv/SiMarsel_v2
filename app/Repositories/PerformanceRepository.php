@@ -8,15 +8,11 @@ use App\Repositories\Concerns\AppliesPerformanceFilter;
 use App\Support\PerformanceFilter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class PerformanceRepository
 {
     use AppliesPerformanceFilter;
-
-    /**
-     * Emails are compared case-insensitively and without surrounding spaces.
-     */
-    private const NORMALIZED_EMAIL = 'LOWER(TRIM(customer_email))';
 
     /**
      * Counts first purchases (Perdana) as new_users and renewals (Perpanjangan) as repeat_orders.
@@ -50,11 +46,12 @@ class PerformanceRepository
 
     public function countUniqueCustomers(PerformanceFilter $filter): int
     {
-        return (int) $this->successfulTransactions($filter)
-            ->withCustomerEmail()
-            ->toBase()
-            ->selectRaw('COUNT(DISTINCT '.self::NORMALIZED_EMAIL.') as total')
-            ->value('total');
+        $buyers = $this->successfulTransactions($filter)
+            ->whereNotNull('markaz_customer_id')
+            ->select(['platform_id', 'markaz_customer_id'])
+            ->distinct();
+
+        return DB::query()->fromSub($buyers, 'buyers')->count();
     }
 
     public function totalDownloaders(PerformanceFilter $filter): int

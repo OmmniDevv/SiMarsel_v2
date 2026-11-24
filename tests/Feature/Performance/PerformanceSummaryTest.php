@@ -39,6 +39,7 @@ class PerformanceSummaryTest extends TestCase
         Platform $platform,
         string $date,
         ?string $email,
+        ?int $customerId,
         float $nominal,
         string $type = Transaction::TYPE_FIRST,
         MarkazTransactionStatus $status = MarkazTransactionStatus::Success,
@@ -46,6 +47,7 @@ class PerformanceSummaryTest extends TestCase
         Transaction::factory()->for($platform)->create([
             'paid_date' => $date,
             'customer_email' => $email,
+            'markaz_customer_id' => $customerId,
             'nominal' => $nominal,
             'product_type' => $type,
             'source_status' => $status->value,
@@ -62,20 +64,20 @@ class PerformanceSummaryTest extends TestCase
      */
     private function seedPerformanceData(): void
     {
-        $this->transaction($this->platformA, '2026-07-15', 'alice@example.com', 100000);
+        $this->transaction($this->platformA, '2026-07-15', 'alice@example.com', 101, 100000);
 
-        $this->transaction($this->platformA, '2026-08-20', 'dave@example.com', 500000);
+        $this->transaction($this->platformA, '2026-08-20', 'dave@example.com', 104, 500000);
         $this->downloader($this->platformA, '2026-08-31', 50);
 
-        $this->transaction($this->platformA, '2026-09-05', 'alice@example.com', 200000, Transaction::TYPE_RENEWAL);
-        $this->transaction($this->platformA, '2026-09-10', ' ALICE@example.com ', 100000, Transaction::TYPE_RENEWAL);
-        $this->transaction($this->platformA, '2026-09-30', 'bob@example.com', 300000);
-        $this->transaction($this->platformA, '2026-09-15', null, 400000);
-        $this->transaction($this->platformA, '2026-09-12', 'carol@example.com', 999999, Transaction::TYPE_RENEWAL, MarkazTransactionStatus::Failed);
+        $this->transaction($this->platformA, '2026-09-05', 'alice@example.com', 101, 200000, Transaction::TYPE_RENEWAL);
+        $this->transaction($this->platformA, '2026-09-10', ' ALICE@example.com ', 101, 100000, Transaction::TYPE_RENEWAL);
+        $this->transaction($this->platformA, '2026-09-30', 'bob@example.com', 102, 300000);
+        $this->transaction($this->platformA, '2026-09-15', null, null, 400000);
+        $this->transaction($this->platformA, '2026-09-12', 'carol@example.com', 103, 999999, Transaction::TYPE_RENEWAL, MarkazTransactionStatus::Failed);
         $this->downloader($this->platformA, '2026-09-01', 30);
         $this->downloader($this->platformA, '2026-09-30', 70);
 
-        $this->transaction($this->platformB, '2026-09-10', 'erin@example.com', 50000);
+        $this->transaction($this->platformB, '2026-09-10', 'erin@example.com', 105, 50000);
         $this->downloader($this->platformB, '2026-09-10', 20);
     }
 
@@ -170,9 +172,9 @@ class PerformanceSummaryTest extends TestCase
 
     public function test_renewals_and_first_purchases_without_success_status_are_not_counted(): void
     {
-        $this->transaction($this->platformA, '2026-09-05', 'alice@example.com', 100000, Transaction::TYPE_RENEWAL);
-        $this->transaction($this->platformA, '2026-09-06', 'alice@example.com', 100000, Transaction::TYPE_RENEWAL, MarkazTransactionStatus::Failed);
-        $this->transaction($this->platformA, '2026-09-07', 'bob@example.com', 100000, Transaction::TYPE_FIRST, MarkazTransactionStatus::Pending);
+        $this->transaction($this->platformA, '2026-09-05', 'alice@example.com', 101, 100000, Transaction::TYPE_RENEWAL);
+        $this->transaction($this->platformA, '2026-09-06', 'alice@example.com', 101, 100000, Transaction::TYPE_RENEWAL, MarkazTransactionStatus::Failed);
+        $this->transaction($this->platformA, '2026-09-07', 'bob@example.com', 102, 100000, Transaction::TYPE_FIRST, MarkazTransactionStatus::Pending);
         $this->downloader($this->platformA, '2026-09-05', 10);
 
         $this->actingAs($this->manager)
@@ -207,9 +209,9 @@ class PerformanceSummaryTest extends TestCase
 
     public function test_single_day_period_compares_with_previous_day(): void
     {
-        $this->transaction($this->platformA, '2026-09-09', 'a@example.com', 100000);
-        $this->transaction($this->platformA, '2026-09-10', 'b@example.com', 100000);
-        $this->transaction($this->platformA, '2026-09-10', 'c@example.com', 100000);
+        $this->transaction($this->platformA, '2026-09-09', 'a@example.com', 101, 100000);
+        $this->transaction($this->platformA, '2026-09-10', 'b@example.com', 102, 100000);
+        $this->transaction($this->platformA, '2026-09-10', 'c@example.com', 103, 100000);
 
         $this->actingAs($this->manager)
             ->getJson(self::URL.'?date_from=2026-09-10&date_to=2026-09-10')
@@ -220,5 +222,18 @@ class PerformanceSummaryTest extends TestCase
                     'total_transactions' => ['value' => 2, 'previous_value' => 1, 'change_percentage' => 100, 'trend' => 'up'],
                 ],
             ]]);
+    }
+
+    public function test_unique_buyers_use_the_markaz_customer_id_per_platform_instead_of_email(): void
+    {
+        $this->transaction($this->platformA, '2026-09-10', 'same@example.com', 101, 100000);
+        $this->transaction($this->platformA, '2026-09-10', 'same@example.com', 102, 100000);
+        $this->transaction($this->platformA, '2026-09-10', 'changed@example.com', 101, 100000);
+        $this->transaction($this->platformB, '2026-09-10', 'same@example.com', 101, 100000);
+
+        $this->actingAs($this->manager)
+            ->getJson(self::URL.'?date_from=2026-09-10&date_to=2026-09-10')
+            ->assertOk()
+            ->assertJsonPath('data.kpis.unique_users.value', 3);
     }
 }

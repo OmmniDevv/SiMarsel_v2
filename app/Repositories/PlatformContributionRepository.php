@@ -16,7 +16,7 @@ class PlatformContributionRepository
     use AppliesPerformanceFilter;
 
     /**
-     * Revenue, transactions, and unique customer emails per platform.
+     * Revenue, transactions, and unique paying accounts per platform.
      * Selected platforms (or every platform) are returned even without successful transactions in the period.
      *
      * @return Collection<int, object{slug: string, name: string, revenue: string|float, transactions: int, users: int}>
@@ -36,8 +36,7 @@ class PlatformContributionRepository
                 'platforms.slug, platforms.name, '
                 .'COALESCE(SUM(transactions.nominal), 0) as revenue, '
                 .'COUNT(transactions.id) as transactions, '
-                ."COUNT(DISTINCT CASE WHEN transactions.customer_email IS NOT NULL AND transactions.customer_email != '' "
-                .'THEN LOWER(TRIM(transactions.customer_email)) END) as users'
+                .'COUNT(DISTINCT transactions.markaz_customer_id) as users'
             )
             ->groupBy('platforms.id', 'platforms.slug', 'platforms.name')
             ->get();

@@ -31,7 +31,7 @@ File langsung diunduh dengan nama `performa_{date_from}_{date_to}.xlsx` atau `.c
 | Ringkasan KPI | Periode, Periode Sebelumnya, dan Platform; lalu tabel KPI, Nilai, Nilai Periode Sebelumnya, Perubahan (%), Tren | `/summary` |
 | Tren | Periode, Tanggal Mulai, Tanggal Akhir, Revenue, Transactions, Downloader, Conversion (%), User Baru, Repeat Order | `/trend` untuk semua metric |
 | Metode Pembayaran | Metode Pembayaran, Jumlah Transaksi, Revenue, Persentase Transaksi (%), Persentase Kontribusi (%) | `/payment-methods` |
-| Kontribusi Platform | Peringkat, Platform, Revenue, Transaksi, User, Persentase Kontribusi (%) | `/platform-contribution` |
+| Kontribusi Platform | Peringkat, Platform, Revenue, Transaksi, Pembeli Unik, Persentase Kontribusi (%) | `/platform-contribution` |
 | Waktu Pembelian | Rentang Waktu, Jam Mulai, Jam Akhir, Jumlah Transaksi, Persentase (%) | `/purchase-times` |
 
 - Rincian sheet **Tren** mengikuti rincian default filter: harian untuk default, rentang tanggal, dan bulan; bulanan untuk tahun dan rentang tahun. Rentang tanggal yang lebih dari 366 hari diekspor per bulan.
