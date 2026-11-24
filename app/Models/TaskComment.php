@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * Comments never change the task's status and are not review decisions. deleted_at exists for a future, approved
  * delete-comment feature; nothing deletes comments yet.
  */
-#[Fillable(['task_id', 'author_id', 'parent_comment_id', 'content'])]
+#[Fillable(['task_id', 'author_id', 'parent_comment_id', 'content', 'client_request_id'])]
 class TaskComment extends Model
 {
     use SoftDeletes;

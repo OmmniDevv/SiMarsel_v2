@@ -39,11 +39,11 @@ MySQL), lulus di SQLite dan MySQL.
 | `task_assignments` | ✅ | ✅ `(task_id, unassigned_at)`, `(account_id, unassigned_at)` | ✅ 4 | `active_flag` (mekanisme unik PIC aktif khusus MySQL yang diminta ERD) |
 | `task_evidences` | ✅ | ✅ `(task_id, created_at)` | ✅ 3 | — |
 | `task_reviews` | ✅ `decision` varchar(30), `updated_at` | ✅ `(task_id, created_at)` | ✅ 2 | — (`cycle` di-drop; API menghitungnya) |
-| `task_comments` | ✅ `created_at` NOT NULL | ✅ `(task_id, created_at)`, `parent_comment_id` | ✅ 3 | — |
+| `task_comments` | ✅ `created_at` NOT NULL | ✅ `(task_id, created_at)`, `parent_comment_id` | ✅ 3 | `client_request_id` (UUID per pengiriman, unique bersama `author_id`; review PR TASK-16) |
 | `task_activities` | ✅ `created_at` NOT NULL | ✅ `(task_id, created_at)` | ✅ 2 | `actor_name_snapshot` (sudah ada sebelum TASK-19, nama pelaku yang akunnya terhapus) |
 | `calendar_events` | ✅ `division_id` nullable, `creator_id` NOT NULL | ✅ `start_at` | ✅ 2 | `is_shared` (penanda agenda bersama) + tabel `calendar_event_divisions` (divisi tujuan), lihat di bawah |
 
-Perbedaan dengan ERD yang **disengaja** (5 kolom di atas) dicatat juga di `TasklistErdConformanceTest::DEVIATIONS`;
+Perbedaan dengan ERD yang **disengaja** (6 kolom di atas) dicatat juga di `TasklistErdConformanceTest::DEVIATIONS`;
 kolom lain di luar ERD membuat test gagal. Tabel di luar ERD:
 
 - `calendar_event_divisions` (`calendar_event_id`, `division_id`; PK gabungan, FK ke `calendar_events` dan

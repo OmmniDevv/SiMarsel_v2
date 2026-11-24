@@ -9,8 +9,10 @@ use App\Models\Role;
 use App\Models\Task;
 use App\Models\TaskActivity;
 use Database\Seeders\DatabaseSeeder;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -200,6 +202,8 @@ class TaskCommentTest extends TestCase
             'terlalu panjang' => [['content' => str_repeat('a', 2001)], 'content', 'Komentar maksimal 2000 karakter.'],
             'parent bukan angka' => [['content' => 'Balas', 'parent_comment_id' => 'abc'], 'parent_comment_id', 'Komentar yang dibalas tidak valid.'],
             'parent nol' => [['content' => 'Balas', 'parent_comment_id' => 0], 'parent_comment_id', 'Komentar yang dibalas tidak valid.'],
+            'ID pengiriman tidak dikirim' => [['content' => 'Halo', 'client_request_id' => null], 'client_request_id', 'ID pengiriman komentar wajib dikirim. Muat ulang halaman lalu coba lagi.'],
+            'ID pengiriman bukan UUID' => [['content' => 'Halo', 'client_request_id' => 'klik-1'], 'client_request_id', 'ID pengiriman komentar tidak valid. Muat ulang halaman lalu coba lagi.'],
         ];
     }
 
@@ -209,7 +213,7 @@ class TaskCommentTest extends TestCase
         $task = $this->task(['status' => TaskStatus::InProgress], ['staff']);
 
         $this->actingAs($this->accounts['staff'])
-            ->postJson("/api/tasks/{$task->id}/comments", $payload)
+            ->postJson("/api/tasks/{$task->id}/comments", array_filter([...['client_request_id' => (string) Str::uuid()], ...$payload], fn ($value) => $value !== null))
             ->assertUnprocessable()
             ->assertJsonValidationErrors([$field => $message]);
 
@@ -230,7 +234,7 @@ class TaskCommentTest extends TestCase
         $task = $this->task(['status' => TaskStatus::InProgress], ['staff']);
 
         $this->actingAs($this->accounts['staff'])
-            ->postJson("/api/tasks/{$task->id}/comments", ['content' => 'Halo', 'author_id' => $this->accounts['admin']->id])
+            ->postJson("/api/tasks/{$task->id}/comments", ['content' => 'Halo', 'client_request_id' => (string) Str::uuid(), 'author_id' => $this->accounts['admin']->id])
             ->assertCreated();
 
         $this->assertSame($this->accounts['staff']->id, $task->comments()->sole()->author_id);
@@ -283,34 +287,85 @@ class TaskCommentTest extends TestCase
 
     // Pengiriman ganda
 
-    public function test_the_same_comment_sent_again_within_ten_seconds_is_stored_once(): void
+    public function test_a_request_sent_again_with_the_same_id_returns_the_stored_comment(): void
     {
         $task = $this->task(['status' => TaskStatus::InProgress], ['staff']);
+        $requestId = (string) Str::uuid();
 
-        $first = $this->comment('staff', $task, 'Sudah upload.')->assertCreated()->json('data.id');
-        $this->travel(9)->seconds();
-        $this->comment('staff', $task, 'Sudah upload.')
+        $first = $this->comment('staff', $task, 'Sudah upload.', requestId: $requestId)->assertCreated()->json('data.id');
+
+        // A retry long after the first request is still the same send.
+        $this->travel(1)->hour();
+        $this->comment('staff', $task, 'Sudah upload.', requestId: $requestId)
             ->assertOk()
             ->assertJsonPath('data.id', $first)
+            ->assertJsonPath('data.content', 'Sudah upload.')
             ->assertJsonPath('message', 'Komentar berhasil dikirim.');
 
         $this->assertSame(1, $task->comments()->count());
         $this->assertSame(1, $task->activities()->where('action', TaskActivity::COMMENT_ADDED)->count());
     }
 
-    public function test_a_repeated_comment_counts_as_new_after_the_window_or_with_another_author_parent_or_text(): void
+    public function test_a_new_send_with_the_same_text_is_a_new_comment(): void
+    {
+        $task = $this->task(['status' => TaskStatus::InProgress], ['staff']);
+
+        $first = $this->comment('staff', $task, 'Oke.')->assertCreated()->json('data.id');
+        $second = $this->comment('staff', $task, 'Oke.')->assertCreated()->json('data.id');
+
+        $this->assertNotSame($first, $second);
+        $this->assertSame(['Oke.', 'Oke.'], $task->comments()->pluck('content')->all());
+        $this->assertSame(2, $task->activities()->where('action', TaskActivity::COMMENT_ADDED)->count());
+    }
+
+    public function test_the_same_id_from_another_account_is_a_separate_send(): void
     {
         $task = $this->task(['status' => TaskStatus::InProgress], ['staff', 'freelance']);
-        $root = $this->comment('staff', $task, 'Oke.')->json('data.id');
+        $requestId = (string) Str::uuid();
 
-        $this->comment('freelance', $task, 'Oke.')->assertCreated();
-        $this->comment('staff', $task, 'Oke.', $root)->assertCreated();
-        $this->comment('staff', $task, 'OKE.')->assertCreated();
-        $this->travel(11)->seconds();
-        $this->comment('staff', $task, 'Oke.')->assertCreated();
+        $this->comment('staff', $task, 'Oke.', requestId: $requestId)->assertCreated();
+        $this->comment('freelance', $task, 'Oke.', requestId: $requestId)->assertCreated();
 
-        $this->assertSame(5, $task->comments()->count());
-        $this->assertSame(5, $task->activities()->where('action', TaskActivity::COMMENT_ADDED)->count());
+        $this->assertSame(2, $task->comments()->count());
+    }
+
+    public function test_an_id_already_used_on_another_task_is_rejected(): void
+    {
+        $task = $this->task(['status' => TaskStatus::InProgress], ['staff']);
+        $other = $this->task(['status' => TaskStatus::InProgress], ['staff']);
+        $requestId = (string) Str::uuid();
+
+        $this->comment('staff', $task, 'Oke.', requestId: $requestId)->assertCreated();
+        $this->comment('staff', $other, 'Oke.', requestId: $requestId)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['client_request_id' => 'ID pengiriman ini sudah dipakai untuk komentar lain. Muat ulang halaman lalu coba lagi.']);
+
+        $this->assertSame(0, $other->comments()->count());
+        $this->assertSame(0, $other->activities()->count());
+    }
+
+    public function test_a_retry_that_arrives_after_the_task_is_done_still_returns_the_stored_comment(): void
+    {
+        $task = $this->task(['status' => TaskStatus::OnReview], ['staff']);
+        $requestId = (string) Str::uuid();
+
+        $first = $this->comment('staff', $task, 'Siap direview.', requestId: $requestId)->assertCreated()->json('data.id');
+        $task->forceFill(['status' => TaskStatus::Done])->save();
+
+        $this->comment('staff', $task, 'Siap direview.', requestId: $requestId)
+            ->assertOk()
+            ->assertJsonPath('data.id', $first);
+    }
+
+    public function test_the_database_keeps_one_comment_per_account_and_id(): void
+    {
+        $task = $this->task(['status' => TaskStatus::InProgress], ['staff']);
+        $requestId = (string) Str::uuid();
+        $this->comment('staff', $task, 'Oke.', requestId: $requestId)->assertCreated();
+
+        $this->expectException(UniqueConstraintViolationException::class);
+
+        $task->comments()->create(['author_id' => $this->accounts['staff']->id, 'content' => 'Oke.', 'client_request_id' => $requestId]);
     }
 
     // Histori, urutan, dan efek samping
@@ -411,11 +466,15 @@ class TaskCommentTest extends TestCase
         $this->assertSame($before, $queries());
     }
 
-    private function comment(string $role, Task $task, string $content, ?int $parentId = null): TestResponse
+    /**
+     * Each call is a new press of Send with its own ID, unless a request ID is given to replay an earlier one.
+     */
+    private function comment(string $role, Task $task, string $content, ?int $parentId = null, ?string $requestId = null): TestResponse
     {
         return $this->actingAs($this->accounts[$role])->postJson(
             "/api/tasks/{$task->id}/comments",
-            ['content' => $content] + ($parentId === null ? [] : ['parent_comment_id' => $parentId]),
+            ['content' => $content, 'client_request_id' => $requestId ?? (string) Str::uuid()]
+                + ($parentId === null ? [] : ['parent_comment_id' => $parentId]),
         );
     }
 

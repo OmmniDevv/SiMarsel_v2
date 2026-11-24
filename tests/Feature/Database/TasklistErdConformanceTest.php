@@ -84,6 +84,7 @@ class TasklistErdConformanceTest extends TestCase
         'task_assignments' => ['active_flag'],      // the MySQL mechanism the ERD asks for: one active PIC per account
         'task_activities' => ['actor_name_snapshot'], // existing before TASK-19: name of a deleted actor
         'calendar_events' => ['is_shared'],         // agenda access of the existing Schedule/Calendar (PR #115 review)
+        'task_comments' => ['client_request_id'],   // one comment per send, so a retried request is not stored twice (PR TASK-16 review)
     ];
 
     /**

@@ -97,7 +97,7 @@ lintas divisi, dan tampilan read-only untuk tugas di luar kewenangan. Calendar d
 | Review Approve / Request Revision, self-approval Manajer/Supervisor | ✅ Siap | Ikuti `can_review` |
 | Monitoring | ✅ Siap | Kunci metrik status berganti nama |
 | Calendar & Timeline | ✅ Siap | Tidak perlu perubahan FE; tombol tugas terkait di pop-up agenda tidak muncul lagi |
-| Komentar & balasan | ✅ Siap (TASK-16) | `GET`/`POST /api/tasks/{id}/comments`; form tampil bila `can_comment`. Tampilkan `content` dengan `x-text`, kunci tombol kirim selama request berjalan, tampilkan komentar setelah respons sukses (`201`, atau `200` untuk kiriman ulang), dan error `422` di field terkait |
+| Komentar & balasan | ✅ Siap (TASK-16) | `GET`/`POST /api/tasks/{id}/comments`; form tampil bila `can_comment`. Kirim `client_request_id` baru (UUID) setiap kali tombol Kirim ditekan dan pakai ID yang sama saat retry. Tampilkan `content` dengan `x-text`, kunci tombol kirim selama request berjalan, tampilkan komentar setelah respons sukses (`201`, atau `200` untuk kiriman ulang), dan error `422` di field terkait |
 | Hapus Task Card | ✅ Siap (TASK-12) | `DELETE /api/tasks/{id}` dengan `version`; tampilkan tombol bila `can_delete`; tugas Done tidak bisa dihapus (`422`) |
 | Filter tanggal, bulan, tahun, rentang | ✅ Siap (TASK-14) | Kirim parameter yang sama ke daftar dan monitoring agar Board, Table, dan KPI konsisten; kirim hanya parameter mode aktif |
 | Pop-up Calendar | ✅ Siap (TASK-12, TASK-15) | Item `deadlines` membawa `task_id`; `GET /api/tasks/{id}/preview`: ringkasan terbaru, seluruh PIC aktif, dan flag akses untuk satu tugas |
