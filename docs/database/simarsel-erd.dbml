@@ -361,6 +361,7 @@ Table task_comments {
   author_id bigint [not null]
   parent_comment_id bigint [null]
   content text [not null]
+  client_request_id uuid [null]
   created_at timestamp [not null]
   updated_at timestamp [null]
   deleted_at timestamp [null]
@@ -368,6 +369,7 @@ Table task_comments {
   indexes {
     (task_id, created_at)
     parent_comment_id
+    (author_id, client_request_id) [unique]
   }
 }
 
