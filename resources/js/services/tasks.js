@@ -17,6 +17,7 @@ import { http } from '../http';
  * PATCH  /api/tasks/{id}/assignment            → { data: TaskDetail, message }         (kirim pic_ids, version, division_id opsional)
  * GET    /api/tasks/{id}/evidences             → { data: [Evidence] }
  * POST   /api/tasks/{id}/evidences             → { data: Evidence, message }           (multipart: file atau url, note)
+ * DELETE /api/tasks/{id}/evidences/{evidence}  → { message }                           (hanya evidence dengan can_delete)
  * POST   /api/tasks/{id}/reviews               → { data: TaskDetail, message }         (kirim decision, note, version)
  * GET    /api/tasks/{id}/activities            → { data: [Activity] }                  (terbaru lebih dulu)
  * GET    /api/tasks/schedule?from&to&division  → { data: [ScheduleItem] }
@@ -59,6 +60,9 @@ export const assignTask = (id, body) => http(`/api/tasks/${id}/assignment`, { me
 
 // Evidence tidak bergantung pada VITE_TASK_API_READY: API-nya sudah tersedia.
 export const fetchEvidences = (id) => http(`/api/tasks/${id}/evidences`);
+
+// Hanya PIC aktif yang mengunggahnya yang boleh menghapus (flag can_delete per evidence); soft delete di backend.
+export const deleteEvidence = (taskId, evidenceId) => http(`/api/tasks/${taskId}/evidences/${evidenceId}`, { method: 'DELETE' });
 
 // Keputusan QA (approve/revisi) tidak bergantung pada VITE_TASK_API_READY: API-nya sudah tersedia.
 export const reviewTask = (id, body) => http(`/api/tasks/${id}/reviews`, { method: 'POST', body });

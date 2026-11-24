@@ -233,7 +233,10 @@ class PerformancePeriodContractTest extends TestCase
         $platform = Platform::where('slug', 'app-a')->first();
         $other = Platform::factory()->create(['slug' => 'app-b']);
 
-        $row = ['platform_id' => $platform->id, 'dataset' => 'transactions', 'date_from' => '2026-11-11', 'date_to' => '2026-11-11', 'cutoff_at' => '2026-11-11 14:00:00', 'is_complete' => true, 'payload' => '{}', 'recorded_at' => '2026-11-11 14:07:00'];
+        $row = [
+            'platform_id' => $platform->id, 'dataset' => 'transactions', 'date_from' => '2026-11-11', 'date_to' => '2026-11-11',
+            'cutoff_at' => '2026-11-11 14:00:00', 'is_complete' => true, 'payload' => '{}', 'recorded_at' => '2026-11-11 14:05:00',
+        ];
 
         DB::table('dashboard_snapshots')->insert([
             $row,
@@ -250,7 +253,7 @@ class PerformancePeriodContractTest extends TestCase
         $this->assertSame('2026-11-11T14:00:00+07:00', $cutoffs['app-a'][0]->toIso8601String());
     }
 
-    public function test_repository_reports_unknown_coverage_without_complete_snapshots(): void
+    public function test_repository_reports_unknown_coverage_until_the_table_exists(): void
     {
         $day = CarbonImmutable::parse('2026-11-11', 'Asia/Jakarta');
 

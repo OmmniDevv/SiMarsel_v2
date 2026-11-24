@@ -5,6 +5,7 @@ import {
     assignTask,
     changeTaskStatus,
     createTask,
+    deleteEvidence,
     deleteTask,
     fetchAssignmentOptions,
     fetchCalendar,
@@ -891,6 +892,8 @@ Alpine.data('taskDetail', () => ({
     evidenceForm: { type: 'file', file: null, url: '', note: '' },
     evidenceErrors: {},
     sendingEvidence: false,
+    confirmingEvidenceId: null,
+    deletingEvidenceId: null,
 
     reviewMode: null,
     reviewNote: '',
@@ -902,7 +905,7 @@ Alpine.data('taskDetail', () => ({
     },
 
     reset() {
-        Object.assign(this, { task: null, state: 'idle', editing: false, confirmingDelete: false, assigneeState: 'idle', reviewMode: null, reviewNote: '', reviewError: '', evidences: [], activities: [], activityState: 'idle', activityError: '' });
+        Object.assign(this, { task: null, state: 'idle', editing: false, confirmingDelete: false, assigneeState: 'idle', reviewMode: null, reviewNote: '', reviewError: '', evidences: [], evidenceErrors: {}, confirmingEvidenceId: null, activities: [], activityState: 'idle', activityError: '' });
         this.activityRequest += 1;
     },
 
@@ -985,7 +988,7 @@ Alpine.data('taskDetail', () => ({
     // Bila gagal, data yang sudah tampil dipertahankan; panel tetap bisa dimuat ulang saat dibuka kembali.
     // Bila gagal, evidence tetap tampil dari respons POST, tetapi histori belum memuat aktivitasnya: bagian histori
     // menampilkan pesan dan tombol Coba lagi (memuat ulang dari API histori).
-    async refreshDetail() {
+    async refreshDetail(failure = 'Evidence tersimpan, tetapi histori aktivitas gagal diperbarui.') {
         const id = this.task?.id;
         // Permintaan histori yang masih berjalan dimulai sebelum aktivitas ini tercatat.
         const request = ++this.activityRequest;
@@ -996,7 +999,7 @@ Alpine.data('taskDetail', () => ({
         } catch {
             if (this.task?.id !== id || request !== this.activityRequest) return;
             this.activityState = 'error';
-            this.activityError = 'Evidence tersimpan, tetapi histori aktivitas gagal diperbarui.';
+            this.activityError = failure;
         }
     },
 
@@ -1189,6 +1192,51 @@ Alpine.data('taskDetail', () => ({
             }
         } finally {
             this.assigning = false;
+        }
+    },
+
+    // --- Hapus evidence sendiri (TASK-13) -----------------------------------------------------
+
+    // Tombol hanya tampil bila backend mengirim can_delete pada evidence itu (PIC aktif pengunggahnya, To Do/On Process).
+    // Setelah dihapus, detail diambil ulang agar histori dan flag evidence lain sama dengan yang tersimpan.
+    async removeEvidence(evidence) {
+        if (this.deletingEvidenceId !== null || evidence?.can_delete !== true) return;
+
+        // Panel bisa ditutup atau berpindah tugas selama request berjalan: hasilnya hanya diterapkan pada tugas ini.
+        const taskId = this.task.id;
+        this.deletingEvidenceId = evidence.id;
+        this.evidenceErrors = {};
+
+        try {
+            const { message } = await deleteEvidence(taskId, evidence.id);
+            showToast({ title: 'Evidence dihapus', text: message ?? 'Evidence berhasil dihapus.' });
+
+            if (this.task?.id !== taskId) {
+                const listed = this.tasks.find(({ id }) => id === taskId);
+                if (listed) this.syncTask({ ...listed, evidence_count: Math.max(0, (listed.evidence_count ?? 1) - 1) });
+
+                return;
+            }
+
+            this.evidences = this.evidences.filter(({ id }) => id !== evidence.id);
+            this.applyTask({ evidence_count: Math.max(0, (this.task.evidence_count ?? 1) - 1) });
+            await this.refreshDetail('Evidence dihapus, tetapi histori aktivitas gagal diperbarui.');
+        } catch (error) {
+            // Penolakan untuk tugas yang sudah tidak ditampilkan tidak boleh muncul di atas tugas lain.
+            if (this.task?.id !== taskId) return;
+
+            if (error?.status === 422) {
+                this.evidenceErrors = { evidence: validationErrors(error).evidence ?? errorMessage(error, 'Evidence gagal dihapus.') };
+            } else if (error?.status === 404) {
+                showToast({ type: 'info', title: 'Gagal', text: 'Evidence tidak ditemukan atau sudah dihapus.', duration: 5000 });
+            } else {
+                notifyFailure(error, 'Evidence gagal dihapus.');
+            }
+            // Status tugas atau PIC mungkin sudah berubah: muat ulang daftar evidence beserta flag can_delete terbaru.
+            await this.refreshDetail('Daftar evidence gagal dimuat ulang. Tutup dan buka kembali detail tugas.');
+        } finally {
+            this.deletingEvidenceId = null;
+            this.confirmingEvidenceId = null;
         }
     },
 
