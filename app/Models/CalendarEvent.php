@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * An agenda on the shared schedule (Timeline and Calendar), next to the tasks' own dates. The only source of
- * agendas since TASK-19; schedule_events is kept read-only until the move is verified.
+ * agendas are stored in calendar_events.
  *
  * The access rules of the existing Schedule/Calendar: a shared agenda (is_shared) is visible to every active
  * account; an internal one to Admin and to the accounts of its target divisions only, so to Admin alone when it has
