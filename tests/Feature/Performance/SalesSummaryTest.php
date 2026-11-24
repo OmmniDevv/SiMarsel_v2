@@ -380,7 +380,6 @@ class SalesSummaryTest extends TestCase
             'net_nominal' => $netNominal,
             'customer_name' => $name,
             'customer_email' => $email,
-            'status_message' => $status?->label() ?? '',
         ]);
     }
 
