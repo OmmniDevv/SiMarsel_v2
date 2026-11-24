@@ -45,7 +45,6 @@ class TransactionFactory extends Factory
         return [
             'platform_id' => Platform::factory(),
             ...$this->markazIdentity('markaz'),
-            'markaz_user_id' => fake()->numberBetween(100000, 999999),
             'paid_date' => fake()->dateTimeBetween('-6 months')->format('Y-m-d'),
             'paid_time' => fake()->time(),
             'payment_method' => fake()->randomElement(self::PAYMENT_METHODS),
@@ -53,8 +52,10 @@ class TransactionFactory extends Factory
             'promo_code' => null,
             'product' => $this->product(null),
             'product_type' => fake()->boolean(70) ? Transaction::TYPE_FIRST : Transaction::TYPE_RENEWAL,
+            'markaz_customer_id' => fake()->numberBetween(10000, 9999999),
             'customer_email' => self::customerEmail(),
-            'status_message' => Transaction::STATUS_SUCCESS,
+            'source_status' => MarkazTransactionStatus::Success->value,
+            'effective_status' => null,
         ];
     }
 
@@ -85,7 +86,10 @@ class TransactionFactory extends Factory
 
     public function failed(): static
     {
-        return $this->state(fn () => ['status_message' => 'failed']);
+        return $this->state(fn () => [
+            'source_status' => MarkazTransactionStatus::Failed->value,
+            'effective_status' => null,
+        ]);
     }
 
     /**
@@ -98,7 +102,6 @@ class TransactionFactory extends Factory
             'paid_time' => null,
             'markaz_paid_at' => null,
             'source_status' => MarkazTransactionStatus::Pending->value,
-            'status_message' => MarkazTransactionStatus::Pending->label(),
         ]);
     }
 

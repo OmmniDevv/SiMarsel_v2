@@ -29,14 +29,14 @@ Jika beberapa tahun dipilih, setiap KPI adalah **gabungan** semua tahun tersebut
 
 ### Rumus KPI
 
-Semua KPI hanya memakai transaksi dengan `status_message` = `Success`.
+KPI pembayaran hanya memakai transaksi dengan status laporan `Success`. Status laporan berasal dari `effective_status`, kemudian `source_status` jika `effective_status` kosong.
 
 | Key | KPI | Sumber | Rumus |
 |---|---|---|---|
 | `total_revenue` | Total Revenue | `transactions` | Jumlah `nominal` |
 | `total_transactions` | Total Transaksi | `transactions` | Jumlah transaksi |
 | `total_downloaders` | Total Downloader | `downloaders` | Jumlah `total` |
-| `unique_users` | User Unik | `transactions` | Jumlah email berbeda. Email disamakan huruf kecilnya dan spasinya dibuang, jadi `Alice@x.com` dan ` alice@x.com ` dihitung satu user. Transaksi tanpa email tidak dihitung. |
+| `unique_users` | Pembeli Unik | `transactions` | Jumlah pasangan `(platform_id, markaz_customer_id)` yang berbeda. Email tidak dipakai sebagai identifier. Transaksi tanpa `markaz_customer_id` tidak dihitung. |
 | `new_users` | User Baru | `transactions` | Jumlah transaksi berhasil dengan `product_type` = `Perdana` |
 | `repeat_orders` | Repeat Order | `transactions` | Jumlah transaksi berhasil dengan `product_type` = `Perpanjangan` |
 | `average_order_value` | AOV | `transactions` | `total_revenue ÷ total_transactions`, dibulatkan 2 desimal. `null` jika tidak ada transaksi. |

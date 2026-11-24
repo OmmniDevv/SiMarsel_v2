@@ -183,7 +183,7 @@ class TransactionAggregationService
         $revenue = (float) array_sum(array_map(fn (TransactionRecord $record) => $record->netNominal, $payments));
         $buyers = array_unique(array_map(
             fn (TransactionRecord $record) => $record->platformId.':'.$record->markazCustomerId,
-            $payments,
+            array_filter($payments, fn (TransactionRecord $record) => $record->markazCustomerId !== null),
         ));
 
         return [

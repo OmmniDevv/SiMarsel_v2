@@ -30,10 +30,9 @@ class DashboardSnapshotMigrationTest extends TestCase
         DB::table('downloaders')->insert(['platform_id' => $platformId, 'date' => '2026-11-15', 'total' => 120, 'created_at' => now(), 'updated_at' => now()]);
         $transactionId = DB::table('transactions')->insertGetId([
             'platform_id' => $platformId,
-            'markaz_user_id' => 445566,
+            'markaz_customer_id' => 445566,
             'trx_id' => 'cerebrum-476770',
             'nominal' => 182000,
-            'status_message' => 'Pending',
             'source_status' => 0,
             'created_at' => now(),
             'updated_at' => now(),

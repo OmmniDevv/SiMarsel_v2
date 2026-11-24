@@ -29,7 +29,7 @@ async function taskApiFixture() {
 
 test('assignment options and updates use the existing backend endpoints', async () => {
     const { api, requests } = await taskApiFixture();
-    const payload = { pic_id: 23, division_id: 4, version: 7 };
+    const payload = { pic_ids: [23, 24], division_id: 4, version: 7 };
 
     await api.fetchAssignmentOptions(12);
     await api.assignTask(12, payload);

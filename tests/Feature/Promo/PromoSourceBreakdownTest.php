@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Promo;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Account;
 use App\Models\Platform;
 use App\Models\PromoCode;
@@ -49,13 +50,13 @@ class PromoSourceBreakdownTest extends TestCase
     /**
      * @param  list<string>|null  $codes
      */
-    private function transaction(?array $codes, float $nominal, string $paidDate = '2026-09-10', ?Platform $platform = null, string $status = Transaction::STATUS_SUCCESS): void
+    private function transaction(?array $codes, float $nominal, string $paidDate = '2026-09-10', ?Platform $platform = null, MarkazTransactionStatus $status = MarkazTransactionStatus::Success): void
     {
         Transaction::factory()->for($platform ?? $this->jadiasn)->create([
             'paid_date' => $paidDate,
             'promo_code' => $codes,
             'nominal' => $nominal,
-            'status_message' => $status,
+            'source_status' => $status->value,
         ]);
     }
 
@@ -80,7 +81,7 @@ class PromoSourceBreakdownTest extends TestCase
         // No code: no usage and no source revenue, but still in the revenue total.
         $this->transaction(null, 600000);
 
-        $this->transaction(['APP26'], 999999, status: 'failed');
+        $this->transaction(['APP26'], 999999, status: MarkazTransactionStatus::Failed);
         $this->transaction(['TT26'], 999999, '2026-10-01');
     }
 

@@ -18,7 +18,7 @@ Contoh:
 
 ### Rentang waktu
 
-Hanya transaksi dengan `status_message` = `Success` yang dihitung. Jam diambil dari `paid_time` transaksi (WIB, sesuai data Markaz).
+Hanya transaksi dengan status laporan `Success` yang dihitung. Status laporan memakai `effective_status`, kemudian `source_status` sebagai fallback. Jam diambil dari `paid_time` transaksi (WIB, sesuai data Markaz).
 
 | `key` | `label` | Jam |
 |---|---|---|

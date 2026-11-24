@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\PromoCode;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Funnel;
 use App\Models\Platform;
 use App\Models\Transaction;
@@ -70,6 +71,21 @@ class PromoCodeUsageNormalizationTest extends TestCase
         $this->transaction([null, '  ']);
 
         $this->assertSame(0, TransactionPromoCode::count());
+    }
+
+    public function test_normalization_uses_effective_status_then_source_status(): void
+    {
+        $sourceSuccess = $this->transaction(['SUCCESS'], attributes: [
+            'source_status' => MarkazTransactionStatus::Success->value,
+            'effective_status' => null,
+        ]);
+        $effectiveFailed = $this->transaction(['FAILED'], attributes: [
+            'source_status' => MarkazTransactionStatus::Success->value,
+            'effective_status' => MarkazTransactionStatus::Failed->value,
+        ]);
+
+        $this->assertCount(1, $sourceSuccess->promoCodeUsages);
+        $this->assertCount(0, $effectiveFailed->promoCodeUsages);
     }
 
     public function test_codes_are_stored_in_markaz_order_with_their_raw_value(): void
@@ -162,20 +178,18 @@ class PromoCodeUsageNormalizationTest extends TestCase
         Transaction::insert([
             [
                 'platform_id' => $this->platformA->id,
-                'markaz_user_id' => 1,
                 'trx_id' => 'jadiasn-1',
                 'paid_date' => '2026-09-10',
                 'nominal' => 100000,
-                'status_message' => Transaction::STATUS_SUCCESS,
+                'source_status' => MarkazTransactionStatus::Success->value,
                 'promo_code' => json_encode(['CPNS26', 'RESELLER01']),
             ],
             [
                 'platform_id' => $this->platformA->id,
-                'markaz_user_id' => 2,
                 'trx_id' => 'jadiasn-2',
                 'paid_date' => '2026-09-10',
                 'nominal' => 100000,
-                'status_message' => Transaction::STATUS_SUCCESS,
+                'source_status' => MarkazTransactionStatus::Success->value,
                 'promo_code' => json_encode(['A', 'B', 'C']),
             ],
         ]);
