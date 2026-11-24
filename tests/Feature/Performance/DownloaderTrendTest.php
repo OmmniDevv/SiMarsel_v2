@@ -199,9 +199,8 @@ class DownloaderTrendTest extends TestCase
         $this->coverage('2026-11-04', '2026-11-10', '2026-11-11 00:00:00');
         $this->coverage('2026-10-28', '2026-11-03', '2026-11-04 00:00:00');
 
-        foreach (['2026-11-04' => 10, '2026-11-06' => 0, '2026-11-08' => 35, '2026-11-10' => 55, '2026-10-30' => 40] as $date => $total) {
-            $this->daily($date, $total);
-        }
+        $this->dailyRange('2026-11-04', [10, 0, 0, 0, 35, 0, 55]);
+        $this->dailyRange('2026-10-28', [0, 0, 40, 0, 0, 0, 0]);
 
         $trend = $this->trend('preset=last_7_days');
 
@@ -210,13 +209,12 @@ class DownloaderTrendTest extends TestCase
         $this->assertSame(0, $trend['buckets'][2]['active']['value']);
         $this->assertEquals([['slug' => 'app-a', 'name' => 'App A', 'availability' => 'complete', 'as_of' => '2026-11-11T00:00:00+07:00', 'value' => 100, 'share_percentage' => 100.0]], $trend['platforms']);
 
-        $summary = $this->actingAs($this->manager)
-            ->getJson('/api/performance/summary?platforms[]=app-a&preset=last_7_days&dataset=downloaders')
-            ->assertOk()
-            ->json('data.kpis.total_downloaders');
+        $summary = $this->summaryDownloaders('preset=last_7_days');
 
         $this->assertSame(100, $summary['value']);
         $this->assertSame(40, $summary['previous_value']);
+        $this->assertEquals($trend['totals']['change']['change_percentage'], $summary['change_percentage']);
+        $this->assertSame('up', $summary['trend']);
 
         $sheet = $this->exportedSection('platforms[]=app-a&preset=last_7_days', 'Downloader', 'Metode Pembayaran');
 
@@ -224,6 +222,124 @@ class DownloaderTrendTest extends TestCase
         $this->assertSame(['04 Nov 2026', '10', '28 Okt 2026', '0', ''], $sheet[1]);
         $this->assertSame(['Total', '100', '', '40', '150'], $sheet[9]);
         $this->assertSame(['App A', '100', '100'], $sheet[12]);
+    }
+
+    public function test_a_date_without_a_daily_total_is_unavailable_while_a_stored_zero_stays_zero(): void
+    {
+        $this->coverage('2026-11-04', '2026-11-10', '2026-11-11 00:00:00');
+        $this->coverage('2026-10-28', '2026-11-03', '2026-11-04 00:00:00');
+        $this->dailyRange('2026-10-28', [5, 5, 5, 5, 5, 5, 5]);
+
+        foreach (['2026-11-04' => 10, '2026-11-05' => 0, '2026-11-06' => 20, '2026-11-08' => 30, '2026-11-09' => 40, '2026-11-10' => 50] as $date => $total) {
+            $this->daily($date, $total);
+        }
+
+        $trend = $this->trend('preset=last_7_days');
+        $buckets = $trend['buckets'];
+
+        $this->assertSame('complete', $buckets[1]['active']['availability']);
+        $this->assertSame(0, $buckets[1]['active']['value']);
+
+        // 7 Nov has no daily total: unknown, not 0, and not compared.
+        $this->assertSame('unavailable', $buckets[3]['active']['availability']);
+        $this->assertNull($buckets[3]['active']['value']);
+        $this->assertSame(['change_percentage' => null, 'trend' => null, 'is_comparable' => false], $buckets[3]['change']);
+        $this->assertSame(5, $buckets[3]['comparison']['value']);
+
+        // A total over an unknown date is unknown too, instead of an undercount of 150.
+        $this->assertSame('unavailable', $trend['totals']['active']['availability']);
+        $this->assertNull($trend['totals']['active']['value']);
+        $this->assertSame(35, $trend['totals']['comparison']['value']);
+        $this->assertNull($trend['totals']['change']['trend']);
+        $this->assertNull($trend['platforms'][0]['value']);
+        $this->assertNull($trend['platforms'][0]['share_percentage']);
+
+        $weekly = $this->trend('preset=last_7_days&granularity=weekly')['buckets'];
+
+        $this->assertSame('unavailable', $weekly[0]['active']['availability']);
+        $this->assertNull($weekly[0]['active']['value']);
+        $this->assertSame(90, $weekly[1]['active']['value']);
+    }
+
+    public function test_a_platform_without_a_daily_total_leaves_the_combined_value_unavailable(): void
+    {
+        $other = Platform::factory()->create(['slug' => 'app-b', 'name' => 'App B']);
+
+        foreach ([$this->platform, $other] as $platform) {
+            $this->coverage('2026-11-09', '2026-11-10', '2026-11-11 00:00:00', $platform);
+            $this->coverage('2026-11-07', '2026-11-08', '2026-11-09 00:00:00', $platform);
+            $this->daily('2026-11-07', 10, $platform);
+            $this->daily('2026-11-08', 10, $platform);
+            $this->daily('2026-11-09', 30, $platform);
+        }
+
+        $this->daily('2026-11-10', 40);
+
+        $trend = $this->actingAs($this->manager)
+            ->getJson(self::URL.'?platforms[]=app-a&platforms[]=app-b&preset=date_range&date_from=2026-11-09&date_to=2026-11-10')
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame(60, $trend['buckets'][0]['active']['value']);
+        $this->assertSame('unavailable', $trend['buckets'][1]['active']['availability']);
+        $this->assertNull($trend['buckets'][1]['active']['value']);
+        $this->assertNull($trend['totals']['active']['value']);
+
+        $this->assertSame([70, null], array_column($trend['platforms'], 'value'));
+        $this->assertSame([null, null], array_column($trend['platforms'], 'share_percentage'));
+
+        $summary = $this->actingAs($this->manager)
+            ->getJson('/api/performance/summary?platforms[]=app-a&platforms[]=app-b&preset=date_range&date_from=2026-11-09&date_to=2026-11-10')
+            ->assertOk()
+            ->json('data.kpis');
+
+        $this->assertNull($summary['total_downloaders']['value']);
+        $this->assertSame(40, $summary['total_downloaders']['previous_value']);
+        $this->assertNull($summary['total_downloaders']['trend']);
+        $this->assertNull($summary['conversion_rate']['value']);
+    }
+
+    public function test_summary_and_trend_report_the_same_unavailable_downloaders_without_data(): void
+    {
+        $this->coverage('2026-11-04', '2026-11-10', '2026-11-11 00:00:00');
+        $this->coverage('2026-10-28', '2026-11-03', '2026-11-04 00:00:00');
+
+        $trend = $this->trend('preset=last_7_days');
+        $summary = $this->actingAs($this->manager)
+            ->getJson('/api/performance/summary?platforms[]=app-a&preset=last_7_days')
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame('unavailable', $trend['totals']['active']['availability']);
+        $this->assertNull($trend['totals']['active']['value']);
+        $this->assertNull($trend['totals']['comparison']['value']);
+
+        $this->assertSame(
+            ['value' => null, 'previous_value' => null, 'change_percentage' => null, 'trend' => null],
+            $summary['kpis']['total_downloaders'],
+        );
+        $this->assertNull($summary['kpis']['conversion_rate']['value']);
+        $this->assertTrue($summary['is_empty']);
+
+        // Without completeness metadata the shared aggregation is unavailable as well.
+        $this->assertNull($this->summaryDownloaders('preset=last_30_days')['value']);
+        $this->assertNull($this->trend('preset=last_30_days')['totals']['active']['value']);
+    }
+
+    public function test_summary_reads_the_recorded_equivalent_hour_like_the_trend(): void
+    {
+        $this->snapshot('2026-11-11', '2026-11-11', '2026-11-11 14:00:00', ['2026-11-11' => 180]);
+        $this->daily('2026-11-11', 180);
+        $this->snapshot('2026-11-10', '2026-11-10', '2026-11-10 14:00:00', ['2026-11-10' => 240]);
+        $this->daily('2026-11-10', 300);
+
+        $trend = $this->trend('preset=today')['totals'];
+        $summary = $this->summaryDownloaders('preset=today');
+
+        $this->assertSame($trend['active']['value'], $summary['value']);
+        $this->assertSame(240, $summary['previous_value']);
+        $this->assertEquals(-25.0, $summary['change_percentage']);
+        $this->assertSame('down', $summary['trend']);
     }
 
     public function test_only_daily_totals_keep_hourly_points_unknown_until_the_end_of_the_day(): void
@@ -303,11 +419,34 @@ class DownloaderTrendTest extends TestCase
     }
 
     /**
+     * @param  list<int>  $totals  One daily total per consecutive date from $from.
+     */
+    private function dailyRange(string $from, array $totals): void
+    {
+        foreach ($totals as $offset => $total) {
+            $this->daily(CarbonImmutable::parse($from)->addDays($offset)->toDateString(), $total);
+        }
+    }
+
+    /**
+     * The Total Downloader KPI of /summary, called without a dataset like the dashboard does.
+     *
+     * @return array<string, mixed>
+     */
+    private function summaryDownloaders(string $query): array
+    {
+        return $this->actingAs($this->manager)
+            ->getJson('/api/performance/summary?platforms[]=app-a&'.$query)
+            ->assertOk()
+            ->json('data.kpis.total_downloaders');
+    }
+
+    /**
      * A complete downloaders record of the whole range, used by the resolver as the data limit.
      */
-    private function coverage(string $from, string $to, string $cutoffAt): void
+    private function coverage(string $from, string $to, string $cutoffAt, ?Platform $platform = null): void
     {
-        $this->snapshot($from, $to, $cutoffAt, []);
+        $this->snapshot($from, $to, $cutoffAt, [], platform: $platform);
     }
 
     /**
