@@ -2,6 +2,8 @@
 
 Database: MySQL, nama `simarsel`. Struktur dibuat dari migration di `database/migrations`.
 
+ERD gabungan modul bisnis tersedia di [database/simarsel-erd.dbml](database/simarsel-erd.dbml). File tersebut mencakup akun, dashboard, promo, tasklist, dan kalender. Tabel internal Laravel tidak ditampilkan. Agenda disimpan di `calendar_events` dan divisi tujuannya di `calendar_event_divisions`. Kedua tabel jadwal lama beserta proses penyalinannya sudah dihapus; migration pembersihan menghapus tabel lama pada database development yang sebelumnya sudah dimigrasikan, tanpa mengubah data kalender aktif.
+
 ## Setup
 
 ```bash
