@@ -74,13 +74,12 @@ class TasklistErdConformanceTest extends TestCase
     ];
 
     /**
-     * Columns the ERD does not list, each documented in tasklist-migration-validation-report.md.
+     * Columns the ERD does not list but the application still requires.
      *
      * @var array<string, array<int, string>>
      */
     private const DEVIATIONS = [
         'accounts' => ['password'],                 // "Kolom autentikasi lain tidak ditampilkan"
-        'tasks' => ['pic_id'],                      // kept until every reader is compatible, as the ERD notes
         'task_assignments' => ['active_flag'],      // the MySQL mechanism the ERD asks for: one active PIC per account
         'task_activities' => ['actor_name_snapshot'], // existing before TASK-19: name of a deleted actor
         'calendar_events' => ['is_shared'],         // agenda access of the existing Schedule/Calendar (PR #115 review)

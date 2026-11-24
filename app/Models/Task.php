@@ -14,10 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * PICs live in task_assignments. The legacy pic_id column is kept only as migrated data and is not fillable, so the
- * application never writes it again.
- */
+/** PIC assignments live exclusively in task_assignments. */
 #[Fillable([
     'title', 'description', 'category_id', 'division_id', 'platform_id', 'creator_id', 'priority', 'status',
     'start_date', 'deadline', 'requires_review', 'evidence_required', 'completed_at', 'deleted_by',

@@ -7,7 +7,7 @@ use Illuminate\Database\Migrations\Migration;
 /**
  * The last TASK-19 migration, so it is the first one a rollback reaches. It changes nothing on the way up; on the
  * way down it stops the rollback while data exists that the older schema cannot hold, because dropping the new
- * tables would delete it and neither tasks.pic_id nor a pre-deploy backup has it.
+ * tables would delete it. PIC assignments are preserved only in task_assignments.
  */
 return new class extends Migration
 {

@@ -197,7 +197,7 @@ class TaskEvidenceTest extends TestCase
     public function test_evidence_cannot_be_sent_for_another_task_through_the_pic_task(): void
     {
         $own = $this->task(TaskStatus::InProgress);
-        $other = $this->task(TaskStatus::InProgress, ['pic_id' => $this->otherStaff->id]);
+        $other = $this->task(TaskStatus::InProgress, [], [$this->otherStaff]);
 
         $this->actingAs($this->staff)
             ->postJson($this->url($own), ['url' => 'https://example.com/hasil', 'task_id' => $other->id])
@@ -524,11 +524,10 @@ class TaskEvidenceTest extends TestCase
     /**
      * @param  array<string, mixed>  $attributes
      */
-    private function task(TaskStatus $status, array $attributes = []): Task
+    private function task(TaskStatus $status, array $attributes = [], ?array $pics = null): Task
     {
-        return Task::factory()->create([
+        return Task::factory()->withPics(...($pics ?? [$this->staff]))->create([
             'division_id' => $this->marketing->id,
-            'pic_id' => $this->staff->id,
             'creator_id' => $this->manager->id,
             'status' => $status,
             'requires_review' => true,

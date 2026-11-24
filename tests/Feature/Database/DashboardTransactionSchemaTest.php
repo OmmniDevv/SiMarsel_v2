@@ -102,14 +102,12 @@ class DashboardTransactionSchemaTest extends TestCase
         $this->assertSame($phone, Transaction::factory()->create(['customer_phone' => $phone])->fresh()->customer_phone);
     }
 
-    public function test_legacy_markaz_user_id_is_optional_and_kept_when_present(): void
+    public function test_legacy_markaz_user_id_has_been_removed(): void
     {
-        $withoutLegacyId = Transaction::factory()->create(['markaz_user_id' => null, 'markaz_customer_id' => 445566]);
-        $legacy = Transaction::factory()->create(['markaz_user_id' => 123456]);
+        $transaction = Transaction::factory()->create(['markaz_customer_id' => 445566]);
 
-        $this->assertNull($withoutLegacyId->fresh()->markaz_user_id);
-        $this->assertSame(445566, $withoutLegacyId->fresh()->markaz_customer_id);
-        $this->assertSame(123456, $legacy->fresh()->markaz_user_id);
+        $this->assertFalse(Schema::hasColumn('transactions', 'markaz_user_id'));
+        $this->assertSame(445566, $transaction->fresh()->markaz_customer_id);
     }
 
     public function test_ac03_group_and_claim_fields_are_read_back(): void

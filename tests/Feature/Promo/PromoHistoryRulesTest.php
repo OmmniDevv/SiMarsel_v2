@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Promo;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Account;
 use App\Models\Funnel;
 use App\Models\Platform;
@@ -45,11 +46,11 @@ class PromoHistoryRulesTest extends TestCase
             $metadata ? $this->funnel->id : null, $metadata ? $this->source->id : null);
     }
 
-    private function transaction(mixed $codes = ['HEMAT'], string $status = 'Success'): Transaction
+    private function transaction(mixed $codes = ['HEMAT'], MarkazTransactionStatus $status = MarkazTransactionStatus::Success): Transaction
     {
         return Transaction::factory()->for($this->platform)->create([
             'promo_code' => $codes, 'paid_date' => '2026-08-10', 'paid_time' => '10:00:00',
-            'status_message' => $status, 'nominal' => 100000,
+            'source_status' => $status->value, 'nominal' => 100000,
         ]);
     }
 
@@ -148,21 +149,21 @@ class PromoHistoryRulesTest extends TestCase
         $this->assertSame($this->source->id, $this->transaction()->promoCodeUsages()->sole()->source_id_snapshot);
     }
 
-    public function test_success_filter_handles_both_status_transitions_and_backfill(): void
+    public function test_report_status_handles_source_fallback_effective_override_and_backfill(): void
     {
-        $transaction = $this->transaction(['UNKNOWN'], 'failed');
+        $transaction = $this->transaction(['UNKNOWN'], MarkazTransactionStatus::Failed);
         $repository = app(UnregisteredPromoCodeRepository::class);
         $this->assertSame(0, $transaction->promoCodeUsages()->count());
-        $transaction->update(['status_message' => 'Success']);
+        $transaction->update(['source_status' => MarkazTransactionStatus::Success->value]);
         $this->assertSame(1, $repository->paginate(null, null, 20)->total());
-        $transaction->update(['status_message' => 'failed']);
+        $transaction->update(['effective_status' => MarkazTransactionStatus::Failed->value]);
         $this->assertSame(0, $repository->paginate(null, null, 20)->total());
         $this->assertTrue($repository->rawCodes([
             ['platform_id' => $this->platform->id, 'code' => 'UNKNOWN'],
         ])->isEmpty());
         $this->register('UNKNOWN');
         $this->assertNull($transaction->promoCodeUsages()->sole()->promo_code_id);
-        $transaction->update(['status_message' => 'Success']);
+        $transaction->update(['effective_status' => null]);
         $this->assertSame($this->funnel->id, $transaction->promoCodeUsages()->sole()->funnel_id_snapshot);
         $this->assertSame(0, $repository->paginate(null, null, 20)->total());
     }

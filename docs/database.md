@@ -60,15 +60,14 @@ php artisan migrate --seed
 - Semua role boleh melihat daftar dan detail divisi. Hanya role Manager (`MGR`) yang boleh membuat, mengubah, dan menghapus divisi.
 - Password disimpan dalam bentuk hash (bcrypt) dan tidak pernah dikembalikan oleh API.
 - Username: 4-25 karakter, hanya huruf, angka, titik, dan underscore.
-- Transaksi dihitung **berhasil** jika `status_message` = `Success`. Transaksi lain diabaikan di semua KPI.
-- Hanya transaksi Markaz dengan `status_message` = `Success` yang diambil dan disimpan ke `transactions`.
+- Semua status transaksi Markaz disimpan. Status laporan memakai `effective_status` jika tersedia, kemudian `source_status` sebagai fallback; nilai `0` tetap berarti Pending.
 - Penggunaan promo, alert, dan backfill pendaftaran hanya memproses transaksi sukses. `transactions.promo_code_anomaly` menandai payload promo invalid: detail ada di file log, histori penggunaan tetap disimpan, dan seluruh query analisis promo/alert mengecualikannya. Ringkasan Performa umum tetap menghitung fakta transaksi sukses tersebut.
 - Snapshot promo memakai master saat pertama diproses, tanpa melihat tanggal bayar; snapshot yang sudah terhubung tetap, termasuk hasil kosong. Rename menggunakan label master terbaru tanpa mengubah snapshot tersimpan.
 - Satu transaksi Markaz tersimpan sekali per platform: `(platform_id, markaz_transaction_id)` unik. `markaz_transaction_id` boleh NULL pada histori yang belum punya ID sumber terverifikasi.
 - `transactions.trx_id` tetap nomor untuk tampilan dan pencocokan, tetapi tidak lagi unik global: nilai yang sama boleh ada di platform berbeda.
 - `downloaders` unik per kombinasi `platform_id` + `date`: satu platform pada satu tanggal hanya punya satu baris, dan sinkronisasi memakai upsert.
 - `markaz_api_tokens.token` disimpan terenkripsi dan tidak pernah dikembalikan oleh API. Hanya boleh ada 1 token aktif; token lama diganti saat token baru disimpan.
-- Satu user diidentifikasi dari `customer_email` (huruf kecil, tanpa spasi di awal atau akhir). Transaksi tanpa email tetap dihitung di revenue dan jumlah transaksi, tapi tidak dihitung sebagai user.
+- Pembeli Unik diidentifikasi dari pasangan `(platform_id, markaz_customer_id)`. `customer_email` tetap disimpan sebagai informasi kontak dan tidak menjadi identifier.
 - Rumus KPI Ringkasan Performa ada di [api/performance.md](api/performance.md).
 - Kolom transaksi untuk Dashboard (FIX-15-BE-02) ada di bagian [Kolom transaksi Dashboard](#kolom-transaksi-dashboard-fix-15-be-02).
 - Kontrak baca tanggal transaksi, status laporan, dan metadata kelengkapan data untuk Analisis Performa ada di [transaction-dates-coverage.md](transaction-dates-coverage.md). Perubahan skemanya dimiliki FIX-15.
@@ -83,7 +82,6 @@ Skema `transactions` mengikuti [kontrak tanggal transaksi](transaction-dates-cov
 |---|---|---|
 | `markaz_transaction_id` | Ya | ID transaksi Markaz (`bigint`). Key sumber bersama `platform_id` |
 | `markaz_customer_id` | Ya | ID akun pembayar dari API |
-| `markaz_user_id` | Ya | Legacy. Nilai lama dipertahankan, tetapi belum dipakai sebagai akun pembayar karena pemetaannya belum terverifikasi. Tidak diisi dari ID transaksi atau `markaz_customer_id`. Penghapusan kolom dikerjakan terpisah |
 | `markaz_ref_id` | Ya | `ref_id` dari API apa adanya. Nilai terisi **tidak selalu** berarti anggota grup, karena transaksi biasa dapat memiliki `ref_id` yang sama dengan ID-nya sendiri |
 | `markaz_created_at` | Ya | Waktu transaksi dibuat di Markaz (WIB) |
 | `markaz_paid_at` | Ya | `paid_date` terbaru dari API apa adanya |
@@ -97,7 +95,8 @@ Skema `transactions` mengikuti [kontrak tanggal transaksi](transaction-dates-cov
 - Kolom sumber bernilai NULL pada transaksi lama. Migration tidak mengisinya dari `created_at`, `updated_at`, atau nilai lokal lain; pengisian histori di luar FIX-15.
 - Index: `(platform_id, markaz_transaction_id)` unik, `trx_id`, `(platform_id, markaz_ref_id)`, `(platform_id, markaz_created_at)` untuk dasar tanggal dibuat, dan `(platform_id, paid_date)` untuk dasar tanggal bayar.
 - PK `transactions.id` dan FK `transaction_promo_codes.transaction_id` tidak berubah.
-- Rollback migration ditolak selama ada transaksi tanpa `paid_date`, tanpa `markaz_user_id`, atau dengan `trx_id` yang sama di beberapa baris, agar data tersebut tidak hilang.
+- `markaz_user_id` sudah dihapus karena tidak mempunyai pemetaan sumber yang terverifikasi dan tidak digunakan oleh business logic. Identitas akun pembayar memakai `markaz_customer_id`.
+- Rollback migration Dashboard ditolak selama ada transaksi tanpa `paid_date` atau dengan `trx_id` yang sama di beberapa baris, agar data tersebut tidak hilang. Migration historis masih melindungi rollback menuju schema lama yang pernah mewajibkan `markaz_user_id`.
 
 ## Snapshot Dashboard (FIX-15-BE-03)
 
