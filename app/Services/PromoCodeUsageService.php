@@ -39,7 +39,7 @@ class PromoCodeUsageService
 
     private function normalizeLocked(Transaction $transaction): bool
     {
-        if ($transaction->status_message !== Transaction::STATUS_SUCCESS) {
+        if (! $transaction->isSuccessful()) {
             return true;
         }
 

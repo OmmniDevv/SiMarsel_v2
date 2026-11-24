@@ -129,7 +129,7 @@ class TaskStatusTransitionTest extends TestCase
 
     public function test_backlog_task_without_pic_cannot_leave_backlog(): void
     {
-        $task = $this->task(TaskStatus::Backlog, ['pic_id' => null]);
+        $task = $this->task(TaskStatus::Backlog, [], []);
 
         $this->actingAs($this->manager)
             ->patchJson($this->url($task), $this->payload('todo'))
@@ -397,11 +397,10 @@ class TaskStatusTransitionTest extends TestCase
     /**
      * @param  array<string, mixed>  $attributes
      */
-    private function task(TaskStatus $status, array $attributes = []): Task
+    private function task(TaskStatus $status, array $attributes = [], ?array $pics = null): Task
     {
-        return Task::factory()->create([
+        return Task::factory()->withPics(...($pics ?? [$this->staff]))->create([
             'division_id' => $this->marketing->id,
-            'pic_id' => $this->staff->id,
             'creator_id' => $this->manager->id,
             'status' => $status,
             'requires_review' => true,

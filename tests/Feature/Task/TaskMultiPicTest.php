@@ -8,11 +8,8 @@ use App\Models\Account;
 use App\Models\Division;
 use App\Models\Role;
 use App\Models\Task;
-use App\Models\TaskAssignment;
-use App\Services\TaskAssignmentBackfillService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -192,47 +189,6 @@ class TaskMultiPicTest extends TestCase
         $this->actingAs($this->financeStaff)->getJson("/api/tasks/{$task->id}")->assertOk();
     }
 
-    // Backfill
-
-    public function test_backfill_adds_missing_assignments_once_and_never_restores_a_released_pic(): void
-    {
-        $legacy = $this->legacyTask($this->staff);
-        $migrated = $this->task([], [$this->otherStaff]);
-        DB::table('tasks')->where('id', $migrated->id)->update(['pic_id' => $this->staff->id]);
-        $released = $this->task(['status' => TaskStatus::Backlog]);
-        $released->assignments()->create([
-            'account_id' => $this->staff->id, 'assigned_by' => $this->manager->id, 'assigned_at' => now()->subDay(),
-            'unassigned_by' => $this->manager->id, 'unassigned_at' => now(),
-        ]);
-        DB::table('tasks')->where('id', $released->id)->update(['pic_id' => $this->staff->id]);
-
-        $backfill = app(TaskAssignmentBackfillService::class);
-
-        $this->assertSame(['tasks_with_pic' => 3, 'matched' => 0, 'missing' => 1, 'diverged' => 2, 'active_assignments' => 1], $backfill->report());
-        $this->assertSame(1, $backfill->apply());
-        $this->assertSame(0, $backfill->apply());
-
-        $this->assertSame(['tasks_with_pic' => 3, 'matched' => 1, 'missing' => 0, 'diverged' => 2, 'active_assignments' => 2], $backfill->report());
-        $this->assertEquals([$this->staff->id], $legacy->pics()->pluck('accounts.id')->all());
-        $this->assertSame(0, $released->pics()->count());
-        $this->assertEquals([$this->otherStaff->id], $migrated->pics()->pluck('accounts.id')->all());
-    }
-
-    public function test_backfill_command_reports_and_applies(): void
-    {
-        $this->legacyTask($this->staff);
-
-        $this->artisan('tasks:backfill-assignments')
-            ->expectsOutputToContain('Mode laporan')
-            ->assertSuccessful();
-        $this->assertSame(0, TaskAssignment::count());
-
-        $this->artisan('tasks:backfill-assignments', ['--apply' => true])
-            ->expectsOutputToContain('1 assignment dibuat.')
-            ->assertSuccessful();
-        $this->assertSame(1, TaskAssignment::count());
-    }
-
     /**
      * @param  array<string, mixed>  $attributes
      * @param  array<int, Account>  $pics
@@ -246,17 +202,6 @@ class TaskMultiPicTest extends TestCase
             'deadline' => '2026-10-30',
             ...$attributes,
         ]);
-    }
-
-    /**
-     * A task as it was before task_assignments: only pic_id is set.
-     */
-    private function legacyTask(Account $pic): Task
-    {
-        $task = $this->task();
-        DB::table('tasks')->where('id', $task->id)->update(['pic_id' => $pic->id]);
-
-        return $task->fresh();
     }
 
     private function account(string $role, string $username, ?Division $division): Account

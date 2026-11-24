@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Promo;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Account;
 use App\Models\Platform;
 use App\Models\Transaction;
@@ -44,14 +45,14 @@ class PromoAnalysisSummaryTest extends TestCase
         float $nominal,
         ?string $paymentMethod = 'BCA',
         ?Platform $platform = null,
-        string $status = Transaction::STATUS_SUCCESS,
+        MarkazTransactionStatus $status = MarkazTransactionStatus::Success,
     ): void {
         Transaction::factory()->for($platform ?? $this->jadiasn)->create([
             'paid_date' => $paidDate,
             'promo_code' => $codes,
             'nominal' => $nominal,
             'payment_method' => $paymentMethod,
-            'status_message' => $status,
+            'source_status' => $status->value,
         ]);
     }
 
@@ -67,7 +68,7 @@ class PromoAnalysisSummaryTest extends TestCase
         $this->transaction('2026-09-12', null, 300000);
         $this->transaction('2026-09-15', ['NEWCODE'], 400000, ' BCA ', $this->cerebrum);
         $this->transaction('2026-09-20', null, 500000, null);
-        $this->transaction('2026-09-21', ['CPNS26'], 999999, 'OVO', status: 'failed');
+        $this->transaction('2026-09-21', ['CPNS26'], 999999, 'OVO', status: MarkazTransactionStatus::Failed);
 
         $this->transaction('2026-08-10', ['CPNS26'], 150000);
         $this->transaction('2026-08-11', null, 50000, 'GOPAY');

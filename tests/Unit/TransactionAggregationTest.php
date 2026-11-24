@@ -309,6 +309,23 @@ class TransactionAggregationTest extends TestCase
         $this->assertSame(1, $this->service->aggregate([$failed, $sameAccount], $filter)['metrics']['unique_buyers']);
     }
 
+    public function test_success_without_a_markaz_customer_id_is_not_counted_as_a_unique_buyer(): void
+    {
+        $rows = [
+            $this->success('TRX-UNKNOWN-1', '2026-11-12 11:00:00', ['markaz_customer_id' => null]),
+            $this->success('TRX-UNKNOWN-2', '2026-11-12 12:00:00', ['markaz_customer_id' => null]),
+            $this->success('TRX-KNOWN', '2026-11-12 13:00:00', ['markaz_customer_id' => 501]),
+        ];
+
+        $metrics = $this->service->aggregate(
+            $rows,
+            $this->filter('2026-11-12', '2026-11-12', TransactionDateBasis::Paid),
+        )['metrics'];
+
+        $this->assertSame(3, $metrics['success_payments']);
+        $this->assertSame(1, $metrics['unique_buyers']);
+    }
+
     public function test_ac11_filling_an_unknown_status_with_success_removes_the_provisional_label(): void
     {
         $rows = [];

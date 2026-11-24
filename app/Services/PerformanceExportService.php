@@ -17,7 +17,7 @@ class PerformanceExportService
         'total_revenue' => 'Total Revenue',
         'total_transactions' => 'Total Transaksi',
         'total_downloaders' => 'Total Downloader',
-        'unique_users' => 'User Unik',
+        'unique_users' => 'Pembeli Unik',
         'new_users' => 'User Baru',
         'repeat_orders' => 'Repeat Order',
         'average_order_value' => 'AOV',
@@ -223,7 +223,7 @@ class PerformanceExportService
         $contribution = $this->platformContributionService->contribution($filter);
 
         return [
-            ['Peringkat', 'Platform', 'Revenue', 'Transaksi', 'User', 'Persentase Kontribusi (%)'],
+            ['Peringkat', 'Platform', 'Revenue', 'Transaksi', 'Pembeli Unik', 'Persentase Kontribusi (%)'],
             ...array_map(fn (array $platform) => [
                 $platform['rank'],
                 $platform['name'],

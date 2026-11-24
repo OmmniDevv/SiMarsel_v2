@@ -358,7 +358,6 @@ class TaskCalendarTest extends TestCase
     {
         return Task::factory()->withPics(...$pics)->create([
             'division_id' => $this->marketing->id,
-            'pic_id' => null,
             'deadline' => $deadline,
         ]);
     }
@@ -406,11 +405,10 @@ class TaskCalendarTest extends TestCase
 
     private function task(string $title, Division $division, ?Account $pic, ?string $deadline, TaskStatus $status = TaskStatus::InProgress): Task
     {
-        return Task::factory()->create([
+        return Task::factory()->withPics(...($pic ? [$pic] : []))->create([
             'title' => $title,
             'description' => 'Rincian tugas',
             'division_id' => $division->id,
-            'pic_id' => $pic?->id,
             'priority' => TaskPriority::High,
             'status' => $status,
             'start_date' => null,

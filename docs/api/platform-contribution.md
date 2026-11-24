@@ -18,14 +18,14 @@ Contoh:
 
 ### Rumus per platform
 
-Hanya transaksi dengan `status_message` = `Success` yang dihitung.
+Hanya transaksi dengan status laporan `Success` yang dihitung. Status laporan memakai `effective_status`, kemudian `source_status` sebagai fallback.
 
 | Field | Rumus |
 |---|---|
 | `rank` | Peringkat berdasarkan urutan di bawah, mulai dari `1` |
 | `revenue` | Jumlah `nominal` |
 | `transactions` | Jumlah transaksi |
-| `users` | Jumlah email unik (huruf kecil, tanpa spasi di awal atau akhir). Transaksi tanpa email tidak dihitung. |
+| `users` | Jumlah akun pembayar unik berdasarkan `markaz_customer_id`. Transaksi tanpa ID akun pembayar tidak dihitung. |
 | `contribution_percentage` | `revenue` platform ÷ total revenue × 100, dibulatkan **1 desimal**. `null` jika total revenue = 0, tampilkan sebagai **N/A**. |
 
 - **Semua platform di master platform selalu ditampilkan**, termasuk yang tidak punya transaksi di periode itu (nilainya `0`).
@@ -36,7 +36,7 @@ Hanya transaksi dengan `status_message` = `Success` yang dihitung.
 
 ### Catatan `users`
 
-Satu email yang bertransaksi di dua platform dihitung di **kedua** platform. Karena itu `totals.users` (jumlah `users` semua platform) bisa lebih besar dari `unique_users` di Ringkasan Performa. `totals.revenue` dan `totals.transactions` selalu sama dengan `total_revenue` dan `total_transactions` di Ringkasan Performa.
+Satu `markaz_customer_id` yang bertransaksi di dua platform dihitung di **kedua** platform karena identitas Pembeli Unik adalah pasangan `(platform_id, markaz_customer_id)`. `totals.revenue` dan `totals.transactions` selalu sama dengan `total_revenue` dan `total_transactions` di Ringkasan Performa.
 
 ### 200 OK
 
@@ -63,7 +63,7 @@ Satu email yang bertransaksi di dua platform dihitung di **kedua** platform. Kar
 | Field | Dipakai untuk |
 |---|---|
 | `labels`, `datasets` | Langsung ke Chart.js: `new Chart(canvas, { type: 'pie', data: { labels, datasets } })`. Nama platform muncul di tooltip saat hover. |
-| `platforms` | Ranking table (Nama → Revenue → Transaksi → User → Persentase), progress bar (panjang = `contribution_percentage` dari skala 0–100), dan tooltip (nama, revenue, persentase) |
+| `platforms` | Ranking table (Nama → Revenue → Transaksi → Pembeli Unik → Persentase), progress bar (panjang = `contribution_percentage` dari skala 0–100), dan tooltip (nama, revenue, persentase) |
 | `totals.revenue`, `totals.platforms` | Ringkasan di atas tabel: Total Revenue seluruh platform dan jumlah platform yang tercakup filter |
 | `totals` | Baris total di tabel |
 

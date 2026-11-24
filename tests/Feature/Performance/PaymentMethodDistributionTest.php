@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Performance;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Account;
 use App\Models\Platform;
 use App\Models\Transaction;
@@ -32,13 +33,13 @@ class PaymentMethodDistributionTest extends TestCase
         $this->platformB = Platform::factory()->create(['slug' => 'app-b', 'name' => 'App B']);
     }
 
-    private function transaction(Platform $platform, string $date, ?string $method, float $nominal, string $status = Transaction::STATUS_SUCCESS): void
+    private function transaction(Platform $platform, string $date, ?string $method, float $nominal, MarkazTransactionStatus $status = MarkazTransactionStatus::Success): void
     {
         Transaction::factory()->for($platform)->create([
             'paid_date' => $date,
             'payment_method' => $method,
             'nominal' => $nominal,
-            'status_message' => $status,
+            'source_status' => $status->value,
         ]);
     }
 
@@ -52,7 +53,7 @@ class PaymentMethodDistributionTest extends TestCase
         $this->transaction($this->platformA, '2026-09-05', 'bank_transfer', 500000);
         $this->transaction($this->platformA, '2026-09-06', 'e_wallet', 200000);
         $this->transaction($this->platformA, '2026-09-30', ' E_WALLET ', 100000);
-        $this->transaction($this->platformA, '2026-09-12', 'credit_card', 999999, 'failed');
+        $this->transaction($this->platformA, '2026-09-12', 'credit_card', 999999, MarkazTransactionStatus::Failed);
 
         $this->transaction($this->platformB, '2026-09-10', 'bank_transfer', 50000);
         $this->transaction($this->platformB, '2026-09-11', null, 100000);

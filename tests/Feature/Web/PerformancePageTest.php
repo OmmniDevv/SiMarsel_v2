@@ -49,7 +49,7 @@ class PerformancePageTest extends TestCase
                 'Total Transaksi',
                 'Total Downloader',
                 'Pengguna Baru',
-                'Pengguna Unik',
+                'Pembeli Unik',
                 'AOV',
                 'Repeat Order',
                 'Konversi',
@@ -305,7 +305,7 @@ class PerformancePageTest extends TestCase
         $this->actingAs($this->employee)
             ->get('/dashboard')
             ->assertOk()
-            ->assertSeeInOrder(['data-dashboard-section="sales-summary"', 'class="mt-3 grid gap-4 xl:grid-cols-2"', 'class="grid gap-4 sm:grid-cols-2"', 'Total Revenue', 'class="grid gap-4 sm:grid-cols-2"', 'Pengguna Unik'], false)
+            ->assertSeeInOrder(['data-dashboard-section="sales-summary"', 'class="mt-3 grid gap-4 xl:grid-cols-2"', 'class="grid gap-4 sm:grid-cols-2"', 'Total Revenue', 'class="grid gap-4 sm:grid-cols-2"', 'Pembeli Unik'], false)
             ->assertSeeInOrder(['class="mt-4 grid gap-4 lg:grid-cols-2"', 'data-dashboard-section="transaction-status"', 'data-dashboard-section="product-type"'], false);
     }
 

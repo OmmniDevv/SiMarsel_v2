@@ -56,7 +56,6 @@ class TasklistMigrationValidator
             $this->noLegacyStatuses(),
             $this->noUnknownStatuses(),
             $this->noLegacyStatusesInHistory(),
-            $this->picIdBackfilled(),
             $this->noDuplicateActivePics(),
             $this->activeTasksHavePic(),
             $this->activePicsAreEligible(),
@@ -156,16 +155,6 @@ class TasklistMigrationValidator
             });
 
         return $this->countResult('Histori status memakai nama baru', $count, 'histori status masih memakai ready_for_qa/on_qa');
-    }
-
-    private function picIdBackfilled(): array
-    {
-        $count = DB::table('tasks')
-            ->whereNotNull('pic_id')
-            ->whereNotExists(fn ($query) => $query->from('task_assignments')->whereColumn('task_assignments.task_id', 'tasks.id'))
-            ->count();
-
-        return $this->countResult('PIC lama (pic_id) sudah di-backfill', $count, 'task punya pic_id tanpa assignment. Jalankan tasks:backfill-assignments --apply.');
     }
 
     private function noDuplicateActivePics(): array

@@ -19,7 +19,7 @@ Wajib login. **Semua user yang login** boleh mengakses. Aturan header dan kode e
 
 ## Sumber data
 
-- Tabel `transactions`, hanya transaksi dengan `status_message` = `Success`, sama seperti Ringkasan Performa.
+- Tabel `transactions`, hanya transaksi dengan status laporan `Success`, sama seperti Ringkasan Performa. Status laporan memakai `effective_status`, kemudian `source_status` sebagai fallback.
 - Khusus analisis promo, transaksi `promo_code_anomaly = true` dikecualikan dari seluruh perhitungan dan denominator. Fakta transaksi tersebut tetap tersedia pada Ringkasan Performa umum.
 - Periode memakai `paid_date` Markaz.
 - Penggunaan kode dari `transaction_promo_codes`, termasuk kode yang **belum terdaftar** di master.

@@ -35,7 +35,7 @@ return new class extends Migration
             $table->decimal('net_nominal', 15, 2)->nullable()->after('nominal');
             $table->string('customer_name')->nullable()->after('product_type');
             $table->string('customer_phone', 50)->nullable()->after('customer_email');
-            $table->dateTime('synced_at')->nullable()->after('status_message');
+            $table->dateTime('synced_at')->nullable()->after('customer_phone');
         });
 
         Schema::table('transactions', function (Blueprint $table) {

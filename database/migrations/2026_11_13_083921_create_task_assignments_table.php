@@ -2,7 +2,6 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -31,47 +30,10 @@ return new class extends Migration
             $table->index(['account_id', 'unassigned_at']);
         });
 
-        $this->backfillFromPicId();
     }
 
     public function down(): void
     {
-        // tasks.pic_id is left untouched by up(), so dropping the table loses no PIC data.
         Schema::dropIfExists('task_assignments');
-    }
-
-    /**
-     * Copy every tasks.pic_id into an active assignment. Who assigned it and when come from the latest
-     * assigned/reassigned history entry; a task without one falls back to its creator and creation time.
-     */
-    private function backfillFromPicId(): void
-    {
-        DB::table('tasks')
-            ->whereNotNull('pic_id')
-            ->orderBy('id')
-            ->select(['id', 'pic_id', 'creator_id', 'created_at'])
-            ->chunkById(500, function ($tasks) {
-                // Ordered oldest first, so keyBy() keeps the latest entry of each task.
-                $latestAssignments = DB::table('task_activities')
-                    ->whereIn('task_id', $tasks->pluck('id'))
-                    ->whereIn('action', ['assigned', 'reassigned'])
-                    ->orderBy('created_at')
-                    ->orderBy('id')
-                    ->get(['task_id', 'account_id', 'created_at'])
-                    ->keyBy('task_id');
-
-                $rows = $tasks->map(function ($task) use ($latestAssignments) {
-                    $activity = $latestAssignments->get($task->id);
-
-                    return [
-                        'task_id' => $task->id,
-                        'account_id' => $task->pic_id,
-                        'assigned_by' => $activity ? $activity->account_id : $task->creator_id,
-                        'assigned_at' => $activity->created_at ?? $task->created_at ?? now(),
-                    ];
-                });
-
-                DB::table('task_assignments')->insertOrIgnore($rows->all());
-            });
     }
 };
