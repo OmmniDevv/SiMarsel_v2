@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Performance;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Account;
 use App\Models\Downloader;
 use App\Models\Platform;
@@ -48,14 +49,14 @@ class PerformanceTrendTest extends TestCase
         ?string $email,
         float $nominal,
         string $type = Transaction::TYPE_FIRST,
-        string $status = Transaction::STATUS_SUCCESS,
+        MarkazTransactionStatus $status = MarkazTransactionStatus::Success,
     ): void {
         Transaction::factory()->for($platform)->create([
             'paid_date' => $date,
             'customer_email' => $email,
             'nominal' => $nominal,
             'product_type' => $type,
-            'status_message' => $status,
+            'source_status' => $status->value,
         ]);
     }
 
@@ -74,7 +75,7 @@ class PerformanceTrendTest extends TestCase
         $this->transaction($this->platformA, '2026-09-02', 'alice@example.com', 200000);
         $this->transaction($this->platformA, '2026-09-05', ' ALICE@example.com ', 100000, Transaction::TYPE_RENEWAL);
         $this->transaction($this->platformA, '2026-09-08', 'bob@example.com', 300000);
-        $this->transaction($this->platformA, '2026-09-10', 'dave@example.com', 999999, Transaction::TYPE_RENEWAL, 'failed');
+        $this->transaction($this->platformA, '2026-09-10', 'dave@example.com', 999999, Transaction::TYPE_RENEWAL, MarkazTransactionStatus::Failed);
         $this->transaction($this->platformA, '2026-09-15', null, 50000, Transaction::TYPE_RENEWAL);
         $this->transaction($this->platformA, '2026-09-30', 'carol@example.com', 400000);
         $this->downloader($this->platformA, '2026-09-01', 40);

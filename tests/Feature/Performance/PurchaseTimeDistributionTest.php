@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Performance;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Account;
 use App\Models\Platform;
 use App\Models\Transaction;
@@ -32,12 +33,12 @@ class PurchaseTimeDistributionTest extends TestCase
         $this->platformB = Platform::factory()->create(['slug' => 'app-b', 'name' => 'App B']);
     }
 
-    private function transaction(Platform $platform, string $date, ?string $time, string $status = Transaction::STATUS_SUCCESS): void
+    private function transaction(Platform $platform, string $date, ?string $time, MarkazTransactionStatus $status = MarkazTransactionStatus::Success): void
     {
         Transaction::factory()->for($platform)->create([
             'paid_date' => $date,
             'paid_time' => $time,
-            'status_message' => $status,
+            'source_status' => $status->value,
         ]);
     }
 
@@ -55,7 +56,7 @@ class PurchaseTimeDistributionTest extends TestCase
         $this->transaction($this->platformA, '2026-09-08', '17:00:00');
         $this->transaction($this->platformA, '2026-09-30', '23:59:59');
         $this->transaction($this->platformA, '2026-09-10', null);
-        $this->transaction($this->platformA, '2026-09-12', '20:00:00', 'failed');
+        $this->transaction($this->platformA, '2026-09-12', '20:00:00', MarkazTransactionStatus::Failed);
 
         $this->transaction($this->platformB, '2026-09-10', '18:00:00');
         $this->transaction($this->platformB, '2026-09-11', '00:00:00');

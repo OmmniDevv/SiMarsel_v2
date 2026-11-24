@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Promo;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Account;
 use App\Models\Funnel;
 use App\Models\Platform;
@@ -48,13 +49,13 @@ class PromoFunnelBreakdownTest extends TestCase
     /**
      * @param  list<string>|null  $codes
      */
-    private function transaction(?array $codes, float $nominal, string $paidDate = '2026-09-10', ?Platform $platform = null, string $status = Transaction::STATUS_SUCCESS): void
+    private function transaction(?array $codes, float $nominal, string $paidDate = '2026-09-10', ?Platform $platform = null, MarkazTransactionStatus $status = MarkazTransactionStatus::Success): void
     {
         Transaction::factory()->for($platform ?? $this->jadiasn)->create([
             'paid_date' => $paidDate,
             'promo_code' => $codes,
             'nominal' => $nominal,
-            'status_message' => $status,
+            'source_status' => $status->value,
         ]);
     }
 
@@ -79,7 +80,7 @@ class PromoFunnelBreakdownTest extends TestCase
         $this->transaction(['UNREG26'], 600000);
         $this->transaction(null, 700000);
 
-        $this->transaction(['MKT26'], 999999, status: 'failed');
+        $this->transaction(['MKT26'], 999999, status: MarkazTransactionStatus::Failed);
         $this->transaction(['MKT26'], 999999, '2026-10-01');
     }
 

@@ -18,7 +18,6 @@ return new class extends Migration
             $table->string('title', 150);
             $table->text('description')->nullable();
             $table->foreignId('division_id')->constrained();
-            $table->foreignId('pic_id')->nullable()->constrained('accounts')->nullOnDelete();
             $table->foreignId('creator_id')->nullable()->constrained('accounts')->nullOnDelete();
             $table->string('priority', 10)->default(TaskPriority::Medium->value);
             $table->string('status', 20)->default(TaskStatus::Backlog->value);
@@ -30,7 +29,6 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['division_id', 'status']);
-            $table->index(['pic_id', 'status']);
         });
     }
 

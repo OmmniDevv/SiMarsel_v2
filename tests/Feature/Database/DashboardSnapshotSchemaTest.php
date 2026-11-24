@@ -332,7 +332,6 @@ class DashboardSnapshotSchemaTest extends TestCase
             'paid_date' => $paidAt === null ? null : substr($paidAt, 0, 10),
             'paid_time' => $paidAt === null ? null : substr($paidAt, 11),
             'source_status' => $status->value,
-            'status_message' => $status->label(),
             'nominal' => 182000,
             'admin_fee' => 2000,
             'net_nominal' => 180000,

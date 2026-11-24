@@ -47,6 +47,7 @@ class TasklistErdConformanceTest extends TestCase
         'task_assignments' => [
             'id' => ['bigint', false], 'task_id' => ['bigint', false], 'account_id' => ['bigint', false], 'assigned_by' => ['bigint', true],
             'assigned_at' => ['timestamp', false], 'unassigned_by' => ['bigint', true], 'unassigned_at' => ['timestamp', true], 'note' => ['text', true],
+            'active_flag' => ['tinyint', true],
         ],
         'task_evidences' => [
             'id' => ['bigint', false], 'task_id' => ['bigint', false], 'submitter_id' => ['bigint', true], 'type' => ['varchar(10)', false],
@@ -60,7 +61,8 @@ class TasklistErdConformanceTest extends TestCase
         ],
         'task_comments' => [
             'id' => ['bigint', false], 'task_id' => ['bigint', false], 'author_id' => ['bigint', false], 'parent_comment_id' => ['bigint', true],
-            'content' => ['text', false], 'created_at' => ['timestamp', false], 'updated_at' => ['timestamp', true], 'deleted_at' => ['timestamp', true],
+            'content' => ['text', false], 'client_request_id' => ['char', true], 'created_at' => ['timestamp', false], 'updated_at' => ['timestamp', true],
+            'deleted_at' => ['timestamp', true],
         ],
         'task_activities' => [
             'id' => ['bigint', false], 'task_id' => ['bigint', false], 'account_id' => ['bigint', true], 'action' => ['varchar(50)', false],
@@ -74,17 +76,14 @@ class TasklistErdConformanceTest extends TestCase
     ];
 
     /**
-     * Columns the ERD does not list, each documented in tasklist-migration-validation-report.md.
+     * Columns the ERD does not list but the application still requires.
      *
      * @var array<string, array<int, string>>
      */
     private const DEVIATIONS = [
         'accounts' => ['password'],                 // "Kolom autentikasi lain tidak ditampilkan"
-        'tasks' => ['pic_id'],                      // kept until every reader is compatible, as the ERD notes
-        'task_assignments' => ['active_flag'],      // the MySQL mechanism the ERD asks for: one active PIC per account
         'task_activities' => ['actor_name_snapshot'], // existing before TASK-19: name of a deleted actor
         'calendar_events' => ['is_shared'],         // agenda access of the existing Schedule/Calendar (PR #115 review)
-        'task_comments' => ['client_request_id'],   // one comment per send, so a retried request is not stored twice (PR TASK-16 review)
     ];
 
     /**
@@ -102,10 +101,10 @@ class TasklistErdConformanceTest extends TestCase
         'task_categories' => [[['name'], true]],
         'tasks' => [[['division_id', 'status'], false], [['status', 'deadline'], false], [['start_date'], false], [['deleted_at'], false]],
         'task_divisions' => [[['task_id', 'division_id'], true]],
-        'task_assignments' => [[['task_id', 'unassigned_at'], false], [['account_id', 'unassigned_at'], false]],
+        'task_assignments' => [[['task_id', 'account_id', 'active_flag'], true], [['task_id', 'unassigned_at'], false], [['account_id', 'unassigned_at'], false]],
         'task_evidences' => [[['task_id', 'created_at'], false]],
         'task_reviews' => [[['task_id', 'created_at'], false]],
-        'task_comments' => [[['task_id', 'created_at'], false], [['parent_comment_id'], false]],
+        'task_comments' => [[['task_id', 'created_at'], false], [['parent_comment_id'], false], [['author_id', 'client_request_id'], true]],
         'task_activities' => [[['task_id', 'created_at'], false]],
         'calendar_events' => [[['start_at'], false]],
     ];

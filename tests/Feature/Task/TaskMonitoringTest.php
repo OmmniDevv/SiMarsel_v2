@@ -405,11 +405,10 @@ class TaskMonitoringTest extends TestCase
 
     private function task(Division $division, ?Account $pic, TaskStatus $status, TaskPriority $priority, ?string $deadline, string $title, ?string $createdAt = null): Task
     {
-        return Task::factory()->create([
+        return Task::factory()->withPics(...($pic ? [$pic] : []))->create([
             'created_at' => $createdAt ?? now(),
             'title' => $title,
             'division_id' => $division->id,
-            'pic_id' => $pic?->id,
             'creator_id' => $this->manager->id,
             'status' => $status,
             'priority' => $priority,

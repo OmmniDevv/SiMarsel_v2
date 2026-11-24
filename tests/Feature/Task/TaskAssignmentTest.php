@@ -73,7 +73,7 @@ class TaskAssignmentTest extends TestCase
 
     public function test_staff_and_freelance_cannot_assign_even_their_own_task(): void
     {
-        $freelanceTask = $this->task(['pic_id' => $this->freelancer->id]);
+        $freelanceTask = $this->task([], [$this->freelancer]);
 
         $this->actingAs($this->staff)
             ->patchJson($this->url(), $this->payload([$this->staff->id, $this->otherStaff->id]))
@@ -150,7 +150,7 @@ class TaskAssignmentTest extends TestCase
 
     public function test_releasing_a_pic_keeps_the_assignment_history_and_the_other_pics(): void
     {
-        $task = $this->task(['pic_id' => null], [$this->staff, $this->otherStaff]);
+        $task = $this->task([], [$this->staff, $this->otherStaff]);
 
         $this->actingAs($this->manager)
             ->patchJson("/api/tasks/{$task->id}/assignment", $this->payload([$this->otherStaff->id]))
@@ -385,7 +385,7 @@ class TaskAssignmentTest extends TestCase
     public function test_the_edit_form_does_not_change_pics(): void
     {
         $this->actingAs($this->admin)
-            ->patchJson($this->url(false), ['version' => 1, 'pic_id' => $this->otherStaff->id, 'pic_ids' => [$this->otherStaff->id]])
+            ->patchJson($this->url(false), ['version' => 1, 'pic_ids' => [$this->otherStaff->id]])
             ->assertOk();
 
         $this->assertActivePics($this->task, [$this->staff]);
@@ -510,14 +510,13 @@ class TaskAssignmentTest extends TestCase
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @param  array<int, Account>  $pics  Extra active PICs besides pic_id.
+     * @param  array<int, Account>|null  $pics
      */
-    private function task(array $attributes = [], array $pics = []): Task
+    private function task(array $attributes = [], ?array $pics = null): Task
     {
-        return Task::factory()->withPics(...$pics)->create([
+        return Task::factory()->withPics(...($pics ?? [$this->staff]))->create([
             'title' => 'Desain banner promo',
             'division_id' => $this->marketing->id,
-            'pic_id' => $this->staff->id,
             'creator_id' => $this->manager->id,
             'status' => TaskStatus::Todo,
             'requires_review' => true,

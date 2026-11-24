@@ -224,11 +224,11 @@ class TaskListingTest extends TestCase
             ->assertJsonPath('data.completed_at', null);
     }
 
-    public function test_task_without_pic_returns_null_pic(): void
+    public function test_task_without_pic_returns_an_empty_pics_list(): void
     {
         $this->actingAs($this->admin)
             ->getJson('/api/tasks?division=FIN')
-            ->assertJsonPath('data.0.pic', null);
+            ->assertJsonPath('data.0.pics', []);
     }
 
     // Filter & pencarian
@@ -440,11 +440,10 @@ class TaskListingTest extends TestCase
      */
     private function task(string $title, Division $division, ?Account $pic, array $attributes = []): Task
     {
-        return Task::factory()->create([
+        return Task::factory()->withPics(...($pic ? [$pic] : []))->create([
             'title' => $title,
             'description' => 'Task description',
             'division_id' => $division->id,
-            'pic_id' => $pic?->id,
             'creator_id' => $this->manager->id,
             'start_date' => null,
             'requires_review' => true,

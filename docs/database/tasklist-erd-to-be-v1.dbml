@@ -5,7 +5,7 @@
 // Tabel baru/field tambahan bersifat rancangan hingga diaudit terhadap database dan migration existing.
 //
 // Salinan ERD acuan PR #115 (17 Nov 2026). Kecocokan skema fisik diuji otomatis di
-// tests/Feature/Database/TasklistErdConformanceTest.php; hasilnya ada di tasklist-migration-validation-report.md.
+// tests/Feature/Database/TasklistErdConformanceTest.php.
 
 Project SimMarsel_Tasklist_ToBe {
   database_type: 'MySQL'
@@ -104,7 +104,7 @@ Table tasks {
     start_date
     deleted_at
   }
-  Note: 'tasks.pic_id dimigrasikan ke task_assignments, lalu dihentikan sebagai source of truth setelah seluruh pembaca/penulis kompatibel. tasks.is_shared tidak diperlukan untuk global read. Catatan kerja per PIC perlu dipetakan dari schema existing atau dirancang tersendiri sebelum implementasi TASK-13.'
+  Note: 'Penugasan PIC disimpan di task_assignments. tasks.is_shared tidak diperlukan untuk global read. Catatan kerja per PIC perlu dipetakan dari schema existing atau dirancang tersendiri sebelum implementasi TASK-13.'
 }
 
 // Hanya apabila perlu divisi kolaborator independen dari assignment PIC.
@@ -128,11 +128,13 @@ Table task_assignments {
   unassigned_by bigint
   unassigned_at timestamp
   note text [note: 'Catatan assignment; belum otomatis berarti catatan progres individual PIC.']
+  active_flag tinyint
   Indexes {
+    (task_id, account_id, active_flag) [unique, name: 'task_assignments_active_pic_unique']
     (task_id, unassigned_at)
     (account_id, unassigned_at)
   }
-  Note: 'Banyak PIC aktif; tidak ada Lead PIC/konfirmasi PIC individual. Riwayat assignment tidak dihapus saat reassign. Uniqueness PIC aktif per (task_id,account_id) perlu mekanisme khusus MySQL + transaksi; index biasa di atas BUKAN unique constraint untuk unassigned_at NULL. PIC dapat memindahkan shared status sampai Ready Review menurut TASK-17.'
+  Note: 'Banyak PIC aktif; tidak ada Lead PIC/konfirmasi PIC individual. Riwayat assignment tidak dihapus saat reassign. Generated column active_flag dan unique index mencegah akun yang sama menjadi PIC aktif dua kali pada task yang sama. PIC dapat memindahkan shared status sampai Ready Review menurut TASK-17.'
 }
 
 // ========== EVIDENCE, REVIEW, KOMENTAR ==========
@@ -177,12 +179,14 @@ Table task_comments {
   author_id bigint [not null]
   parent_comment_id bigint [note: 'NULL = komentar utama; reply harus berasal dari task yang sama']
   content text [not null]
+  client_request_id char(36) [note: 'UUID per pengiriman dari FE; kirim ulang dengan ID yang sama mengembalikan komentar yang sudah tersimpan. NULL untuk komentar lama.']
   created_at timestamp [not null]
   updated_at timestamp
   deleted_at timestamp [note: 'Opsional; hanya dipakai jika fitur delete comment disetujui.']
   Indexes {
     (task_id, created_at)
     parent_comment_id
+    (author_id, client_request_id) [unique]
   }
   Note: 'Komentar opsional, tidak mengubah status/task_review. Input diperbolehkan pada status aktif sesuai TASK-16; setelah Done read-only. Parent task yang sama divalidasi Backend.'
 }

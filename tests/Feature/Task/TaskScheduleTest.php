@@ -369,11 +369,10 @@ class TaskScheduleTest extends TestCase
 
     private function task(string $title, Division $division, ?Account $pic, ?string $startDate, ?string $deadline): Task
     {
-        return Task::factory()->create([
+        return Task::factory()->withPics(...($pic ? [$pic] : []))->create([
             'title' => $title,
             'description' => 'Rincian internal',
             'division_id' => $division->id,
-            'pic_id' => $pic?->id,
             'priority' => TaskPriority::High,
             'status' => $pic ? TaskStatus::InProgress : TaskStatus::Backlog,
             'start_date' => $startDate,
