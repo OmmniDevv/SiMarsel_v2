@@ -128,11 +128,13 @@ Table task_assignments {
   unassigned_by bigint
   unassigned_at timestamp
   note text [note: 'Catatan assignment; belum otomatis berarti catatan progres individual PIC.']
+  active_flag tinyint
   Indexes {
+    (task_id, account_id, active_flag) [unique, name: 'task_assignments_active_pic_unique']
     (task_id, unassigned_at)
     (account_id, unassigned_at)
   }
-  Note: 'Banyak PIC aktif; tidak ada Lead PIC/konfirmasi PIC individual. Riwayat assignment tidak dihapus saat reassign. Uniqueness PIC aktif per (task_id,account_id) perlu mekanisme khusus MySQL + transaksi; index biasa di atas BUKAN unique constraint untuk unassigned_at NULL. PIC dapat memindahkan shared status sampai Ready Review menurut TASK-17.'
+  Note: 'Banyak PIC aktif; tidak ada Lead PIC/konfirmasi PIC individual. Riwayat assignment tidak dihapus saat reassign. Generated column active_flag dan unique index mencegah akun yang sama menjadi PIC aktif dua kali pada task yang sama. PIC dapat memindahkan shared status sampai Ready Review menurut TASK-17.'
 }
 
 // ========== EVIDENCE, REVIEW, KOMENTAR ==========
