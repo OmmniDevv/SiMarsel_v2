@@ -1819,3 +1819,178 @@ test('Evidence rejected by the backend shows the reason in the form and keeps th
     assert.equal(panel.evidences.length, 0);
     assert.equal(panel.sendingEvidence, false);
 });
+
+// --- Hapus evidence sendiri (TASK-13) -----------------------------------------------------------
+
+const ownEvidence = (id, name, overrides = {}) => ({
+    id,
+    task_id: 7,
+    type: 'file',
+    file_name: name,
+    file_url: `/api/tasks/7/evidences/${id}/download`,
+    url: null,
+    note: null,
+    submitter: { id: PIC.id, fullname: 'Staff Marketing' },
+    can_delete: true,
+    created_at: '2026-11-11T02:00:00Z',
+    ...overrides,
+});
+
+test('A PIC deletes their own evidence after confirming: DELETE is sent, the list, history, and Board count follow the backend', async () => {
+    let evidence = [
+        ownEvidence(2, 'banner-v2.png'),
+        ownEvidence(1, 'brief-pic-lain.pdf', { submitter: { id: 11, fullname: 'Staff Baru' }, can_delete: false }),
+    ];
+    let history = [];
+    const { board, detail: createDetail, requests, toasts } = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [task({ status: 'in_progress', evidence_count: 2 })], meta: { status_counts: {} } } }),
+        'GET /api/tasks/7': () => ({ json: { data: task({ status: 'in_progress', evidence, evidence_count: evidence.length, history }) } }),
+        'GET /api/tasks/7/activities': () => ({ json: { data: history } }),
+        'DELETE /api/tasks/7/evidences/2': () => {
+            evidence = evidence.filter(({ id }) => id !== 2);
+            history = [{ id: 9, action: 'evidence_deleted', action_label: 'Evidence dihapus', description: 'Evidence: banner-v2.png', changes: {}, actor: { id: PIC.id, fullname: 'Staff Marketing' }, created_at: '2026-11-12T02:00:00Z' }];
+            return { json: { message: 'Evidence berhasil dihapus.' } };
+        },
+    });
+    await board.load();
+    board.detailId = 7;
+    const panel = createDetail();
+    await panel.open(7);
+
+    // Evidence of another PIC has no delete action and sends nothing.
+    await panel.removeEvidence(panel.evidences[1]);
+    assert.equal(requests.some(({ method }) => method === 'DELETE'), false);
+
+    panel.confirmingEvidenceId = 2;
+    await panel.removeEvidence(panel.evidences[0]);
+
+    const [deleted] = requests.filter(({ method }) => method === 'DELETE');
+    assert.equal(deleted.url, '/api/tasks/7/evidences/2');
+    assert.equal(deleted.body, undefined);
+    assert.equal(deleted.headers['X-CSRF-TOKEN'], 'csrf-test');
+
+    assert.deepEqual([...panel.evidences].map(({ id }) => id), [1], 'the evidence of the other PIC stays');
+    assert.equal(board.tasks[0].evidence_count, 1);
+    assert.equal(board.tasks[0].status, 'in_progress', 'the task and its status do not change');
+    assert.deepEqual([...panel.activities].map(({ action_label }) => action_label), ['Evidence dihapus']);
+    assert.equal(toasts.at(-1).title, 'Evidence dihapus');
+    assert.equal(panel.confirmingEvidenceId, null);
+    assert.equal(panel.deletingEvidenceId, null);
+});
+
+test('A rejected evidence deletion explains why and reloads the evidence with the current permissions', async () => {
+    let reply;
+    let evidence = [ownEvidence(2, 'banner-v2.png')];
+    const { board, detail: createDetail, toasts } = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [task({ status: 'in_progress', evidence_count: 1 })], meta: { status_counts: {} } } }),
+        'GET /api/tasks/7': () => ({ json: { data: task({ status: 'in_progress', evidence, evidence_count: evidence.length, history: [] }) } }),
+        'GET /api/tasks/7/activities': () => ({ json: { data: [] } }),
+        'DELETE /api/tasks/7/evidences/2': () => reply,
+    });
+    await board.load();
+    board.detailId = 7;
+    const panel = createDetail();
+    await panel.open(7);
+
+    // The task was handed to QA meanwhile: the reason shows outside the hidden upload form and the flag is refreshed.
+    reply = { status: 422, json: { message: 'Data tidak valid.', errors: { evidence: ['Evidence hanya dapat dihapus saat tugas berstatus To Do atau On Process, bukan Ready Review.'] } } };
+    evidence = [ownEvidence(2, 'banner-v2.png', { can_delete: false })];
+    await panel.removeEvidence(panel.evidences[0]);
+    assert.equal(panel.evidenceErrors.evidence, 'Evidence hanya dapat dihapus saat tugas berstatus To Do atau On Process, bukan Ready Review.');
+    assert.equal(panel.evidences[0].can_delete, false);
+    assert.equal(board.tasks[0].evidence_count, 1);
+    panel.reset();
+    assert.deepEqual({ ...panel.evidenceErrors }, {}, 'the reason does not carry over to the next task opened');
+    await panel.open(7);
+
+    // The PIC was released meanwhile.
+    evidence = [ownEvidence(2, 'banner-v2.png')];
+    await panel.refreshDetail();
+    reply = { status: 403, json: { message: 'This action is unauthorized.' } };
+    await panel.removeEvidence(panel.evidences[0]);
+    assert.equal(toasts.at(-1).text, 'Anda tidak memiliki akses untuk tindakan ini.');
+
+    // Already deleted in another tab: the message names the evidence, not the task, and the list follows the backend.
+    evidence = [ownEvidence(2, 'banner-v2.png')];
+    await panel.refreshDetail();
+    reply = { status: 404, json: { message: 'Not Found' } };
+    evidence = [];
+    await panel.removeEvidence(panel.evidences[0]);
+    assert.equal(toasts.at(-1).text, 'Evidence tidak ditemukan atau sudah dihapus.');
+    assert.deepEqual(panel.evidences, []);
+    assert.equal(panel.deletingEvidenceId, null);
+});
+
+test('An evidence deletion that finishes after the detail was closed or moved on only updates its own card', async () => {
+    let release;
+    const { board, detail: createDetail, requests, toasts } = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [task({ status: 'in_progress', evidence_count: 1 }), task({ id: 8, title: 'Tugas lain', status: 'in_progress', evidence_count: 3 })], meta: { status_counts: {} } } }),
+        'GET /api/tasks/7': () => ({ json: { data: task({ status: 'in_progress', evidence: [ownEvidence(2, 'banner-v2.png')], evidence_count: 1, history: [] }) } }),
+        'GET /api/tasks/8': () => ({ json: { data: task({ id: 8, title: 'Tugas lain', status: 'in_progress', evidence: [], evidence_count: 3, history: [] }) } }),
+        'GET /api/tasks/7/activities': () => ({ json: { data: [] } }),
+        'GET /api/tasks/8/activities': () => ({ json: { data: [] } }),
+        'DELETE /api/tasks/7/evidences/2': async () => {
+            await new Promise((resolve) => (release = resolve));
+            return { json: { message: 'Evidence berhasil dihapus.' } };
+        },
+    });
+    await board.load();
+    board.detailId = 7;
+    const panel = createDetail();
+
+    // Closed while the request runs.
+    await panel.open(7);
+    let running = panel.removeEvidence(panel.evidences[0]);
+    panel.reset();
+    release();
+    await running;
+    assert.equal(toasts.at(-1).title, 'Evidence dihapus', 'the deletion succeeded, so no failure is reported');
+    assert.equal(board.tasks.find(({ id }) => id === 7).evidence_count, 0);
+    assert.equal(requests.some(({ url }) => url.includes('undefined')), false);
+
+    // Another task opened while the request runs: its card and panel stay untouched.
+    board.tasks.find(({ id }) => id === 7).evidence_count = 1;
+    await panel.open(7);
+    running = panel.removeEvidence(panel.evidences[0]);
+    await panel.open(8);
+    release();
+    await running;
+    assert.equal(board.tasks.find(({ id }) => id === 8).evidence_count, 3);
+    assert.equal(panel.task.evidence_count, 3);
+    assert.equal(board.tasks.find(({ id }) => id === 7).evidence_count, 0);
+    assert.equal(panel.deletingEvidenceId, null);
+});
+
+test('A rejected evidence deletion that returns after another task was opened shows nothing on that task', async () => {
+    let release;
+    const { board, detail: createDetail, requests, toasts } = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [task({ status: 'in_progress', evidence_count: 1 }), task({ id: 8, title: 'Tugas lain', status: 'in_progress', evidence_count: 3 })], meta: { status_counts: {} } } }),
+        'GET /api/tasks/7': () => ({ json: { data: task({ status: 'in_progress', evidence: [ownEvidence(2, 'banner-v2.png')], evidence_count: 1, history: [] }) } }),
+        'GET /api/tasks/8': () => ({ json: { data: task({ id: 8, title: 'Tugas lain', status: 'in_progress', evidence: [], evidence_count: 3, history: [] }) } }),
+        'GET /api/tasks/7/activities': () => ({ json: { data: [] } }),
+        'GET /api/tasks/8/activities': () => ({ json: { data: [] } }),
+        'DELETE /api/tasks/7/evidences/2': async () => {
+            await new Promise((resolve) => (release = resolve));
+            return { status: 422, json: { message: 'Data tidak valid.', errors: { evidence: ['Evidence hanya dapat dihapus saat tugas berstatus To Do atau On Process, bukan Ready Review.'] } } };
+        },
+    });
+    await board.load();
+    board.detailId = 7;
+    const panel = createDetail();
+    await panel.open(7);
+
+    const running = panel.removeEvidence(panel.evidences[0]);
+    await panel.open(8);
+    const toastsBefore = toasts.length;
+    const detailRequestsBefore = requests.filter(({ url }) => url === '/api/tasks/7').length;
+    release();
+    await running;
+
+    assert.equal(panel.task.id, 8);
+    assert.deepEqual({ ...panel.evidenceErrors }, {}, 'the reason for Task A is not shown on Task B');
+    assert.equal(toasts.length, toastsBefore, 'no error toast while Task B is open');
+    assert.equal(panel.task.evidence_count, 3);
+    assert.deepEqual(board.tasks.map(({ id, evidence_count }) => [id, evidence_count]), [[7, 1], [8, 3]], 'nothing was deleted, so no count changes');
+    assert.equal(requests.filter(({ url }) => url === '/api/tasks/7').length, detailRequestsBefore, 'Task A is not reloaded into the panel');
+    assert.equal(panel.deletingEvidenceId, null);
+});
