@@ -142,5 +142,5 @@ Pembanding jam setara dikosongkan karena query Ringkasan membaca data transaksi 
 
 ## Batasan saat ini
 
-- Tabel `dashboard_snapshots` belum ada di `dev`. Sampai tabel tersedia, resolver melaporkan `availability = unavailable`.
-- Query komponen masih menghitung per hari penuh. Pembacaan nilai catatan untuk pembanding jam setara milik agregasi FIX-02-BE-02.
+- Tanpa catatan `dashboard_snapshots` lengkap untuk rentang yang diminta, resolver melaporkan `availability = unavailable`.
+- Query komponen lain masih menghitung per hari penuh. Tren Omzet dan Transaksi (`/api/performance/trend/sales`) membaca catatan untuk pembanding jam setara, lihat [API Performa](api/performance.md#get-apiperformancetrendsales).
