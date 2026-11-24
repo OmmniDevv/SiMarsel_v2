@@ -864,32 +864,160 @@ test('With the default config, the summary comes from the monitoring API with th
     assert.equal(monitoringRequests(requests).at(-1).url, '/api/tasks/monitoring?scope=tasklist&division=MKT');
 });
 
-test('Period filter validates its configuration and alerts that the backend is unavailable without sending requests', async () => {
-    const { board, requests, alerts } = await tasklistPage({
-        'GET /api/tasks': () => ({ json: { data: [], meta: { status_counts: {} } } }),
-        'GET /api/tasks/monitoring': () => ({ json: { data: monitoringOf({}) } }),
-    }, ADMIN);
+const periodPage = (data = [], user = ADMIN) => tasklistPage({
+    'GET /api/tasks': () => ({ json: { data, meta: { status_counts: {} } } }),
+    'GET /api/tasks/monitoring': () => ({ json: { data: monitoringOf({}) } }),
+}, user);
+
+const choosePeriod = (board, values) => Object.assign(board.periodFilter, values);
+
+test('Terapkan Periode sends only the active mode to the list and the KPIs, with the same filters', async () => {
+    const { board, requests } = await periodPage();
+    board.filters = { search: 'promo', division: 'MKT', priority: '', status: 'todo' };
     await board.load();
 
-    board.periodFilter.mode = 'range';
-    board.periodFilter.basis = 'start_date';
-    board.periodFilter.startDate = '2026-11-20';
-    board.periodFilter.endDate = '2026-11-10';
+    choosePeriod(board, { mode: 'range', basis: 'start_date', startDate: '2026-11-20', endDate: '2026-11-10' });
     assert.equal(board.canConfirmPeriodFilter, false);
+    const before = requests.length;
+    await board.confirmPeriodFilter();
+    assert.equal(requests.length, before, 'an invalid range is not sent');
 
-    board.periodFilter.endDate = '2026-11-20';
-    assert.equal(board.canConfirmPeriodFilter, true);
-    const requestCount = requests.length;
-    board.confirmPeriodFilter();
+    const cases = [
+        [{ mode: 'date', basis: 'deadline', date: '2026-11-18' }, 'filter_mode=date&date_field=deadline&date=2026-11-18'],
+        [{ mode: 'month', basis: 'deadline', month: '2026-02' }, 'filter_mode=month&date_field=deadline&month=2&year=2026'],
+        [{ mode: 'year', basis: 'start_date', year: 2009 }, 'filter_mode=year&date_field=start_date&year=2009'],
+        [{ mode: 'range', basis: 'start_date', startDate: '2026-11-10', endDate: '2026-11-20' }, 'filter_mode=range&date_field=start_date&start_date=2026-11-10&end_date=2026-11-20'],
+    ];
 
-    assert.deepEqual(alerts, ['backend belum tersedia']);
-    assert.equal(requests.length, requestCount, 'period filters are not sent to an unavailable backend');
+    for (const [values, period] of cases) {
+        choosePeriod(board, values);
+        await board.confirmPeriodFilter();
+
+        assert.equal(listRequests(requests).at(-1).url, `/api/tasks?scope=all_tasks&search=promo&division=MKT&status=todo&${period}`, values.mode);
+        assert.equal(monitoringRequests(requests).at(-1).url, `/api/tasks/monitoring?scope=tasklist&search=promo&division=MKT&status=todo&${period}`, `${values.mode}: the KPIs use the same period`);
+    }
+
+    assert.equal(board.appliedPeriodLabel, 'Tanggal Mulai: 10 Nov 2026 – 20 Nov 2026');
+    choosePeriod(board, { mode: 'month', basis: 'deadline', month: '2026-02' });
+    await board.confirmPeriodFilter();
+    assert.equal(board.appliedPeriodLabel, 'Deadline: Februari 2026', 'the month is read with its own year');
+    assert.equal(board.hasActiveFilter, true);
+});
+
+test('The applied period stays across the Board, the Table, and Tugas Saya until it is removed or reset', async () => {
+    const { board, requests } = await periodPage();
+    await board.load();
+    choosePeriod(board, { mode: 'year', basis: 'deadline', year: '2026' });
+    await board.confirmPeriodFilter();
 
     board.view = 'table';
-    assert.equal(board.periodFilter.mode, 'range', 'the period selection is shared between views');
+    board.taskScope = 'my_tasks';
+    await board.load();
+    assert.equal(listRequests(requests).at(-1).url, '/api/tasks?scope=my_tasks&filter_mode=year&date_field=deadline&year=2026');
+    assert.equal(board.periodFilter.mode, 'year', 'the form keeps the period between views');
+
+    // Editing the form without applying it does not change the data.
+    choosePeriod(board, { mode: 'date', date: '2026-11-18' });
+    await board.load();
+    assert.equal(listRequests(requests).at(-1).url, '/api/tasks?scope=my_tasks&filter_mode=year&date_field=deadline&year=2026');
+
+    // "Tanpa filter periode" removes the applied period.
+    choosePeriod(board, { mode: '' });
+    assert.equal(board.canConfirmPeriodFilter, true);
+    await board.confirmPeriodFilter();
+    assert.equal(board.appliedPeriod, null);
+    assert.equal(listRequests(requests).at(-1).url, '/api/tasks?scope=my_tasks');
+    assert.equal(board.canConfirmPeriodFilter, false, 'nothing left to remove');
+
+    choosePeriod(board, { mode: 'date', date: '2026-11-18' });
+    await board.confirmPeriodFilter();
     board.resetFilters();
-    assert.equal(board.periodFilter.mode, '');
+    await board.load();
+    assert.equal(board.appliedPeriod, null);
     assert.equal(board.hasPeriodConfiguration, false);
+    assert.equal(listRequests(requests).at(-1).url, '/api/tasks?scope=my_tasks');
+    assert.equal(monitoringRequests(requests).length > 0, true);
+});
+
+test('A period rejected by the backend shows its reason in the period form', async () => {
+    const { board } = await tasklistPage({
+        'GET /api/tasks': () => ({ status: 422, json: { message: 'Tanggal akhir tidak boleh sebelum tanggal awal.', errors: { end_date: ['Tanggal akhir tidak boleh sebelum tanggal awal.'] } } }),
+        'GET /api/tasks/monitoring': () => ({ json: { data: monitoringOf({}) } }),
+    }, ADMIN);
+
+    choosePeriod(board, { mode: 'range', basis: 'deadline', startDate: '2026-11-01', endDate: '2026-11-30' });
+    await board.confirmPeriodFilter();
+
+    assert.equal(board.status, 'error');
+    assert.equal(board.periodError, 'Tanggal akhir tidak boleh sebelum tanggal awal.');
+});
+
+test('Cards outside the applied period or without its date are not shown, and each task is counted once', async () => {
+    const inPeriod = task({ id: 1, status: 'todo', deadline: '2026-11-30', pics: [{ id: PIC.id, fullname: 'A' }, { id: 11, fullname: 'B' }] });
+    const { board } = await periodPage([inPeriod]);
+    choosePeriod(board, { mode: 'month', basis: 'deadline', month: '2026-11' });
+    await board.confirmPeriodFilter();
+    assert.deepEqual(board.tasksIn('todo').map(({ id }) => id), [1], 'a Multi-PIC task is one card');
+
+    // A card changed or opened outside the list follows the period on the selected date.
+    board.syncTask(task({ id: 2, status: 'todo', deadline: '2026-12-01' }));
+    board.syncTask(task({ id: 3, status: 'todo', deadline: null }));
+    board.syncTask({ ...inPeriod, deadline: '2026-11-01' });
+    assert.deepEqual(board.tasksIn('todo').map(({ id }) => id), [1]);
+
+    // The fixture tasks start on 1 Nov 2026, outside this one-day period.
+    choosePeriod(board, { mode: 'date', basis: 'start_date', date: '2026-11-02' });
+    await board.confirmPeriodFilter();
+    board.syncTask(task({ id: 4, status: 'todo', start_date: '2026-11-02' }));
+    board.syncTask(task({ id: 5, status: 'todo', start_date: null }));
+    assert.deepEqual(board.tasksIn('todo').map(({ id }) => id), [4]);
+});
+
+test('Opening a task hidden by the period removes the period so its card can be shown', async () => {
+    const { board, requests } = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [], meta: { status_counts: {} } } }),
+        'GET /api/tasks/monitoring': () => ({ json: { data: monitoringOf({}) } }),
+        'GET /api/tasks/7': () => ({ json: { data: task({ deadline: '2027-01-05' }) } }),
+    }, ADMIN);
+    choosePeriod(board, { mode: 'month', basis: 'deadline', month: '2026-11' });
+    await board.confirmPeriodFilter();
+
+    board.focusTask({ id: 7 });
+    await new Promise((resolve) => setTimeout(resolve));
+
+    assert.equal(board.appliedPeriod, null);
+    assert.equal(board.periodFilter.mode, '');
+    assert.equal(listRequests(requests).at(-1).url.includes('filter_mode'), false);
+});
+
+test('Opening a Calendar task inside the applied period keeps the period', async () => {
+    const { board } = await tasklistPage({
+        'GET /api/tasks': () => ({ json: { data: [], meta: { status_counts: {} } } }),
+        'GET /api/tasks/monitoring': () => ({ json: { data: monitoringOf({}) } }),
+        'GET /api/tasks/7': () => ({ json: { data: task({ deadline: '2026-11-20' }) } }),
+    }, ADMIN);
+    choosePeriod(board, { mode: 'month', basis: 'deadline', month: '2026-11' });
+    await board.confirmPeriodFilter();
+
+    board.focusTask(task({ deadline: '2026-11-20' }));
+    await new Promise((resolve) => setTimeout(resolve));
+
+    assert.equal(board.appliedPeriodLabel, 'Deadline: November 2026');
+});
+
+test('Changing the start date of a task reloads the KPIs, which may count it by its start date', async () => {
+    const listed = task({ id: 1, start_date: '2026-11-05' });
+    const { board, requests } = await periodPage([listed]);
+    choosePeriod(board, { mode: 'month', basis: 'start_date', month: '2026-11' });
+    await board.confirmPeriodFilter();
+    const before = monitoringRequests(requests).length;
+
+    board.syncTask({ ...listed, start_date: '2026-12-05' });
+    await new Promise((resolve) => setTimeout(resolve));
+
+    assert.equal(monitoringRequests(requests).length, before + 1);
+    assert.match(monitoringRequests(requests).at(-1).url, /filter_mode=month&date_field=start_date&month=11&year=2026/);
+    assert.deepEqual(board.tasksIn('todo').map(({ id }) => id), [], 'the card leaves the Board together with the KPIs');
 });
 
 test('Atur Ulang Filter resets the period and every Tasklist filter in the Board and the Table, keeping Tugas Saya', async () => {
@@ -926,15 +1054,15 @@ test('Atur Ulang Filter resets the period and every Tasklist filter in the Board
 });
 
 test('Period filter rejects a date with a year beyond four digits, whose text order would pass as a valid range', async () => {
-    const { board, alerts } = await tasklistPage({}, ADMIN);
+    const { board } = await tasklistPage({}, ADMIN);
 
     board.periodFilter.mode = 'range';
     board.periodFilter.startDate = '12026-01-01';
     board.periodFilter.endDate = '2026-12-31';
     assert.equal(board.canConfirmPeriodFilter, false, 'year 12026 is after 2026 although its text sorts first');
     assert.equal(board.periodRangeError, 'Format tanggal tidak valid.');
-    board.confirmPeriodFilter();
-    assert.deepEqual(alerts, []);
+    assert.equal(await board.confirmPeriodFilter(), undefined);
+    assert.equal(board.appliedPeriod, null);
 
     board.periodFilter.startDate = '2026-12-31';
     board.periodFilter.endDate = '2026-01-01';
@@ -952,7 +1080,7 @@ test('Period filter rejects a date with a year beyond four digits, whose text or
 });
 
 test('Period filter accepts any four-digit year, including years older than the previous ten-year list', async () => {
-    const { board, requests, alerts } = await tasklistPage({}, ADMIN);
+    const { board, requests } = await periodPage();
     const currentYear = Number(board.periodFilter.year);
 
     board.periodFilter.mode = 'year';
@@ -963,11 +1091,9 @@ test('Period filter accepts any four-digit year, including years older than the 
         assert.equal(board.canConfirmPeriodFilter, true, `${year} can be confirmed`);
     }
 
-    const requestCount = requests.length;
     board.periodFilter.year = '1998';
-    board.confirmPeriodFilter();
-    assert.deepEqual(alerts, ['backend belum tersedia']);
-    assert.equal(requests.length, requestCount, 'an older year is not sent to an unavailable backend');
+    await board.confirmPeriodFilter();
+    assert.equal(listRequests(requests).at(-1).url, '/api/tasks?scope=all_tasks&filter_mode=year&date_field=deadline&year=1998', 'an older year is sent as it is');
 
     for (const year of ['', '199', '0999', '12026', '-199', '1e3', '2026.5']) {
         board.periodFilter.year = year;

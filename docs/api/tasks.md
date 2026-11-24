@@ -35,6 +35,8 @@ Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend h
 - Tugas tanpa `can_edit`, `can_assign`, dan `can_delete` diberi tanda **Hanya lihat**. Tombol Ubah, Atur PIC, Hapus, dan keputusan review mengikuti flag backend per tugas.
 - Pemilihan PIC mengirim daftar lengkap `pic_ids`. Tombol Hapus Tugas memakai `DELETE /api/tasks/{id}` dengan `version`.
 
+**Frontend (TASK-14)**: form Filter Periode di Papan dan Tabel baru berlaku setelah **Terapkan Periode**. Periode yang diterapkan dikirim sebagai parameter [Filter periode](#filter-periode-task-14) ke `GET /api/tasks` dan `GET /api/tasks/monitoring?scope=tasklist`, dan tetap berlaku saat berpindah Papan/Tabel atau Semua Tugas/Tugas Saya. **Atur Ulang Filter** menghapusnya. Pesan `422` untuk parameter periode ditampilkan di form periode.
+
 ## Objek
 
 **Task** (daftar, Board, Table, Calendar):

@@ -54,6 +54,7 @@ const STATUS_METRICS = { backlog: 'backlog', todo: 'todo', in_progress: 'on_proc
 const nested = (value, key) => (value === undefined ? undefined : (value?.[key] ?? null));
 const SUMMARY_FIELDS = [
     (task) => task.status,
+    (task) => task.start_date,
     (task) => task.deadline,
     (task) => task.priority,
     (task) => task.title,
@@ -91,6 +92,46 @@ function myTaskMetrics(tasks, asOf) {
 const BACKEND_PENDING = 'Menunggu pengerjaan Back End.';
 const PERIOD_DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
 const PERIOD_YEAR_FORMAT = /^[1-9]\d{3}$/;
+const PERIOD_FIELDS = ['filter_mode', 'date_field', 'date', 'month', 'year', 'start_date', 'end_date'];
+const PERIOD_MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+/**
+ * Periode dari form filter dalam bentuk parameter TASK-14 (GET /api/tasks dan monitoring), beserta rentang hari
+ * inklusifnya untuk menyaring kartu yang ditambahkan di luar daftar. Hanya parameter milik mode aktif yang dikirim.
+ */
+function periodOf({ mode, basis, date, month, year, startDate, endDate }) {
+    const base = { filter_mode: mode, date_field: basis };
+
+    if (mode === 'date') return { params: { ...base, date }, from: date, to: date };
+    if (mode === 'range') return { params: { ...base, start_date: startDate, end_date: endDate }, from: startDate, to: endDate };
+    if (mode === 'year') {
+        const value = String(year);
+
+        return { params: { ...base, year: value }, from: `${value}-01-01`, to: `${value}-12-31` };
+    }
+
+    const [monthYear, monthNumber] = month.split('-');
+    const lastDay = new Date(Number(monthYear), Number(monthNumber), 0).getDate();
+
+    return {
+        params: { ...base, month: String(Number(monthNumber)), year: monthYear },
+        from: `${month}-01`,
+        to: `${month}-${String(lastDay).padStart(2, '0')}`,
+    };
+}
+
+function periodLabelOf({ params }) {
+    const basis = params.date_field === 'start_date' ? 'Tanggal Mulai' : 'Deadline';
+    const value = {
+        date: () => formatDate(params.date),
+        month: () => `${PERIOD_MONTHS[Number(params.month) - 1]} ${params.year}`,
+        year: () => params.year,
+        range: () => `${formatDate(params.start_date)} – ${formatDate(params.end_date)}`,
+    }[params.filter_mode]();
+
+    return `${basis}: ${value}`;
+}
+
 const emptyPeriodFilter = () => ({
     mode: '',
     basis: 'deadline',
@@ -176,6 +217,8 @@ Alpine.data('tasklist', () => ({
 
     filters: { search: '', division: '', priority: '', status: '' },
     periodFilter: emptyPeriodFilter(),
+    appliedPeriod: null,
+    periodError: '',
     sort: { key: 'deadline', dir: 'asc' },
     page: 1,
 
@@ -278,7 +321,9 @@ Alpine.data('tasklist', () => ({
     },
 
     get hasActiveFilter() {
-        return ['search', 'priority', 'status'].some((key) => this.filters[key] !== '') || this.filters.division !== this.defaultDivision();
+        return ['search', 'priority', 'status'].some((key) => this.filters[key] !== '')
+            || this.filters.division !== this.defaultDivision()
+            || this.appliedPeriod !== null;
     },
 
     get hasPeriodConfiguration() {
@@ -314,18 +359,33 @@ Alpine.data('tasklist', () => ({
         if (mode === 'year') return !this.periodYearError;
         if (mode === 'range') return Boolean(startDate && endDate) && !this.periodRangeError;
 
-        return false;
+        // "Tanpa filter periode" hanya dapat diterapkan untuk menghapus periode yang sedang aktif.
+        return this.appliedPeriod !== null;
     },
 
+    get appliedPeriodLabel() {
+        return this.appliedPeriod ? periodLabelOf(this.appliedPeriod) : '';
+    },
+
+    // Periode baru berlaku untuk Board, Table, dan KPI sekaligus, pada cakupan Semua Tugas maupun Tugas Saya.
     confirmPeriodFilter() {
         if (!this.canConfirmPeriodFilter) return;
 
-        alert('backend belum tersedia');
+        this.appliedPeriod = this.periodFilter.mode ? periodOf(this.periodFilter) : null;
+        this.page = 1;
+
+        return this.load();
+    },
+
+    clearPeriod() {
+        this.periodFilter = emptyPeriodFilter();
+        this.appliedPeriod = null;
+        this.periodError = '';
     },
 
     resetFilters() {
         this.filters = { search: '', division: this.defaultDivision(), priority: '', status: '' };
-        this.periodFilter = emptyPeriodFilter();
+        this.clearPeriod();
         this.sort = { key: 'deadline', dir: 'asc' };
     },
 
@@ -335,7 +395,17 @@ Alpine.data('tasklist', () => ({
             division: this.filters.division,
             priority: this.filters.priority,
             status: this.filters.status,
+            ...this.appliedPeriod?.params,
         };
+    },
+
+    // Tugas tanpa tanggal pada dasar tanggal yang dipilih tidak masuk periode, sama seperti backend.
+    matchesPeriod(task) {
+        if (!this.appliedPeriod) return true;
+
+        const value = task[this.appliedPeriod.params.date_field]?.slice(0, 10);
+
+        return Boolean(value) && value >= this.appliedPeriod.from && value <= this.appliedPeriod.to;
     },
 
     // Daftar tugas dan ringkasan KPI dimuat bersamaan dengan filter yang sama.
@@ -343,6 +413,7 @@ Alpine.data('tasklist', () => ({
         const sequence = ++this.loadSequence;
         this.loading = true;
         this.error = '';
+        this.periodError = '';
         const summary = this.loadSummary();
 
         try {
@@ -357,6 +428,11 @@ Alpine.data('tasklist', () => ({
             this.tasks = [];
             this.status = error?.unavailable ? 'unavailable' : 'error';
             this.error = taskErrorMessage(error, 'Gagal memuat daftar tugas.');
+            // Periode yang ditolak backend (422) dijelaskan di form periode.
+            if (error?.status === 422) {
+                const errors = validationErrors(error);
+                this.periodError = PERIOD_FIELDS.map((field) => errors[field]).find(Boolean) ?? '';
+            }
         } finally {
             if (sequence === this.loadSequence) {
                 this.loading = false;
@@ -420,7 +496,9 @@ Alpine.data('tasklist', () => ({
 
     // Tugas yang dibuka dari luar daftar atau PIC yang baru dilepas tidak tampil di Tugas Saya.
     get filteredTasks() {
-        return this.tasks.filter((task) => this.matchesFilters(task) && (this.taskScope !== 'my_tasks' || isTaskPic(task, this.user)));
+        return this.tasks.filter((task) => this.matchesFilters(task)
+            && this.matchesPeriod(task)
+            && (this.taskScope !== 'my_tasks' || isTaskPic(task, this.user)));
     },
 
     // Tanpa tugas dalam cakupan, backend mengirim semua angka 0.
@@ -580,6 +658,11 @@ Alpine.data('tasklist', () => ({
             this.filters.search = '';
             this.filters.priority = '';
             this.filters.status = '';
+        }
+        // Item Calendar membawa tanggalnya sendiri; tautan ?task=ID hanya membawa ID, sehingga periode dilepas.
+        if (this.appliedPeriod && !this.matchesPeriod(loaded ?? task)) {
+            this.clearPeriod();
+            this.load();
         }
         if (!loaded) {
             this.filters.division = '';
