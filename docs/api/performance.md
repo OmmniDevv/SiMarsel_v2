@@ -35,12 +35,14 @@ Semua KPI hanya memakai transaksi dengan `status_message` = `Success`.
 |---|---|---|---|
 | `total_revenue` | Total Revenue | `transactions` | Jumlah `nominal` |
 | `total_transactions` | Total Transaksi | `transactions` | Jumlah transaksi |
-| `total_downloaders` | Total Downloader | `downloaders` | Jumlah `total` |
+| `total_downloaders` | Total Downloader | `downloaders` | Jumlah `total`. Dengan `preset`, dibaca dari agregasi Downloader bersama (lihat catatan di bawah) |
 | `unique_users` | User Unik | `transactions` | Jumlah email berbeda. Email disamakan huruf kecilnya dan spasinya dibuang, jadi `Alice@x.com` dan ` alice@x.com ` dihitung satu user. Transaksi tanpa email tidak dihitung. |
 | `new_users` | User Baru | `transactions` | Jumlah transaksi berhasil dengan `product_type` = `Perdana` |
 | `repeat_orders` | Repeat Order | `transactions` | Jumlah transaksi berhasil dengan `product_type` = `Perpanjangan` |
 | `average_order_value` | AOV | `transactions` | `total_revenue ÷ total_transactions`, dibulatkan 2 desimal. `null` jika tidak ada transaksi. |
 | `conversion_rate` | Konversi (%) | keduanya | `total_transactions ÷ total_downloaders × 100`, dibulatkan 2 desimal. `null` jika downloader = 0. |
+
+Dengan `preset`, `total_downloaders` (`value`, `previous_value`, `change_percentage`, `trend`) sama persis dengan `totals` [`/trend/downloaders`](#get-apiperformancetrenddownloaders). Periodenya di-resolve dengan metadata `dataset = downloaders`, apa pun nilai `dataset` di request. Total yang belum tersedia bernilai `null`, bukan `0`, dan `conversion_rate` ikut `null`. Pembanding jam setara Downloader dibaca dari catatan `dashboard_snapshots`, jadi tetap ditampilkan walaupun KPI transaksi menyembunyikan pembandingnya. Tanpa `preset`, `total_downloaders` tetap jumlah `downloaders.total` pada rentang filter.
 
 `new_users` dan `repeat_orders` menghitung **transaksi**, bukan orang. Satu email yang melakukan dua kali `Perpanjangan` dihitung 2.
 
@@ -394,6 +396,7 @@ Contoh: `GET /api/performance/trend/downloaders?preset=today&platforms[]=app-a`
 - Rentang beberapa hari menjumlahkan total hariannya. Total harian 300 dan 350 menghasilkan 650.
 - Catatan yang sudah tersimpan tidak berubah saat `downloaders.total` diperbarui: pembanding 14.00 tetap memakai nilai saat dicatat.
 - Jam tanpa catatan tidak diestimasi dari total harian.
+- Tanggal tanpa baris `downloaders` untuk salah satu platform terpilih dianggap **belum tersedia**, bukan `0`. Bucket dan total yang mencakup tanggal itu bernilai `null`. Baris dengan `total = 0` tetap `0`.
 
 ### Titik per `granularity`
 
@@ -409,7 +412,7 @@ Pemasangan titik aktif dan pembanding sama dengan `/trend/sales`.
 | Keadaan | `availability` | `value` | `change` |
 |---|---|---|---|
 | Data ada | `complete` atau `partial` (dengan `as_of`) | Angka. `0` dari sumber tetap `0` | Dihitung jika kedua sisi tersedia |
-| Setelah batas data, cakupan belum diketahui, atau catatan jam itu tidak ada/belum lengkap di salah satu platform | `unavailable` | `null`, bukan `0` | `null` |
+| Setelah batas data, cakupan belum diketahui, total harian salah satu platform belum ada, atau catatan jam itu tidak ada/belum lengkap di salah satu platform | `unavailable` | `null`, bukan `0` | `null` |
 | Posisi yang tidak terjangkau periode pembanding | `comparison: null` | — | `null` |
 
 `change` berisi `change_percentage`, `trend`, dan `is_comparable`. `is_comparable = true` hanya jika kedua sisi tersedia dengan `availability` yang sama, dan untuk `partial`, `as_of` pada jam yang sama. Pembanding `0` menghasilkan `is_comparable = true`, `change_percentage = null` (tidak bisa dibagi 0), dan `trend = up` atau `same`. Pembanding kosong menghasilkan `is_comparable = false` dan `trend = null`.
@@ -418,7 +421,7 @@ Pemasangan titik aktif dan pembanding sama dengan `/trend/sales`.
 
 - `totals.active` dan `totals.comparison` adalah total seluruh periode dengan aturan sumber yang sama. `totals.change` dihitung dari `change_basis` resolver, jadi hari tanpa padanan tidak ikut perubahan.
 - `platforms[]` berisi total aktif setiap platform dan `share_percentage` (1 desimal) terhadap `totals.active.value`. `null` jika total 0 atau belum tersedia.
-- Untuk platform dan periode lengkap yang sama, `totals.active.value` sama dengan `kpis.total_downloaders.value` di `/summary`.
+- `/summary` dengan `preset` membaca total ini (`totals.active`, `totals.comparison`, `totals.change`) untuk KPI `total_downloaders`, termasuk saat nilainya `null`.
 
 ### 200 OK
 
@@ -481,4 +484,4 @@ Sama dengan [`/trend/sales`](#422-validasi-gagal-2).
 
 ### Batasan
 
-- `/summary` masih membaca `downloaders.total` per tanggal lewat filternya sendiri. Nilainya sama untuk periode yang tersedia, tetapi saat cakupan Downloader belum diketahui `/summary` tetap mengeluarkan jumlah (bisa `0`), sementara endpoint ini mengeluarkan `null`.
+- Satu tanggal tanpa total harian membuat total periode `null`. Total tidak dihitung dari tanggal yang tersedia saja, agar angka yang kurang tidak terbaca sebagai total lengkap.

@@ -140,6 +140,8 @@ Objek `period` ada di dalam `filter` pada response yang memakai `preset`.
 
 Pembanding jam setara dikosongkan karena query Ringkasan membaca data transaksi terbaru, bukan catatan `dashboard_snapshots` pada jam tersebut. Angka dari data terbaru tidak mewakili kondisi pada jam setara, sehingga tidak ditampilkan sebagai pembanding. Frontend menampilkan `trend = null` sebagai "Tanpa Pembanding".
 
+Pengecualian: `total_downloaders` mengikuti agregasi Downloader bersama ([API Performa](api/performance.md#get-apiperformancetrenddownloaders)), yang membaca catatan jam setara. Ketersediaannya mengikuti metadata `dataset = downloaders`.
+
 ## Batasan saat ini
 
 - Tanpa catatan `dashboard_snapshots` lengkap untuk rentang yang diminta, resolver melaporkan `availability = unavailable`.
