@@ -66,7 +66,7 @@ class PerformanceExportService
     public function sections(PerformanceFilter $filter, ?PerformanceFilter $downloaderFilter = null): array
     {
         return [
-            'Ringkasan KPI' => $this->summaryRows($filter),
+            'Ringkasan KPI' => $this->summaryRows($filter, $downloaderFilter),
             'Tren' => $this->trendRows($filter),
             ...($downloaderFilter?->period === null ? [] : ['Downloader' => $this->downloaderRows($downloaderFilter)]),
             'Metode Pembayaran' => $this->paymentMethodRows($filter),
@@ -78,9 +78,9 @@ class PerformanceExportService
     /**
      * @return list<list<string|int|float|null>>
      */
-    private function summaryRows(PerformanceFilter $filter): array
+    private function summaryRows(PerformanceFilter $filter, ?PerformanceFilter $downloaderFilter): array
     {
-        $summary = $this->performanceSummaryService->summarize($filter);
+        $summary = $this->performanceSummaryService->summarize($filter, $downloaderFilter);
 
         $rows = [
             ['Periode', $this->periodText($summary['filter']['ranges'])],

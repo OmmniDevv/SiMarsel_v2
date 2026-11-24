@@ -10,6 +10,7 @@ use App\Repositories\DownloaderRepository;
 use App\Services\Concerns\ComparesWithPreviousValue;
 use App\Support\PerformanceFilter;
 use App\Support\Period\PeriodWindow;
+use App\Support\Period\ResolvedPeriod;
 use App\Support\TransactionAggregation\TransactionRecord;
 use App\Support\TrendBuckets;
 use Carbon\CarbonImmutable;
@@ -22,7 +23,8 @@ use InvalidArgumentException;
  * total at the active data limit, otherwise the downloaders dashboard_snapshots payload recorded at exactly that
  * cutoff. Recorded snapshots are never summed with each other and are never estimated from daily totals.
  *
- * A missing value is null with availability = unavailable, never 0; a stored 0 stays 0.
+ * A missing value is null with availability = unavailable, never 0: a platform without a daily total for a date
+ * leaves that date unknown, while a stored total of 0 stays 0.
  */
 class DownloaderAggregationService
 {
@@ -53,11 +55,7 @@ class DownloaderAggregationService
      */
     public function trend(PerformanceFilter $filter, TrendPeriod $granularity): array
     {
-        $period = $filter->period ?? throw new InvalidArgumentException('The downloader trend needs a resolved period.');
-        $platforms = $this->downloaders->platforms($period->platforms);
-        $platformIds = array_keys($platforms);
-        $active = $this->source($period->active, $platformIds);
-        $comparison = $period->comparison === null ? null : $this->source($period->comparison, $platformIds);
+        [$period, $platforms, $active, $comparison] = $this->sources($filter);
 
         $activeBuckets = TrendBuckets::windows($period->active->dateFrom, $period->active->dateTo->addDay(), $granularity);
         $comparisonBuckets = $period->comparison === null
@@ -68,6 +66,7 @@ class DownloaderAggregationService
             fn (array $snapshot) => ($snapshot['payload']['daily'] ?? []) !== [],
         );
         $totals = $this->totals($active, $comparison, $period->changeBasis?->activeRanges, $period->changeBasis?->comparisonRanges);
+        unset($totals['change_basis']);
 
         return [
             'filter' => $filter->toArray(),
@@ -95,6 +94,36 @@ class DownloaderAggregationService
                     'change' => $this->change($activeSide, $comparisonSide),
                 ];
             }, array_keys($activeBuckets)),
+        ];
+    }
+
+    /**
+     * The whole-period Downloader totals read by the Ringkasan KPI: the active and comparison totals, their change,
+     * and the totals of the change basis ranges (null when unknown).
+     *
+     * @return array{active: array<string, mixed>, comparison: array<string, mixed>|null, change: array<string, mixed>, change_basis: array{active: int|null, comparison: int|null}}
+     */
+    public function periodTotals(PerformanceFilter $filter): array
+    {
+        [$period, , $active, $comparison] = $this->sources($filter);
+
+        return $this->totals($active, $comparison, $period->changeBasis?->activeRanges, $period->changeBasis?->comparisonRanges);
+    }
+
+    /**
+     * @return array{0: ResolvedPeriod, 1: array<int, array{slug: string, name: string}>, 2: array<string, mixed>, 3: array<string, mixed>|null}
+     */
+    private function sources(PerformanceFilter $filter): array
+    {
+        $period = $filter->period ?? throw new InvalidArgumentException('The Downloader aggregation needs a resolved period.');
+        $platforms = $this->downloaders->platforms($period->platforms);
+        $platformIds = array_keys($platforms);
+
+        return [
+            $period,
+            $platforms,
+            $this->source($period->active, $platformIds),
+            $period->comparison === null ? null : $this->source($period->comparison, $platformIds),
         ];
     }
 
@@ -146,6 +175,7 @@ class DownloaderAggregationService
             'change' => $activeBasis === null || $comparisonBasis === null
                 ? $this->noChange()
                 : [...$this->changeFromPrevious($activeBasis, $comparisonBasis), 'is_comparable' => true],
+            'change_basis' => ['active' => $activeBasis, 'comparison' => $comparisonBasis],
         ];
     }
 
@@ -247,7 +277,8 @@ class DownloaderAggregationService
 
     /**
      * The total of one day up to $at. The end of the day, and the active data limit (latest state), read the latest
-     * daily total; an earlier hour reads the snapshot recorded at exactly that cutoff.
+     * daily total; an earlier hour reads the snapshot recorded at exactly that cutoff. Null when any platform has no
+     * daily total or no complete snapshot for it.
      *
      * @param  array<string, mixed>  $source
      * @param  list<int>  $platformIds
@@ -260,7 +291,9 @@ class DownloaderAggregationService
         $date = $day->toDateString();
 
         if ($at->eq($day->addDay()) || ($window->stateBasis === PeriodStateBasis::Latest && $at->eq($window->cutoffAt))) {
-            return [array_sum(array_map(fn (int $id) => $source['daily'][$id][$date] ?? 0, $platformIds)), 'latest'];
+            $totals = array_map(fn (int $id) => $source['daily'][$id][$date] ?? null, $platformIds);
+
+            return [in_array(null, $totals, true) ? null : array_sum($totals), 'latest'];
         }
 
         return [$this->recorded($source, $platformIds, $day, $at), 'snapshot'];
