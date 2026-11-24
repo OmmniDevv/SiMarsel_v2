@@ -83,8 +83,10 @@ class DashboardSnapshot extends Model
     }
 
     /**
-     * The latest cutoff_at at which every selected platform has a complete snapshot for the period.
-     * Incomplete snapshots never count; null when no common complete cutoff is stored yet.
+     * The latest cutoff_at at which every selected platform has a complete snapshot for the period,
+     * so a comparison at that hour can be read on all of them. Earlier hours are checked when a later
+     * one is complete on only some platforms. Incomplete snapshots never count; null when no hour is
+     * complete on every selected platform, meaning the comparison is not available yet.
      *
      * @param  list<int>  $platformIds
      */
@@ -106,7 +108,9 @@ class DashboardSnapshot extends Model
             ->whereIn('platform_id', $platformIds)
             ->groupBy('cutoff_at')
             ->havingRaw('COUNT(DISTINCT platform_id) = ?', [count($platformIds)])
-            ->max('cutoff_at');
+            ->orderByDesc('cutoff_at')
+            ->limit(1)
+            ->value('cutoff_at');
 
         return $cutoff === null ? null : CarbonImmutable::parse($cutoff);
     }

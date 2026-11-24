@@ -2,13 +2,13 @@
 
 Kontrak data untuk halaman **Tasklist** (`/tasks`): Board, Table, ringkasan, Timeline, Calendar, detail tugas, pembuatan tugas, penugasan PIC, workflow status, evidence, review, dan histori (TASK-01 s.d. TASK-11).
 
-**Status: Board/Table, ringkasan, Timeline, Calendar, pembuatan, detail, edit, penugasan, workflow status, evidence, review, dan histori tugas terintegrasi dengan backend.** `GET /api/tasks/meta`, `GET /api/tasks`, `GET /api/tasks/monitoring`, `GET /api/tasks/schedule`, `GET /api/tasks/calendar`, `GET /api/tasks/create-options`, `POST /api/tasks`, `GET /api/tasks/{id}`, `PATCH /api/tasks/{id}`, `GET /api/tasks/{id}/assignment-options`, `PATCH /api/tasks/{id}/assignment`, `PATCH /api/tasks/{id}/status`, `GET /api/tasks/{id}/evidences`, `POST /api/tasks/{id}/evidences`, `POST /api/tasks/{id}/reviews`, dan `GET /api/tasks/{id}/activities` dipanggil langsung, tanpa bergantung pada `VITE_TASK_API_READY`. Daftar evidence di detail diambil dari `evidence` pada `GET /api/tasks/{id}`. Keputusan QA dari Board (drag On Review → Done untuk approve, On Review → On Process membuka form revisi) dan dari detail selalu memakai `POST /api/tasks/{id}/reviews` dengan `version`, tidak pernah `PATCH /status`; tombol dan form keputusan di detail mengikuti `can_review`. Filter daftar tugas dikirim ke API; endpoint Tasklist tambahan tetap dinonaktifkan sampai tersedia.
+**Status: Board/Table, ringkasan, Timeline, Calendar, pembuatan, detail, edit, penugasan, workflow status, evidence, review, dan histori tugas terintegrasi dengan backend.** `GET /api/tasks/meta`, `GET /api/tasks`, `GET /api/tasks/monitoring`, `GET /api/tasks/schedule`, `GET /api/tasks/calendar`, `GET /api/tasks/create-options`, `POST /api/tasks`, `GET /api/tasks/{id}`, `PATCH /api/tasks/{id}`, `GET /api/tasks/{id}/assignment-options`, `PATCH /api/tasks/{id}/assignment`, `PATCH /api/tasks/{id}/status`, `GET /api/tasks/{id}/evidences`, `POST /api/tasks/{id}/evidences`, `POST /api/tasks/{id}/reviews`, dan `GET /api/tasks/{id}/activities` dipanggil langsung, tanpa bergantung pada `VITE_TASK_API_READY`. Daftar evidence di detail diambil dari `evidence` pada `GET /api/tasks/{id}`. Keputusan QA dari Board (drag On Review → Done untuk approve, On Review → On Process membuka form revisi) dan dari detail selalu memakai `POST /api/tasks/{id}/reviews` dengan `version`, tidak pernah `PATCH /status`; drag keputusan QA di Board serta tombol dan form keputusan di detail mengikuti `can_review`. Filter daftar tugas dikirim ke API; endpoint Tasklist tambahan tetap dinonaktifkan sampai tersedia.
 
 Wajib login. Header dan kode error umum mengikuti [authentication.md](authentication.md). Tanggal memakai format `YYYY-MM-DD`; waktu memakai ISO 8601.
 
 ## Role & cakupan data
 
-Role dan kewenangan membuat tugas berasal dari `GET /api/tasks/meta`. Jika pemuatan meta gagal, frontend memakai pemetaan role akun `MGR` → `manager`, `EMP` → `staff`, dan `ADM` → `admin`.
+Role dan kewenangan membuat tugas berasal dari `GET /api/tasks/meta`. Jika pemuatan meta gagal, frontend memakai pemetaan role akun `ADM` → `admin`, `MGR` → `manager`, serta `SPV`, `EMP`, dan `FRL` → `staff`.
 
 Semua akun **aktif** melihat daftar dan detail tugas **seluruh divisi** (Board, Table, Calendar, Timeline, histori, evidence, review, monitoring). Melihat tidak memberi hak mengubah; hak mengubah mengikuti permission role (`meta.permissions`), cakupan divisi, dan assignment PIC aktif.
 
@@ -26,6 +26,14 @@ Semua akun **aktif** melihat daftar dan detail tugas **seluruh divisi** (Board, 
 - `meta.role` tetap tiga nilai (`admin`, `manager`, `staff`) agar kode lama tidak rusak; pakai `meta.role_code` untuk membedakan Supervisor dan Freelance, dan `meta.can_create` untuk tombol Buat Tugas.
 
 Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend hanya untuk tampilan.
+
+**Frontend (TASK-12)**:
+
+- Nama role (Admin, Manajer, Supervisor, Staff, Freelance) berasal dari `meta.role_code`. Filter divisi tersedia untuk semua role; nilai awalnya mengikuti `meta.default_division`.
+- Papan dan Tabel memiliki cakupan **Semua Tugas** (`scope=all_tasks`) dan **Tugas Saya** (`scope=my_tasks`). Cakupan tersimpan di URL (`?scope=`) dan filter aktif dipertahankan saat berpindah cakupan.
+- `GET /api/tasks/monitoring` belum memiliki cakupan `my_tasks`, sehingga ringkasan pada Tugas Saya dihitung frontend dari daftar `my_tasks` dengan rumus yang sama.
+- Tugas tanpa `can_edit`, `can_assign`, dan `can_delete` diberi tanda **Hanya lihat**. Tombol Ubah, Atur PIC, Hapus, dan keputusan review mengikuti flag backend per tugas.
+- Pemilihan PIC mengirim daftar lengkap `pic_ids`. Tombol Hapus Tugas memakai `DELETE /api/tasks/{id}` dengan `version`.
 
 ## Objek
 
@@ -45,6 +53,8 @@ Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend h
   "evidence_required": true,
   "evidence_count": 0,
   "can_view_detail": true,
+  "can_change_status": true,
+  "can_review": false,
   "version": 1,
   "updated_at": "2026-10-21T03:00:00Z"
 }
@@ -53,12 +63,14 @@ Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend h
 - `priority`: `low` | `medium` | `high` | `urgent`.
 - `status`: `backlog` | `todo` | `in_progress` | `ready_review` | `on_review` | `done` (label: Back Log, To Do, On Process, Ready Review, On Review, Done).
 - `pics`: semua PIC aktif, urut nama; `[]` bila belum ada PIC. Tidak ada Lead PIC. Field `pic` (satu PIC) sudah dihapus.
+- `can_change_status`: `true` bila user boleh memindahkan status tugas ini sekarang lewat endpoint status (permission `task.change_status` serta PIC aktif atau pengelola sesuai status). Board hanya mengizinkan drag bila `true`; keputusan QA dari `on_review` mengikuti `can_review`.
+- `can_review`: `true` bila user boleh memberi keputusan QA (approve/revisi) sekarang: tugas `on_review` yang wajib QA, akun aktif dengan permission `task.review`, dan Admin/Manajer untuk semua divisi atau Supervisor untuk divisinya. Board hanya mengizinkan drag On Review → Done/On Process bila `true`.
 - `can_assign`: `true` bila user boleh mengatur PIC tugas ini sekarang.
 - `can_delete`: `true` bila user boleh menghapus tugas ini sekarang (Admin dan Manajer semua divisi, Supervisor divisinya; bukan untuk tugas Done).
 - `start_date` dan `deadline` boleh `null`.
 - `version` dipakai untuk mencegah perubahan berbasis data lama (lihat 409).
 
-**TaskDetail** = Task ditambah `description`, `category` (`{ id, name, requires_review, evidence_required }` | null), `platform` (`{ id, name }` | null), `creator` (`{ id, fullname }` | null), `assignments` (array Assignment: riwayat PIC aktif dan yang sudah dilepas, terlama lebih dulu), `evidence` (array Evidence), `history` (array Activity), `reviews` (semua Review, terbaru lebih dulu), `last_review` (Review terbaru | null), `can_review` (`true` bila user boleh memberi keputusan QA saat ini: tugas `on_review` dan user Admin/Manajer berwenang), `editable_fields`, `next_statuses`, `created_at`, dan `completed_at`. `next_statuses` tidak memuat status tujuan dari `on_review`, karena keputusan QA memakai endpoint review.
+**TaskDetail** = Task ditambah `description`, `category` (`{ id, name, requires_review, evidence_required }` | null), `platform` (`{ id, name }` | null), `creator` (`{ id, fullname }` | null), `assignments` (array Assignment: riwayat PIC aktif dan yang sudah dilepas, terlama lebih dulu), `evidence` (array Evidence), `history` (array Activity), `reviews` (semua Review, terbaru lebih dulu), `last_review` (Review terbaru | null), `editable_fields`, `next_statuses`, `created_at`, dan `completed_at`. `next_statuses` tidak memuat status tujuan dari `on_review`, karena keputusan QA memakai endpoint review.
 
 **Activity** (histori, `GET /api/tasks/{id}/activities`):
 
@@ -83,11 +95,11 @@ Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend h
 | Method & path | Body / query | Respons |
 |---|---|---|
 | `GET /api/tasks/meta` | – | `{ data: { role, role_code, permissions, division, default_division, can_create, divisions, statuses, priorities } }`. `role` tetap `admin` \| `manager` \| `staff`; `role_code` = kode role akun (`ADM`, `MGR`, `SPV`, `EMP`, `FRL`); `permissions` = kode permission role itu (misalnya `task.view_all`, `task.assign`), urut abjad. Permission hanya menyatakan kewenangan umum; akses per tugas tetap diputuskan backend. |
-| `GET /api/tasks` | `scope` (`all_tasks` default \| `my_tasks`), `search`, `division`, `priority`, `status`, `sort`, `direction`, `per_page`, `page` (semua opsional) | `{ data: [Task], meta: { status_counts } }`, tugas dalam cakupan user. `my_tasks` = hanya tugas yang user menjadi PIC aktifnya. Tugas dengan banyak PIC tetap muncul sekali di daftar, halaman, dan `status_counts`. `sort=pic` memakai nama PIC aktif pertama (abjad). Tanpa `per_page` semua tugas dikembalikan sekaligus; Board/Table mengirim filter ke server dan mengurutkan serta mempaginasi di frontend. |
+| `GET /api/tasks` | `scope` (`all_tasks` default \| `my_tasks`), `search`, `division`, `pic_id`, `priority`, `status`, `filter_mode`, `date_field`, `date`, `month`, `year`, `start_date`, `end_date`, `sort`, `direction`, `per_page`, `page` (semua opsional; lihat [Filter periode](#filter-periode-task-14)) | `{ data: [Task], meta: { status_counts } }`, tugas dalam cakupan user. `my_tasks` = hanya tugas yang user menjadi PIC aktifnya. Tugas dengan banyak PIC tetap muncul sekali di daftar, halaman, dan `status_counts`. `sort=pic` memakai nama PIC aktif pertama (abjad). Tanpa `per_page` semua tugas dikembalikan sekaligus; Board/Table mengirim filter ke server dan mengurutkan serta mempaginasi di frontend. |
 | `GET /api/tasks/create-options` | – | `divisions` (divisi yang boleh dibuatkan tugas), `pics` (semua akun yang dapat menjadi PIC dari semua divisi: `{ id, fullname, role, division: { id, code_division, name } \| null }`), kategori/aturan QA, platform, prioritas, status awal, dan default form. Admin/Manajer saja. |
 | `POST /api/tasks` | `title`*, `description`, `category_id`, `division_id`*, `pic_ids` (array ID akun, maks. 20), `platform_id`, `priority`, `start_date`, `deadline`, `status`, `requires_review`, `evidence_required` | `201 { data: TaskDetail, message }`; Admin/Manajer saja. Field pembuat ditentukan dari akun yang login. Setiap PIC mendapat assignment aktif dengan `assigned_by` = pembuat. |
 | `GET /api/tasks/{id}` | – | `{ data: TaskDetail }` |
-| `GET /api/tasks/{id}/preview` | – | `{ data: TaskPreview }` untuk pop-up Calendar: field Task ditambah `description`, `is_overdue`, `can_review`. Dibaca ulang dari database setiap kali dipanggil dan tidak mengubah data. `pics` berisi seluruh PIC aktif tanpa duplikasi (`[]` bila belum ada); `start_date` dan `deadline` `null` bila kosong. Semua akun aktif; `404` bila tugas tidak ada atau sudah dihapus |
+| `GET /api/tasks/{id}/preview` | – | `{ data: TaskPreview }` untuk pop-up Calendar: field Task (termasuk `can_review`) ditambah `description` dan `is_overdue`. Dibaca ulang dari database setiap kali dipanggil dan tidak mengubah data. `pics` berisi seluruh PIC aktif tanpa duplikasi (`[]` bila belum ada); `start_date` dan `deadline` `null` bila kosong. Semua akun aktif; `404` bila tugas tidak ada atau sudah dihapus |
 | `DELETE /api/tasks/{id}` | `version`* | `{ message: "Tugas berhasil dihapus." }`. Soft delete; hanya Admin/Manajer (semua divisi) dan Supervisor (divisinya), selain itu `403`. `422` di `errors.status` bila tugas sudah Done; `409` bila `version` usang |
 | `PATCH /api/tasks/{id}` | `title`, `description`, `category_id`, `platform_id`, `priority`, `start_date`, `deadline`, `version`* | `{ data: TaskDetail, message }` |
 | `PATCH /api/tasks/{id}/status` | `status`*, `version`* | `{ data: TaskDetail, message }`; semua transisi kecuali keluar dari `on_review` (approve/revisi memakai `POST /api/tasks/{id}/reviews`). `422` dengan alasan di `errors.status` bila transisi ditolak; `409 { message, current_version }` bila `version` sudah usang |
@@ -114,6 +126,27 @@ Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend h
 - **Event** (Calendar): `{ id, title, division, is_shared, target_divisions, start_date, end_date, description, task_id, can_view_detail }`. `task_id` selalu `null` dan `can_view_detail` selalu `false`: agenda tidak terhubung ke tugas, sehingga tombol "Lihat Detail Tugas Terkait" tidak muncul. `deadlines` hanya berisi tugas dalam cakupan user dan yang memiliki deadline, berupa objek Task ditambah `task_id` (sama dengan `id`), `description` (boleh `null`), dan `is_overdue`. Lihat [Calendar](#calendar-task-11).
 - **Lihat Detail dari Calendar (TASK-15)**: frontend membawa `task_id` ke Board dan membuka detail lewat `GET /api/tasks/{id}`. Bila tugas tersembunyi oleh filter atau pagination, frontend menyesuaikan filter yang menghalangi (cari, prioritas, status, PIC, periode, divisi, dan cakupan `my_tasks`) dan tetap menampilkan Task Card dari respons detail. Navigasi tidak mengubah data dan tidak menambah hak edit: akses tetap diputuskan backend (`403`/`404`), dan tombol mengikuti flag `can_*`.
 - **Tautan langsung**: `/tasks?task={id}` membuka Board dengan detail tugas tersebut memakai alur yang sama. Parameter `task` diperbarui saat panel detail dibuka dan dihapus saat ditutup.
+
+## Filter periode (TASK-14)
+
+`GET /api/tasks` dan `GET /api/tasks/monitoring?scope=tasklist` menerima parameter periode yang sama. Tanpa `filter_mode` = tanpa filter periode.
+
+| `filter_mode` | Parameter wajib | Periode |
+|---|---|---|
+| `date` | `date` (`YYYY-MM-DD`) | Satu hari |
+| `month` | `month` (1 sampai 12), `year` (4 digit) | Seluruh bulan pada tahun itu |
+| `year` | `year` (4 digit, 1000 sampai 9999) | 1 Januari sampai 31 Desember |
+| `range` | `start_date`, `end_date` (`YYYY-MM-DD`) | Termasuk kedua tanggal; `end_date` tidak boleh sebelum `start_date` |
+
+- `date_field` (`start_date` atau `deadline`) wajib dikirim bersama `filter_mode`.
+- Kirim hanya parameter milik mode yang aktif. Parameter mode lain, atau parameter periode tanpa `filter_mode`, ditolak `422`.
+- Tugas yang tanggalnya kosong pada `date_field` tidak masuk hasil.
+- `pic_id` (ID akun) menyaring tugas dengan akun itu sebagai PIC aktif. PIC yang sudah dilepas tidak cocok.
+- Periode dapat digabung dengan `scope`, `search`, `division`, `pic_id`, `priority`, `status`, `sort`, `direction`, `per_page`, dan `page`. Filter tidak mengubah hak akses.
+- Tugas dengan banyak PIC tetap satu baris dan dihitung satu kali di daftar, `status_counts`, dan KPI.
+- Agar KPI sama dengan Board dan Table, kirim parameter yang sama ke monitoring dengan `scope=tasklist`, dan kirim cakupan daftar sebagai `task_scope` (`all_tasks` atau `my_tasks`).
+
+Contoh: `GET /api/tasks?scope=my_tasks&filter_mode=month&date_field=deadline&month=11&year=2026&status=todo`
 
 ## Timeline (TASK-10)
 
@@ -254,6 +287,9 @@ Tugas tanpa deadline tidak dihitung pada Overdue maupun Due Today.
 | `search` | teks, maks. 150 | Judul tugas, sama seperti Tasklist. |
 | `date_basis` | `deadline` (default) \| `created_at` | Tanggal yang dipakai filter periode. Lihat *Dasar tanggal periode* di bawah. |
 | `date_from`, `date_to` | `YYYY-MM-DD` | Batas periode (inklusif) pada tanggal sesuai `date_basis`. Boleh diisi salah satu. `date_to` ≥ `date_from`. |
+| `task_scope` | `all_tasks` (default) \| `my_tasks` | Hanya untuk `scope=tasklist`. `my_tasks` = tugas dengan user sebagai PIC aktif. |
+| `pic_id` | ID akun | Tugas dengan akun itu sebagai PIC aktif. |
+| `filter_mode`, `date_field`, `date`, `month`, `year`, `start_date`, `end_date` | lihat [Filter periode](#filter-periode-task-14) | Periode yang sama dengan `GET /api/tasks`. Tidak boleh digabung dengan `date_basis`, `date_from`, atau `date_to` (`422`). |
 
 Tanpa parameter = konfigurasi default (Reset Filter): cakupan `report`, semua divisi, `date_basis=deadline`, tanpa periode.
 
