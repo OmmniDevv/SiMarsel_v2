@@ -82,7 +82,7 @@ class TaskReviewTest extends TestCase
 
     public function test_admin_reviews_tasks_of_any_division(): void
     {
-        $task = $this->task(TaskStatus::OnReview, ['division_id' => $this->finance->id, 'pic_id' => null]);
+        $task = $this->task(TaskStatus::OnReview, ['division_id' => $this->finance->id]);
 
         $this->actingAs($this->admin)->postJson($this->url($task), $this->approve())->assertOk();
     }
@@ -372,9 +372,8 @@ class TaskReviewTest extends TestCase
      */
     private function task(TaskStatus $status, array $attributes = []): Task
     {
-        return Task::factory()->create([
+        return Task::factory()->withPics($this->staff)->create([
             'division_id' => $this->marketing->id,
-            'pic_id' => $this->staff->id,
             'creator_id' => $this->manager->id,
             'status' => $status,
             'requires_review' => true,

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Promo;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Account;
 use App\Models\Funnel;
 use App\Models\Platform;
@@ -221,7 +222,9 @@ class PromoCodeSummaryTest extends TestCase
         app(PromoCodeService::class)->register($this->jadiasn->id, 'EMPTY26');
         $this->transaction(['EMPTY26'], 80000, '2026-09-22');
         // A transaction that turns failed keeps its usage history but leaves the analysis.
-        $this->transaction(['APP26'], 90000, '2026-09-23')->update(['status_message' => 'failed']);
+        $this->transaction(['APP26'], 90000, '2026-09-23')->update([
+            'source_status' => MarkazTransactionStatus::Failed->value,
+        ]);
 
         // Deleting the source keeps its snapshot name on the usages.
         $instagram = PromoSource::where('name', 'Instagram')->first();

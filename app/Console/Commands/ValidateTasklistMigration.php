@@ -18,7 +18,7 @@ class ValidateTasklistMigration extends Command
         $this->table(['Pemeriksaan', 'Hasil', 'Detail'], array_map(fn (array $result) => array_values($result), $results));
 
         if (! $validator->passed($results)) {
-            $this->error('Validasi gagal. Lihat baris FAIL dan prosedur pemulihan di docs/database/tasklist-schema-alignment.md.');
+            $this->error('Validasi gagal. Periksa baris FAIL sebelum melanjutkan deployment.');
 
             return self::FAILURE;
         }

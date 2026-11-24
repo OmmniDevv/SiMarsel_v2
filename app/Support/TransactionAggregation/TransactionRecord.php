@@ -19,7 +19,7 @@ final class TransactionRecord
         public readonly int $platformId,
         public readonly string $markazTransactionId,
         public readonly ?string $markazRefId,
-        public readonly int $markazCustomerId,
+        public readonly ?int $markazCustomerId,
         public readonly CarbonImmutable $markazCreatedAt,
         public readonly ?CarbonImmutable $paidAt,
         public readonly ?MarkazTransactionStatus $reportStatus,
@@ -39,7 +39,7 @@ final class TransactionRecord
             platformId: (int) $row['platform_id'],
             markazTransactionId: (string) $row['markaz_transaction_id'],
             markazRefId: self::blankToNull($row['markaz_ref_id'] ?? null),
-            markazCustomerId: (int) $row['markaz_customer_id'],
+            markazCustomerId: self::nullableInteger($row['markaz_customer_id'] ?? null),
             markazCreatedAt: self::wib($row['markaz_created_at']),
             paidAt: $paidDate === null ? null : self::wib($paidDate.' '.(self::blankToNull($row['paid_time'] ?? null) ?? '00:00:00')),
             reportStatus: MarkazTransactionStatus::forReport(
@@ -101,6 +101,13 @@ final class TransactionRecord
      * An empty or missing status field means unknown, while 0 is Pending.
      */
     private static function statusCode(mixed $value): ?int
+    {
+        $value = self::blankToNull($value);
+
+        return $value === null ? null : (int) $value;
+    }
+
+    private static function nullableInteger(mixed $value): ?int
     {
         $value = self::blankToNull($value);
 

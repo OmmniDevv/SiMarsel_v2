@@ -18,9 +18,8 @@ class UnsafeTasklistRollbackException extends RuntimeException
 
         return new self(
             "Rollback TASK-19 dibatalkan karena akan menghapus data baru ({$found}). "
-            .'Jalankan `php artisan tasks:recovery status` dan ikuti prosedur pemulihan di '
-            .'docs/database/tasklist-migration-validation-report.md. Set TASKLIST_ALLOW_DESTRUCTIVE_ROLLBACK=true '
-            .'hanya bila data tersebut memang boleh dibuang.'
+            .'Jalankan `php artisan tasks:recovery` untuk melihat rinciannya dan gunakan backup database untuk '
+            .'pemulihan. Set TASKLIST_ALLOW_DESTRUCTIVE_ROLLBACK=true hanya bila data tersebut memang boleh dibuang.'
         );
     }
 }

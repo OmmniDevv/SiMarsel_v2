@@ -40,23 +40,6 @@ class TaskFactory extends Factory
     }
 
     /**
-     * A task created with the legacy pic_id gets the active assignment the backfill would give it, so it looks like
-     * migrated data.
-     */
-    public function configure(): static
-    {
-        return $this->afterCreating(function (Task $task) {
-            if ($task->pic_id !== null && ! $task->assignments()->exists()) {
-                $task->assignments()->create([
-                    'account_id' => $task->pic_id,
-                    'assigned_by' => $task->creator_id,
-                    'assigned_at' => $task->created_at ?? now(),
-                ]);
-            }
-        });
-    }
-
-    /**
      * Active PICs for the task.
      */
     public function withPics(Account ...$pics): static

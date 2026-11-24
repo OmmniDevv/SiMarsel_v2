@@ -15,10 +15,8 @@ use App\Support\Period\PeriodCoverageSource;
 use App\Support\Period\PeriodSelection;
 use Carbon\CarbonImmutable;
 use Database\Seeders\DatabaseSeeder;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Tests\Support\InMemoryPeriodCoverage;
 use Tests\TestCase;
 
@@ -76,7 +74,6 @@ class PerformancePeriodContractTest extends TestCase
             'payment_method' => 'BNI',
             'nominal' => $nominal,
             'product_type' => Transaction::TYPE_FIRST,
-            'status_message' => Transaction::STATUS_SUCCESS,
         ]);
     }
 
@@ -235,17 +232,10 @@ class PerformancePeriodContractTest extends TestCase
         $platform = Platform::where('slug', 'app-a')->first();
         $other = Platform::factory()->create(['slug' => 'app-b']);
 
-        Schema::create('dashboard_snapshots', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('platform_id');
-            $table->string('dataset');
-            $table->date('date_from');
-            $table->date('date_to');
-            $table->dateTime('cutoff_at');
-            $table->boolean('is_complete');
-        });
-
-        $row = ['platform_id' => $platform->id, 'dataset' => 'transactions', 'date_from' => '2026-11-11', 'date_to' => '2026-11-11', 'cutoff_at' => '2026-11-11 14:00:00', 'is_complete' => true];
+        $row = [
+            'platform_id' => $platform->id, 'dataset' => 'transactions', 'date_from' => '2026-11-11', 'date_to' => '2026-11-11',
+            'cutoff_at' => '2026-11-11 14:00:00', 'is_complete' => true, 'payload' => '{}', 'recorded_at' => '2026-11-11 14:05:00',
+        ];
 
         DB::table('dashboard_snapshots')->insert([
             $row,

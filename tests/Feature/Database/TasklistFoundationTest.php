@@ -39,37 +39,6 @@ class TasklistFoundationTest extends TestCase
         $this->staff = $this->account(Role::EMPLOYEE, 'staff');
     }
 
-    public function test_pic_id_is_backfilled_into_active_assignments_without_touching_pic_id(): void
-    {
-        $migration = $this->migration('create_task_assignments_table');
-        $migration->down();
-
-        // Legacy rows: pic_id is written directly, as before task_assignments existed.
-        $withHistory = $this->legacyTask($this->staff);
-        $withoutHistory = $this->legacyTask($this->staff);
-        $unassigned = $this->legacyTask(null);
-
-        $admin = $this->account(Role::ADMIN, 'admin');
-        DB::table('task_activities')->insert([
-            ['task_id' => $withHistory->id, 'account_id' => $this->manager->id, 'action' => TaskActivity::ASSIGNED, 'created_at' => '2026-11-01 08:00:00'],
-            ['task_id' => $withHistory->id, 'account_id' => $admin->id, 'action' => TaskActivity::REASSIGNED, 'created_at' => '2026-11-02 09:00:00'],
-        ]);
-
-        $migration->up();
-
-        $this->assertSame(2, TaskAssignment::count());
-        $this->assertDatabaseHas('task_assignments', [
-            'task_id' => $withHistory->id, 'account_id' => $this->staff->id, 'assigned_by' => $admin->id,
-            'assigned_at' => '2026-11-02 09:00:00', 'unassigned_at' => null,
-        ]);
-        $this->assertDatabaseHas('task_assignments', [
-            'task_id' => $withoutHistory->id, 'account_id' => $this->staff->id, 'assigned_by' => $this->manager->id,
-        ]);
-        $this->assertSame(0, TaskAssignment::where('task_id', $unassigned->id)->count());
-        $this->assertSame($this->staff->id, $withHistory->fresh()->pic_id);
-        $this->assertEquals([$this->staff->id], $withHistory->pics()->pluck('accounts.id')->all());
-    }
-
     public function test_an_account_cannot_be_an_active_pic_of_the_same_task_twice(): void
     {
         $task = Task::factory()->create(['division_id' => $this->division->id]);
@@ -190,20 +159,6 @@ class TasklistFoundationTest extends TestCase
             $this->assertFalse($role->hasPermission(Permission::TASK_CREATE), $code);
             $this->assertFalse($role->hasPermission(Permission::TASK_REVIEW), $code);
         }
-    }
-
-    private function legacyTask(?Account $pic): Task
-    {
-        return Task::find(DB::table('tasks')->insertGetId([
-            'title' => 'Tugas lama',
-            'division_id' => $this->division->id,
-            'pic_id' => $pic?->id,
-            'creator_id' => $this->manager->id,
-            'priority' => 'medium',
-            'status' => 'todo',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]));
     }
 
     private function migration(string $name): Migration

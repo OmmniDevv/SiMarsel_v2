@@ -158,7 +158,6 @@ class TaskCreationTest extends TestCase
             'category_id' => $this->reviewed->id,
             'division_id' => $this->marketing->id,
             'platform_id' => $platform->id,
-            'pic_id' => null,
             'creator_id' => $this->manager->id,
             'priority' => 'high',
         ]);

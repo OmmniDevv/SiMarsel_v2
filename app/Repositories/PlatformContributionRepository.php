@@ -2,6 +2,7 @@
 
 namespace App\Repositories;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Platform;
 use App\Models\Transaction;
 use App\Repositories\Concerns\AppliesPerformanceFilter;
@@ -15,7 +16,7 @@ class PlatformContributionRepository
     use AppliesPerformanceFilter;
 
     /**
-     * Revenue, transactions, and unique customer emails per platform.
+     * Revenue, transactions, and unique paying accounts per platform.
      * Selected platforms (or every platform) are returned even without successful transactions in the period.
      *
      * @return Collection<int, object{slug: string, name: string, revenue: string|float, transactions: int, users: int}>
@@ -26,7 +27,7 @@ class PlatformContributionRepository
             ->when($filter->platforms !== [], fn (Builder $query) => $query->whereIn('platforms.slug', $filter->platforms))
             ->leftJoin('transactions', function (JoinClause $join) use ($filter) {
                 $join->on('transactions.platform_id', '=', 'platforms.id')
-                    ->where('transactions.status_message', Transaction::STATUS_SUCCESS);
+                    ->whereRaw(Transaction::REPORT_STATUS_EXPRESSION.' = ?', [MarkazTransactionStatus::Success->value]);
 
                 $this->whereInPerformancePeriod($join, $filter, 'transactions.paid_date');
             })
@@ -35,8 +36,7 @@ class PlatformContributionRepository
                 'platforms.slug, platforms.name, '
                 .'COALESCE(SUM(transactions.nominal), 0) as revenue, '
                 .'COUNT(transactions.id) as transactions, '
-                ."COUNT(DISTINCT CASE WHEN transactions.customer_email IS NOT NULL AND transactions.customer_email != '' "
-                .'THEN LOWER(TRIM(transactions.customer_email)) END) as users'
+                .'COUNT(DISTINCT transactions.markaz_customer_id) as users'
             )
             ->groupBy('platforms.id', 'platforms.slug', 'platforms.name')
             ->get();

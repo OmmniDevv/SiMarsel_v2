@@ -22,7 +22,6 @@ class TaskPreviewResource extends TaskResource
             ...parent::toArray($request),
             'description' => $this->description,
             'is_overdue' => $this->status !== TaskStatus::Done && $this->deadline !== null && $this->deadline->lt(today()),
-            'can_review' => $this->resource->awaitsDecisionFrom($request->user()),
         ];
     }
 }
