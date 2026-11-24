@@ -335,7 +335,6 @@ class PerformanceSalesTrendTest extends TestCase
             'nominal' => $netNominal + 2000,
             'admin_fee' => 2000,
             'net_nominal' => $netNominal,
-            'status_message' => $status->label(),
         ]);
     }
 
