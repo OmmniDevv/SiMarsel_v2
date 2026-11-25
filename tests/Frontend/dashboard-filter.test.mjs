@@ -11,7 +11,7 @@ const browser = {
 const filters = await loadPerformanceModule('filter.js');
 const period = await loadPerformanceModule('period.js');
 const resolved = await loadPerformanceModule('fixtures/resolved-periods.js');
-const { default: dashboardFilter, STATUS } = await loadPerformanceModule('global-filter.js', browser);
+const { default: dashboardFilter, PERIOD_PENDING, STATUS } = await loadPerformanceModule('global-filter.js', browser);
 
 const PLATFORMS = [
     { value: 'cerebrum', label: 'Cerebrum' },
@@ -226,6 +226,65 @@ test('AC-04: the custom comparison range is checked the same way on its own end 
     }));
 
     assert.deepEqual(errors, { comparison_to: MESSAGE });
+});
+
+const SEVEN_DAYS = {
+    active: '4 Nov 2026, 00.00 – 10 Nov 2026, 24.00 WIB',
+    comparison: '28 Okt 2026, 00.00 – 3 Nov 2026, 24.00 WIB',
+    record: '4 Nov 2026, 00.00 WIB (keadaan terbaru)',
+};
+
+/** Mounts the filter with 7 Hari Terakhir applied and its response received. */
+function mountSevenDays() {
+    const mounted = mount();
+
+    mounted.filter.filter.preset = 'last_7_days';
+    mounted.filter.changePreset();
+    mounted.respond();
+    assert.equal(mounted.filter.periodInfo.active, SEVEN_DAYS.active);
+
+    return mounted;
+}
+
+const shows = (info, text) => JSON.stringify(info).includes(text);
+
+test('the previous period is not shown while the response for the new filter is pending', () => {
+    const { filter, respond } = mountSevenDays();
+
+    filter.filter.preset = 'last_30_days';
+    filter.changePreset();
+
+    const pending = plain(filter.periodInfo);
+    assert.deepEqual(
+        [pending.active, pending.comparison, pending.completeUntil, filter.activeRangeLabel],
+        [PERIOD_PENDING, PERIOD_PENDING, PERIOD_PENDING, PERIOD_PENDING],
+    );
+    for (const text of Object.values(SEVEN_DAYS)) assert.equal(shows(pending, text), false, text);
+    assert.deepEqual([pending.provisional, pending.change, pending.durations], [false, null, null]);
+
+    respond('preset=last_7_days');
+    assert.equal(filter.periodInfo.active, PERIOD_PENDING, 'the late 7-day response does not bring it back');
+
+    respond('preset=last_30_days');
+    assert.equal(filter.periodInfo.active, '12 Okt 2026, 00.00 – 10 Nov 2026, 24.00 WIB');
+    assert.equal(filter.periodInfo.comparison, '12 Sep 2026, 00.00 – 11 Okt 2026, 24.00 WIB');
+    assert.equal(filter.periodInfo.completeUntil, '11 Nov 2026, 00.00 WIB');
+});
+
+test('a failed request for the new filter shows the failure instead of the previous period', () => {
+    const { filter } = mountSevenDays();
+
+    filter.filter.preset = 'last_30_days';
+    filter.changePreset();
+    filter.receivePeriod({ query: filter.filterQuery, error: { status: 500, data: {} } });
+
+    const failed = plain(filter.periodInfo);
+    assert.deepEqual(
+        [failed.active, failed.comparison, failed.completeUntil],
+        [STATUS.periodError, STATUS.periodError, STATUS.periodError],
+    );
+    for (const text of Object.values(SEVEN_DAYS)) assert.equal(shows(failed, text), false, text);
+    assert.deepEqual([filter.filterStatus, filter.filterFailed], [`${STATUS.failed} ${STATUS.periodError}`, true]);
 });
 
 test('AC-05 (FE AC-03): a 7-day response arriving after the 30-day one is ignored', () => {

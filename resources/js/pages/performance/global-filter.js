@@ -25,6 +25,25 @@ export const STATUS = Object.freeze({
     periodError: 'Gagal memuat periode filter.',
 });
 
+export const PERIOD_PENDING = 'Memperbarui periode…';
+
+/**
+ * Period panel text while the latest request is pending or after it failed. The previous period is never
+ * shown in the meantime, so it cannot be read as the result of the new filter.
+ */
+function periodNotice(text) {
+    return {
+        active: text,
+        provisional: false,
+        provisionalLabel: '',
+        comparison: text,
+        completeUntil: text,
+        snapshot: text,
+        change: null,
+        durations: null,
+    };
+}
+
 /**
  * Global Dashboard filter (FIX-04-FE-01). Owns the filter state, the URL and the resolved period, and tells
  * every section the new query through the `performance-filter` window event. Section state (series
@@ -52,6 +71,7 @@ export default function dashboardFilter(platforms = [], {
 
         period: null,
         periodLoading: true,
+        periodFailed: false,
 
         init() {
             this.applyGlobalFilter();
@@ -81,6 +101,9 @@ export default function dashboardFilter(platforms = [], {
         },
 
         get periodInfo() {
+            if (this.periodLoading) return periodNotice(PERIOD_PENDING);
+            if (this.periodFailed) return periodNotice(STATUS.periodError);
+
             return this.period ? describePeriod(this.period) : null;
         },
 
@@ -135,7 +158,7 @@ export default function dashboardFilter(platforms = [], {
 
         /**
          * Validates the filter, keeps every typed value, then sends the new query to every section. The
-         * resolved period arrives with the summary response (receivePeriod).
+         * previous period is dropped; the resolved one arrives with the summary response (receivePeriod).
          */
         applyGlobalFilter() {
             this.filterErrors = validateFilter(this.filter);
@@ -148,7 +171,9 @@ export default function dashboardFilter(platforms = [], {
 
             this.filterQuery = toQueryString(this.filter);
             this.appliedFilter = { ...this.filter };
+            this.period = null;
             this.periodLoading = true;
+            this.periodFailed = false;
             writeUrl(this.filterQuery);
             this.$nextTick(() => this.$dispatch(FILTER_EVENT, this.filterQuery));
         },
@@ -169,6 +194,7 @@ export default function dashboardFilter(platforms = [], {
             }
 
             this.period = null;
+            this.periodFailed = true;
             this.filterFailed = true;
 
             if (error.status === 422 && error.data?.errors) {
