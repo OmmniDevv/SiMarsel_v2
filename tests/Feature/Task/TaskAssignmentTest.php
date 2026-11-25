@@ -368,7 +368,7 @@ class TaskAssignmentTest extends TestCase
 
     // Pembatasan status
 
-    public function test_pics_cannot_be_changed_while_the_task_is_in_qa(): void
+    public function test_pics_cannot_be_changed_while_the_task_is_in_review(): void
     {
         foreach ([TaskStatus::ReadyReview, TaskStatus::OnReview] as $status) {
             $task = $this->task(['status' => $status]);
@@ -376,7 +376,7 @@ class TaskAssignmentTest extends TestCase
             $this->actingAs($this->admin)
                 ->patchJson("/api/tasks/{$task->id}/assignment", $this->payload([$this->otherStaff->id]))
                 ->assertUnprocessable()
-                ->assertJsonValidationErrors(['pic_ids' => 'PIC tidak dapat diganti selama tugas dalam tahap QA.']);
+                ->assertJsonValidationErrors(['pic_ids' => 'PIC tidak dapat diganti selama tugas dalam tahap review.']);
 
             $this->assertActivePics($task, [$this->staff]);
         }
@@ -459,7 +459,7 @@ class TaskAssignmentTest extends TestCase
         $this->actingAs($this->manager)
             ->getJson("/api/tasks/{$task->id}/assignment-options")
             ->assertOk()
-            ->assertJsonPath('data.locked_reason', 'PIC tidak dapat diganti selama tugas dalam tahap QA.');
+            ->assertJsonPath('data.locked_reason', 'PIC tidak dapat diganti selama tugas dalam tahap review.');
 
         $this->getJson("/api/tasks/{$task->id}")->assertJsonPath('data.can_assign', false);
         $this->getJson($this->url(false))->assertJsonPath('data.can_assign', true);

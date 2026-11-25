@@ -348,18 +348,19 @@ class TaskEvidenceTest extends TestCase
             ->assertJsonPath('data.evidence_count', 1);
     }
 
-    public function test_task_without_qa_is_completed_by_the_pic_after_evidence(): void
+    public function test_task_without_review_is_completed_by_a_reviewer_after_the_pic_sends_evidence(): void
     {
         $task = $this->task(TaskStatus::InProgress, ['evidence_required' => true, 'requires_review' => false]);
 
-        $this->actingAs($this->staff)
+        $this->actingAs($this->manager)
             ->patchJson($this->statusUrl($task), ['version' => $task->version, 'status' => 'done'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['status' => 'Unggah evidence terlebih dahulu sebelum mengubah status ke Done.']);
 
-        $this->postJson($this->url($task), ['file' => UploadedFile::fake()->image('hasil.png')])->assertCreated();
+        $this->actingAs($this->staff)->postJson($this->url($task), ['file' => UploadedFile::fake()->image('hasil.png')])->assertCreated();
 
-        $this->patchJson($this->statusUrl($task), ['version' => $task->version, 'status' => 'done'])
+        $this->actingAs($this->manager)
+            ->patchJson($this->statusUrl($task), ['version' => $task->version, 'status' => 'done'])
             ->assertOk()
             ->assertJsonPath('data.status', 'done')
             ->assertJsonPath('data.completed_at', now()->toIso8601ZuluString());
@@ -386,6 +387,8 @@ class TaskEvidenceTest extends TestCase
             ->postJson("/api/tasks/{$task->id}/reviews", ['version' => $task->fresh()->version, 'decision' => 'revision', 'note' => 'Perbaiki data.'])
             ->assertOk();
 
+        $this->moveTo($task, $this->staff, 'todo');
+        $this->moveTo($task, $this->staff, 'in_progress');
         $this->actingAs($this->staff)->postJson($this->url($task), ['url' => 'https://example.com/v2'])->assertCreated();
         $this->moveTo($task, $this->staff, 'ready_review');
 

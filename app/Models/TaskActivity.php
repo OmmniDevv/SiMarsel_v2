@@ -45,7 +45,7 @@ class TaskActivity extends Model
     public const REVISION_REQUESTED = 'revision_requested';
 
     /**
-     * The PIC handed the task back to QA after a revision.
+     * The PIC handed the task back to review after a revision.
      */
     public const RESUBMITTED = 'resubmitted';
 
@@ -77,7 +77,7 @@ class TaskActivity extends Model
         'status' => 'Status',
         'start_date' => 'Tanggal mulai',
         'deadline' => 'Deadline',
-        'requires_review' => 'Wajib QA',
+        'requires_review' => 'Wajib review',
         'evidence_required' => 'Wajib evidence',
     ];
 
@@ -171,7 +171,7 @@ class TaskActivity extends Model
         $parts = [];
 
         foreach ($changes as $field => $change) {
-            if ($field === 'evidence' || $field === 'review') {
+            if (in_array($field, ['evidence', 'review', 'comment'], true)) {
                 continue;
             }
 
@@ -184,6 +184,10 @@ class TaskActivity extends Model
 
         if ($evidence = $changes['evidence']['new'] ?? $changes['evidence']['old'] ?? null) {
             $parts[] = 'Evidence: '.($evidence['name'] ?? '-');
+        }
+
+        if ($changes['comment']['new']['parent_comment_id'] ?? null) {
+            $parts[] = 'Membalas komentar';
         }
 
         if ($note = $changes['review']['new']['note'] ?? null) {
