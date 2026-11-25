@@ -222,6 +222,14 @@ Route::middleware('auth')->group(function () {
             ->whereNumber(['task', 'evidence'])
             ->can('view', 'task')
             ->name('evidences.download');
+        Route::get('/{task}/comments', [TaskController::class, 'comments'])
+            ->whereNumber('task')
+            ->can('view', 'task')
+            ->name('comments.index');
+        Route::post('/{task}/comments', [TaskController::class, 'storeComment'])
+            ->whereNumber('task')
+            ->can('comment', 'task')
+            ->name('comments.store');
         Route::get('/{task}/reviews', [TaskController::class, 'reviews'])
             ->whereNumber('task')
             ->can('view', 'task')

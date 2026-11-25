@@ -19,7 +19,7 @@ Semua akun **aktif** melihat daftar dan detail tugas **seluruh divisi** (Board, 
 | Supervisor (`SPV`, `meta.role` = `staff`) | Semua tugas | Divisinya | Divisinya (kecuali divisi) | Tugas divisinya, PIC baru hanya dari divisinya | Tidak | Divisinya; langkah PIC bila dia PIC aktif | Divisinya | Bila dia PIC aktif |
 | Staff (`EMP`) dan Freelance (`FRL`), `meta.role` = `staff` | Semua tugas | Tidak | Tidak | Tidak | Tidak | Hanya sebagai PIC aktif: To Do → On Process → Ready Review (atau → Done bila tanpa QA) | Tidak | Bila dia PIC aktif |
 
-- Tugas di luar kewenangan tampil **read-only**: `can_edit`, `can_assign`, `can_delete`, `can_review` `false`, `editable_fields` dan `next_statuses` kosong. FE cukup mengikuti flag ini.
+- Tugas di luar kewenangan tampil **read-only**: `can_edit`, `can_assign`, `can_delete`, `can_review`, `can_comment` `false`, `editable_fields` dan `next_statuses` kosong. FE cukup mengikuti flag ini.
 - Perubahan tanpa hak lewat API ditolak `403`. Perubahan yang diizinkan tetapi tidak sah untuk kondisi tugas (mis. transisi status yang salah) ditolak `422` dengan alasan.
 - PIC yang dilepas tetap melihat tugas lewat `all_tasks`, tetapi hilang dari `my_tasks` dan kehilangan hak sebagai PIC.
 - Akun nonaktif tidak bisa login dan mendapat `403` di semua endpoint Tasklist.
@@ -70,7 +70,7 @@ Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend h
 - `start_date` dan `deadline` boleh `null`.
 - `version` dipakai untuk mencegah perubahan berbasis data lama (lihat 409).
 
-**TaskDetail** = Task ditambah `description`, `category` (`{ id, name, requires_review, evidence_required }` | null), `platform` (`{ id, name }` | null), `creator` (`{ id, fullname }` | null), `assignments` (array Assignment: riwayat PIC aktif dan yang sudah dilepas, terlama lebih dulu), `evidence` (array Evidence), `history` (array Activity), `reviews` (semua Review, terbaru lebih dulu), `last_review` (Review terbaru | null), `editable_fields`, `next_statuses`, `created_at`, dan `completed_at`. `next_statuses` tidak memuat status tujuan dari `on_review`, karena keputusan QA memakai endpoint review.
+**TaskDetail** = Task ditambah `description`, `category` (`{ id, name, requires_review, evidence_required }` | null), `platform` (`{ id, name }` | null), `creator` (`{ id, fullname }` | null), `assignments` (array Assignment: riwayat PIC aktif dan yang sudah dilepas, terlama lebih dulu), `evidence` (array Evidence), `history` (array Activity), `reviews` (semua Review, terbaru lebih dulu), `last_review` (Review terbaru | null), `can_comment` (`true` bila user boleh mengirim komentar saat ini; lihat [Komentar](#komentar--balasan-task-16)), `editable_fields`, `next_statuses`, `created_at`, dan `completed_at`. `next_statuses` tidak memuat status tujuan dari `on_review`, karena keputusan QA memakai endpoint review.
 
 **Activity** (histori, `GET /api/tasks/{id}/activities`):
 
@@ -86,7 +86,7 @@ Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend h
 }
 ```
 
-- `action`: `created` | `updated` | `assigned` | `reassigned` | `unassigned` | `status_changed` | `evidence_submitted` | `approved` | `revision_requested` | `resubmitted`. Perubahan PIC: `assigned` = hanya menambah PIC, `unassigned` = hanya melepas, `reassigned` = menambah dan melepas sekaligus. Penerusan divisi tanpa perubahan PIC dicatat `updated`. Tipe `deleted` (Tugas dihapus), `evidence_deleted` (Evidence dihapus), dan `comment_added` (Komentar ditambahkan) sudah disiapkan untuk fitur hapus tugas, hapus evidence (TASK-18), dan komentar (TASK-16); belum dicatat sampai fitur tersebut dibuat.
+- `action`: `created` | `updated` | `assigned` | `reassigned` | `unassigned` | `status_changed` | `evidence_submitted` | `approved` | `revision_requested` | `resubmitted`. Perubahan PIC: `assigned` = hanya menambah PIC, `unassigned` = hanya melepas, `reassigned` = menambah dan melepas sekaligus. Penerusan divisi tanpa perubahan PIC dicatat `updated`. `comment_added` (Komentar ditambahkan) dicatat satu kali untuk setiap komentar atau balasan baru, dengan `changes.comment.new = { id, parent_comment_id }` tanpa isi komentar; `description` balasan berisi "Membalas komentar". Tipe `deleted` (Tugas dihapus) dan `evidence_deleted` (Evidence dihapus) dipakai fitur hapus tugas dan hapus evidence.
 - `changes`: nilai sebelum dan sesudah untuk tiap field yang berubah (`{}` untuk `created`). Perubahan PIC memakai `changes.pics` berisi daftar PIC aktif sebelum dan sesudah.
 - `actor.id` bernilai `null` bila akun pelaku sudah dihapus; `actor.fullname` tetap berisi nama pelaku saat aktivitas terjadi.
 
@@ -111,6 +111,8 @@ Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend h
 | `POST /api/tasks/{id}/evidences` | multipart: `file` **atau** `url`, `note` | `201 { data: Evidence, message }`; hanya PIC (`403` untuk yang lain); `422` dengan pesan di `errors.file`/`errors.url`, atau di `errors.evidence` bila status tugas tidak menerima evidence |
 | `GET /api/tasks/{id}/reviews` | – | `{ data: [Review] }`, terbaru lebih dulu; dapat dilihat siapa pun yang dapat melihat tugas (termasuk PIC) |
 | `POST /api/tasks/{id}/reviews` | `decision`* (`approve`\|`revision`), `note` (wajib untuk `revision`, maks. 2000), `version`* | `{ data: TaskDetail, message }`; `403` bila bukan Admin/Manajer atau Supervisor divisi tugas atau tugas tidak wajib QA; `422` di `errors.note` bila revisi tanpa alasan, di `errors.decision` bila tugas tidak berstatus `on_review`; `409 { message, current_version }` bila `version` usang |
+| `GET /api/tasks/{id}/comments` | – | `{ data: [Comment] }`, terlama lebih dulu (TASK-16). Semua akun aktif yang dapat melihat tugas, termasuk PIC yang sudah dilepas |
+| `POST /api/tasks/{id}/comments` | `content`* (maks. 2000), `client_request_id`* (UUID per pengiriman), `parent_comment_id` (untuk balasan) | `201 { data: Comment, message }` (TASK-16). `200` dengan komentar yang sudah tersimpan bila `client_request_id` yang sama dikirim ulang (lihat [Komentar](#komentar--balasan-task-16)). `403` bila user tidak boleh berkomentar; `422` di `errors.content` bila kosong, terlalu panjang, atau tugas sudah Done; `422` di `errors.parent_comment_id` bila komentar yang dibalas bukan milik tugas itu; `422` di `errors.client_request_id` bila tidak dikirim, bukan UUID, atau sudah dipakai untuk komentar di tugas lain |
 | `GET /api/tasks/{id}/activities` | – | `{ data: [Activity] }` |
 | `GET /api/tasks/schedule` | `from`*, `to`*, `division` | `{ data: [ScheduleItem] }` |
 | `GET /api/tasks/calendar` | `month`* (`YYYY-MM`), `division` | `{ data: { events: [Event], deadlines: [Task] } }` |
@@ -119,6 +121,7 @@ Backend **wajib** menerapkan aturan ini di setiap endpoint. Aturan di frontend h
 
 - **Evidence**: `{ id, task_id, type, file_name, file_url, url, note, submitter: { id, fullname }, can_delete, created_at }`. `can_delete` = `true` bila user boleh menghapus evidence ini sekarang. `type` = `file` (isi `file_name`/`file_url`) atau `link` (isi `url`). Detail tugas mengirimnya di `evidence`, terbaru lebih dulu; `[]` bila tugas belum punya evidence.
 - **Review**: `{ id, task_id, cycle, decision, decision_label, note, reviewer: { id, fullname }, created_at }`. `decision` = `approve` (label Approve) atau `revision` (label Request Revision). `cycle` = urutan pemeriksaan tugas itu (1, 2, ...), dihitung dari urutan review (tidak disimpan sebagai kolom sejak ERD TASK-19). Review tidak dapat diubah atau dihapus.
+- **Comment**: `{ id, task_id, parent_comment_id, content, author: { id, fullname, role: { code_role, name } }, reply_to: { id, author: { id, fullname } } | null, created_at }`. `parent_comment_id` dan `reply_to` bernilai `null` untuk komentar utama. `role` = role penulis saat ini.
 - **Activity**: lihat bentuk JSON di atas (`action`, `action_label`, `description`, `changes`, `actor`). Histori hanya ditambahkan oleh sistem, tidak bisa diedit.
 - **Assignment** (di `TaskDetail.assignments`): `{ id, account: { id, fullname }, assigned_by: { id, fullname } | null, assigned_at, unassigned_by: { id, fullname } | null, unassigned_at, is_active, note }`. Assignment aktif = `unassigned_at` `null`. Melepas PIC tidak menghapus barisnya; menugaskan ulang PIC yang sudah dilepas membuat assignment baru.
 - **Mengatur PIC**: lewat `PATCH /api/tasks/{id}/assignment` dengan `version` dan daftar lengkap `pic_ids`. `PATCH /api/tasks/{id}` tidak mengubah PIC. Sertakan `division_id` bila Admin atau Manajer meneruskan tugas ke divisi lain. Backend tidak mengubah status ketika PIC/divisi diperbarui dan mencatat daftar PIC sebelum/sesudah di `history`. Penugasan terkunci saat tugas berada di tahap QA atau sudah selesai.
@@ -248,6 +251,16 @@ Semua PIC aktif menjalankan workflow bersama; satu PIC dapat memindahkan status 
 - Frontend: bagian Histori Aktivitas di detail mengambil `GET /api/tasks/{id}/activities` setelah detail tampil, dengan state loading, kosong, dan error (tombol "Coba lagi") sendiri, sehingga kegagalan histori tidak menutup detail. Setelah perubahan berhasil, histori diperbarui dari `history` pada respons TaskDetail; respons histori yang lebih lama diabaikan.
 
 **Data lama (409)**: setiap perubahan membawa `version` terakhir yang dilihat user. Jika berbeda dengan data di database, tolak dengan `409 Conflict`. Frontend lalu memuat ulang data dan meminta user memeriksa kembali.
+
+## Komentar & Balasan (TASK-16)
+
+- **Siapa yang boleh mengirim**: Admin dan Manajer di semua divisi, Supervisor di divisinya, dan setiap PIC aktif tugas itu, termasuk semua PIC pada tugas Multi-PIC. Selain itu hanya bisa membaca (`403`), termasuk PIC yang sudah dilepas. FE cukup mengikuti `can_comment` di TaskDetail.
+- **Status**: komentar diterima pada `backlog`, `todo`, `in_progress`, `ready_review`, dan `on_review`. Pada `done` komentar tetap bisa dibaca, tetapi komentar baru ditolak `422`: "Tugas yang sudah selesai tidak dapat dikomentari."
+- **Balasan**: kirim `parent_comment_id` berisi ID komentar pada tugas yang sama, baik komentar utama maupun balasan lain. Semua komentar tugas berada dalam satu thread; FE menyusun balasan memakai `parent_comment_id` atau `reply_to`.
+- **Isi**: `content` dipangkas spasinya; isi kosong atau hanya spasi ditolak. Penulis selalu akun yang login (`author_id` dari body diabaikan). Isi dikembalikan apa adanya, jadi **FE wajib menampilkannya sebagai teks** (`x-text`), bukan HTML.
+- **Pengiriman ganda**: FE membuat `client_request_id` baru (UUID, mis. `crypto.randomUUID()`) setiap kali user menekan Kirim, dan memakai ID yang sama bila request itu diulang (retry atau koneksi putus). Request dengan ID yang sudah tersimpan mengembalikan komentar tersebut (`200`) tanpa membuat komentar atau histori baru, kapan pun diulang. Pengiriman baru dengan ID baru selalu membuat komentar baru, meskipun teksnya sama. ID berlaku per akun; ID yang sama dari akun lain adalah pengiriman terpisah. Tampilkan komentar hanya setelah respons sukses.
+- **Bukan keputusan review**: komentar tidak mengubah status, review, PIC, atau `version` tugas. Approve dan Request Revision tetap lewat `POST /api/tasks/{id}/reviews`.
+- **Tidak hilang**: komentar tetap tersimpan setelah status, PIC, atau siklus revisi berubah.
 
 ## Kode respons
 
