@@ -111,7 +111,7 @@ Tampilkan `message` sebagai kondisi kosong di halaman.
 
 ### Ringkasan Sales (`sales_summary`)
 
-Diisi hanya jika request memakai `preset` ([resolver periode](../period-resolver.md)); tanpa `preset`, nilainya `null` dan `kpis` di atas tetap dipakai. Semua nilai dihitung dengan agregasi transaksi bersama (`TransactionAggregationService`), jadi aturan klaim, status, tanggal, dan paket grup sama dengan tren Omzet dan Transaksi. Downloader belum termasuk di blok ini (FIX-05-BE-02).
+Diisi hanya jika request memakai `preset` ([resolver periode](../period-resolver.md)); tanpa `preset`, nilainya `null` dan `kpis` di atas tetap dipakai. Semua nilai dihitung dengan agregasi transaksi bersama (`TransactionAggregationService`), jadi aturan klaim, status, tanggal, dan paket grup sama dengan tren Omzet dan Transaksi. Downloader diambil apa adanya dari agregasi Downloader bersama (`DownloaderAggregationService`), dengan total yang sama seperti [Tren Downloader](#get-apiperformancetrenddownloaders), tanpa agregasi ulang.
 
 Contoh: `GET /api/performance/summary?platforms[]=jadiasn&preset=last_7_days`
 
@@ -123,6 +123,7 @@ Contoh: `GET /api/performance/summary?platforms[]=jadiasn&preset=last_7_days`
 | `conversion` | Konversi Transaksi | `transaction_activity` | `created` | `percentage` | Pembelian Success ÷ seluruh percobaan pembelian × 100. Klaim keluar dari kedua sisi. `null` jika penyebut 0. |
 | `average_order_value` | Rata-rata Nilai Order | `supporting` | `paid` | `currency` | Omzet ÷ Transaksi Berhasil pada periode bayar yang sama. `null` jika tidak ada pembayaran. |
 | `unique_buyers` | Pembeli Unik | `supporting` | `paid` | `count` | Jumlah pasangan unik (`platform_id`, `markaz_customer_id`) dari pembayaran Success di seluruh rentang. Nama/email tidak dipakai. |
+| `downloaders` | Downloader | `supporting` | `null` | `count` | Total Downloader platform terpilih pada rentang yang di-resolve dengan metadata `downloaders`, sama dengan `totals` Tren Downloader. Hanya membawa `value`, `availability`, `as_of`, dan `source`. |
 
 Baris anggota paket grup (`markaz_ref_id` terisi) tidak pernah menambah angka mana pun. Pembelian yang berubah menjadi Failed keluar dari metrik berbasis tanggal bayar dan Konversi, tetapi tetap ada di Total sebagai Tidak Berhasil.
 
@@ -141,6 +142,8 @@ Baris anggota paket grup (`markaz_ref_id` terisi) tidak pernah menambah angka ma
 | `success_purchases`, `purchase_attempts`, `unknown_status_count`, `is_provisional`, `provisional_label` | Hanya `conversion`. Jika ada pembelian berstatus kosong, `is_provisional` = `true` dan `provisional_label` = `Sementara`. |
 
 `comparison` bernilai `null` jika periode aktif tidak punya tanggal setara.
+
+Untuk `downloaders`, pembanding 0 tetap `value: 0` dengan `availability: complete`, sedangkan pembanding tanpa total harian bernilai `value: null` dengan `availability: unavailable`. Pada keduanya `active.value` tetap tampil dan `change.value` bernilai `null`.
 
 #### Perubahan (`change`)
 

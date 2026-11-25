@@ -15,10 +15,11 @@ use App\Support\TransactionAggregation\TransactionRecord;
 use Carbon\CarbonImmutable;
 
 /**
- * The six transaction metrics of the Ringkasan Sales: Omzet and Transaksi Berhasil (Hasil Penjualan, paid date),
+ * The seven metrics of the Ringkasan Sales: Omzet and Transaksi Berhasil (Hasil Penjualan, paid date),
  * Total Transaksi and Konversi Transaksi (Aktivitas Transaksi, created date), and the supporting AOV and
- * Pembeli Unik (paid date). Every value comes from the shared transaction aggregation, so claims, statuses,
- * dates, and group members follow the same rules as the trends.
+ * Pembeli Unik (paid date) and Downloader. Every transaction value comes from the shared transaction aggregation,
+ * so claims, statuses, dates, and group members follow the same rules as the trends. Downloader is read as is
+ * from the shared Downloader aggregation (the same totals as /trend/downloaders), never aggregated again here.
  *
  * The active value always covers the whole active period. When some active days have no equivalent date, the
  * change uses only the matched days on both sides and keeps those values next to the full active value.
@@ -56,6 +57,8 @@ class SalesSummaryService
         'unique_buyers' => ['Pembeli Unik', 'supporting', 'paid', self::UNIT_COUNT, 'unique_buyers'],
     ];
 
+    private const DOWNLOADERS = 'downloaders';
+
     /** The Total Transaksi breakdown shown under its value. */
     private const CHECKOUT_BREAKDOWN = ['purchase_attempts', 'success_purchases', 'unsuccessful_purchases', 'unknown_status_count', 'claim_checkouts'];
 
@@ -71,9 +74,13 @@ class SalesSummaryService
     ) {}
 
     /**
+     * $downloaderPeriod is the same selection resolved on the downloaders metadata and $downloaderTotals its
+     * DownloaderAggregationService::periodTotals(). Without them, the Downloader metric stays unavailable.
+     *
+     * @param  array<string, mixed>|null  $downloaderTotals
      * @return array<string, mixed>
      */
-    public function summarize(ResolvedPeriod $period): array
+    public function summarize(ResolvedPeriod $period, ?ResolvedPeriod $downloaderPeriod = null, ?array $downloaderTotals = null): array
     {
         $platformIds = $this->dashboardTransactions->platformIds($period->platforms);
         $activeRecords = $this->records($platformIds, $period->active);
@@ -97,10 +104,50 @@ class SalesSummaryService
                 ...$group,
                 'date_basis_label' => self::DATE_BASIS_LABELS[$group['date_basis']] ?? null,
             ], self::GROUPS),
-            'metrics' => array_map(
-                fn (string $key) => $this->metric($key, $active, $comparison, $activeBasis, $comparisonBasis, $isTrimmed),
-                array_keys(self::METRICS),
-            ),
+            'metrics' => [
+                ...array_map(
+                    fn (string $key) => $this->metric($key, $active, $comparison, $activeBasis, $comparisonBasis, $isTrimmed),
+                    array_keys(self::METRICS),
+                ),
+                $this->downloaderMetric($downloaderPeriod, $downloaderTotals),
+            ],
+        ];
+    }
+
+    /**
+     * The seventh metric. The active total stays visible when the comparison is 0 or unknown; the relative change
+     * is then null. The change uses the matched days only when the Downloader change basis is trimmed.
+     *
+     * @param  array<string, mixed>|null  $totals
+     * @return array<string, mixed>
+     */
+    private function downloaderMetric(?ResolvedPeriod $period, ?array $totals): array
+    {
+        $side = fn (?array $value) => [
+            'value' => $value['value'] ?? null,
+            'availability' => $value['availability'] ?? DataAvailability::Unavailable->value,
+            'as_of' => $value['as_of'] ?? null,
+            'source' => $value['source'] ?? null,
+        ];
+        $hasComparison = $totals === null ? $period?->comparison !== null : $totals['comparison'] !== null;
+
+        return [
+            'key' => self::DOWNLOADERS,
+            'label' => 'Downloader',
+            'group' => 'supporting',
+            'date_basis' => null,
+            'date_basis_label' => null,
+            'unit' => self::UNIT_COUNT,
+            'active' => $side($totals['active'] ?? null),
+            'comparison' => $hasComparison ? $side($totals['comparison'] ?? null) : null,
+            'change' => [
+                'value' => $totals['change']['change_percentage'] ?? null,
+                'unit' => self::CHANGE_PERCENT,
+                'trend' => $totals['change']['trend'] ?? null,
+                'is_trimmed' => $period?->changeBasis?->isTrimmed ?? false,
+                'active_value' => $totals['change_basis']['active'] ?? null,
+                'comparison_value' => $totals['change_basis']['comparison'] ?? null,
+            ],
         ];
     }
 
