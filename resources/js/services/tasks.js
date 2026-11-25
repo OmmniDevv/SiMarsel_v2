@@ -5,9 +5,9 @@ import { http } from '../http';
  * Endpoint Tasklist lain yang belum terintegrasi tetap menunggu VITE_TASK_API_READY=true.
  * Kontrak lengkap ada di docs/api/tasks.md.
  *
- * GET    /api/tasks/meta                       → { data: { role, role_code, permissions, division, default_division, can_create, divisions, statuses, priorities } }
- * GET    /api/tasks?scope&search&division&priority&status → { data: [Task], meta: { status_counts } }   (scope: all_tasks | my_tasks)
- * GET    /api/tasks/monitoring?scope&search&division&priority&status → { data: { scope, as_of, metrics, by_priority, by_division } }
+ * GET    /api/tasks/meta                       → { data: { role, role_code, permissions, division, default_division, can_create, divisions, pics, statuses, priorities } }
+ * GET    /api/tasks?scope&search&division&priority&status&pic_id&<periode> → { data: [Task], meta: { status_counts } }   (scope: all_tasks | my_tasks)
+ * GET    /api/tasks/monitoring?scope&search&division&priority&status&pic_id&<periode> → { data: { scope, as_of, metrics, by_priority, by_division } }
  * POST   /api/tasks                            → { data: Task, message }
  * GET    /api/tasks/{id}                       → { data: TaskDetail }
  * PATCH  /api/tasks/{id}                       → { data: TaskDetail, message }         (kirim version)
