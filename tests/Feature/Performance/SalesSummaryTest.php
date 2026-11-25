@@ -65,7 +65,7 @@ class SalesSummaryTest extends TestCase
         $metrics = $this->metrics($summary);
 
         $this->assertSame(
-            ['revenue', 'success_payments', 'total_checkouts', 'conversion', 'average_order_value', 'unique_buyers'],
+            ['revenue', 'success_payments', 'total_checkouts', 'conversion', 'average_order_value', 'unique_buyers', 'downloaders'],
             array_column($summary['metrics'], 'key'),
         );
         $this->assertSame(['sales_result', 'transaction_activity', 'supporting'], array_column($summary['groups'], 'key'));
