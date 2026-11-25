@@ -109,6 +109,71 @@ Jika periode yang dipilih tidak punya transaksi berhasil dan tidak punya data do
 
 Tampilkan `message` sebagai kondisi kosong di halaman.
 
+### Ringkasan Sales (`sales_summary`)
+
+Diisi hanya jika request memakai `preset` ([resolver periode](../period-resolver.md)); tanpa `preset`, nilainya `null` dan `kpis` di atas tetap dipakai. Semua nilai dihitung dengan agregasi transaksi bersama (`TransactionAggregationService`), jadi aturan klaim, status, tanggal, dan paket grup sama dengan tren Omzet dan Transaksi. Downloader belum termasuk di blok ini (FIX-05-BE-02).
+
+Contoh: `GET /api/performance/summary?platforms[]=jadiasn&preset=last_7_days`
+
+| `key` | Label | `group` | `date_basis` | `unit` | Rumus |
+|---|---|---|---|---|---|
+| `revenue` | Omzet | `sales_result` | `paid` | `currency` | Jumlah `net_nominal` pembelian Success dengan tanggal bayar valid. Klaim tidak dihitung. |
+| `success_payments` | Transaksi Berhasil | `sales_result` | `paid` | `count` | Jumlah pembelian Success dengan tanggal bayar valid. |
+| `total_checkouts` | Total Transaksi | `transaction_activity` | `created` | `count` | Semua pembelian (status apa pun, termasuk status kosong) + klaim kupon, berdasarkan `markaz_created_at`. |
+| `conversion` | Konversi Transaksi | `transaction_activity` | `created` | `percentage` | Pembelian Success ÷ seluruh percobaan pembelian × 100. Klaim keluar dari kedua sisi. `null` jika penyebut 0. |
+| `average_order_value` | Rata-rata Nilai Order | `supporting` | `paid` | `currency` | Omzet ÷ Transaksi Berhasil pada periode bayar yang sama. `null` jika tidak ada pembayaran. |
+| `unique_buyers` | Pembeli Unik | `supporting` | `paid` | `count` | Jumlah pasangan unik (`platform_id`, `markaz_customer_id`) dari pembayaran Success di seluruh rentang. Nama/email tidak dipakai. |
+
+Baris anggota paket grup (`markaz_ref_id` terisi) tidak pernah menambah angka mana pun. Pembelian yang berubah menjadi Failed keluar dari metrik berbasis tanggal bayar dan Konversi, tetapi tetap ada di Total sebagai Tidak Berhasil.
+
+`groups` berisi urutan blok beserta `date_basis_label` (`Berdasarkan tanggal pembayaran` / `Berdasarkan tanggal transaksi dibuat`). Setiap item `metrics` juga membawa `label`, `group`, `date_basis`, dan `date_basis_label`.
+
+#### Bentuk setiap sisi (`active` dan `comparison`)
+
+| Field | Keterangan |
+|---|---|
+| `value` | Nilai metrik. `0` berarti data lengkap tanpa transaksi; `null` berarti belum tersedia atau tidak bisa dihitung. |
+| `availability` | `complete`, `partial` (data sampai `as_of`), atau `unavailable`. |
+| `as_of` | Batas data yang dihitung, atau `null`. |
+| `source` | `latest` (state terbaru) atau `snapshot` (pembanding jam setara dari `dashboard_snapshots`). Metrik yang tidak ada di payload snapshot bernilai `null`. |
+| `nominal_total` | Hanya `revenue`: jumlah `nominal` (tagihan) pembayaran yang sama, untuk rincian. |
+| `breakdown` | Hanya `total_checkouts`: `purchase_attempts`, `success_purchases`, `unsuccessful_purchases`, `unknown_status_count`, `claim_checkouts`. `null` jika sisi tidak tersedia. |
+| `success_purchases`, `purchase_attempts`, `unknown_status_count`, `is_provisional`, `provisional_label` | Hanya `conversion`. Jika ada pembelian berstatus kosong, `is_provisional` = `true` dan `provisional_label` = `Sementara`. |
+
+`comparison` bernilai `null` jika periode aktif tidak punya tanggal setara.
+
+#### Perubahan (`change`)
+
+| Field | Keterangan |
+|---|---|
+| `value` | `conversion`: selisih poin persentase (`active − comparison`). Metrik lain: `(active − comparison) ÷ comparison × 100`, `null` jika pembanding 0 atau belum tersedia. |
+| `unit` | `percentage_point` untuk `conversion`, `percent` untuk metrik lain. |
+| `trend` | `up`, `down`, `same`, atau `null` jika salah satu sisi kosong. |
+| `is_trimmed` | `true` jika sebagian hari aktif tidak punya tanggal setara, misalnya Bulan Ini pada 31 Maret. |
+| `active_value`, `comparison_value` | Nilai yang dipakai menghitung perubahan. Saat `is_trimmed`, `active_value` hanya mencakup hari yang punya pasangan, sedangkan `active.value` tetap total periode aktif penuh. |
+
+```json
+{
+    "key": "conversion",
+    "label": "Konversi Transaksi",
+    "group": "transaction_activity",
+    "date_basis": "created",
+    "date_basis_label": "Berdasarkan tanggal transaksi dibuat",
+    "unit": "percentage",
+    "active": {
+        "value": 60, "availability": "complete", "as_of": "2026-11-11T00:00:00+07:00", "source": "latest",
+        "success_purchases": 6, "purchase_attempts": 10, "unknown_status_count": 0,
+        "is_provisional": false, "provisional_label": null
+    },
+    "comparison": {
+        "value": 100, "availability": "complete", "as_of": "2026-11-04T00:00:00+07:00", "source": "latest",
+        "success_purchases": 2, "purchase_attempts": 2, "unknown_status_count": 0,
+        "is_provisional": false, "provisional_label": null
+    },
+    "change": { "value": -40, "unit": "percentage_point", "trend": "down", "is_trimmed": false, "active_value": 60, "comparison_value": 100 }
+}
+```
+
 ### 422 Validasi gagal
 
 Lihat [filter Ringkasan Performa](performance-filter.md#422-validasi-gagal), misalnya lebih dari satu mode periode, format tanggal salah, atau slug platform tidak ditemukan.

@@ -13,6 +13,7 @@ class PerformanceSummaryService
     public function __construct(
         private PerformanceRepository $performanceRepository,
         private DownloaderAggregationService $downloaderAggregation,
+        private SalesSummaryService $salesSummaryService,
     ) {}
 
     /**
@@ -66,6 +67,7 @@ class PerformanceSummaryService
             'is_empty' => $isEmpty,
             'message' => $isEmpty ? 'Data tidak tersedia untuk filter yang dipilih.' : null,
             'kpis' => $kpis,
+            'sales_summary' => $filter->period === null ? null : $this->salesSummaryService->summarize($filter->period),
         ];
     }
 
