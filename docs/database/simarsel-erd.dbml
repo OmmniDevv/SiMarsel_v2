@@ -1,0 +1,471 @@
+Project simarsel_dashboard {
+  database_type: 'MySQL'
+}
+
+Table accounts {
+  id bigint [pk, increment]
+  role_id bigint [not null]
+  division_id bigint [null]
+  fullname varchar(255) [not null]
+  username varchar(255) [not null, unique]
+  password varchar(255) [not null]
+  is_active boolean [not null, default: true]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+}
+
+Table divisions {
+  id bigint [pk, increment]
+  code_division varchar(50) [not null, unique]
+  name varchar(100) [not null, unique]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+}
+
+Table roles {
+  id bigint [pk, increment]
+  code_role varchar(25) [not null, unique]
+  name varchar(50) [not null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+}
+
+Table sessions {
+  id varchar(255) [pk]
+  user_id bigint [null]
+  ip_address varchar(45) [null]
+  user_agent text [null]
+  payload longtext [not null]
+  last_activity integer [not null]
+
+  indexes {
+    user_id
+    last_activity
+  }
+}
+
+Table account_role_changes {
+  id bigint [pk, increment]
+  account_id bigint [null]
+  account_fullname varchar(255) [not null]
+  account_username varchar(255) [not null]
+  old_role_id bigint [null]
+  new_role_id bigint [null]
+  changed_by bigint [null]
+  changed_by_fullname varchar(255) [null]
+  changed_by_username varchar(255) [null]
+  changed_at timestamp [not null]
+
+  indexes {
+    (account_id, changed_at)
+  }
+}
+
+Table platforms {
+  id bigint [pk, increment]
+  slug varchar(50) [not null, unique]
+  name varchar(100) [not null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+}
+
+Table transactions {
+  id bigint [pk, increment]
+  platform_id bigint [not null]
+  markaz_transaction_id bigint [null]
+  markaz_customer_id bigint [null]
+  markaz_ref_id bigint [null]
+  trx_id varchar(255) [not null]
+  markaz_created_at datetime [null]
+  markaz_paid_at datetime [null]
+  paid_date date [null]
+  paid_time time [null]
+  synced_at datetime [null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+  source_status tinyint [null]
+  effective_status tinyint [null]
+  is_claim_coupon boolean [not null, default: false]
+  payment_method varchar(100) [null]
+  product varchar(255) [null]
+  product_type varchar(100) [null]
+  product_price decimal(15,2) [null]
+  voucher_discount decimal(15,2) [null]
+  admin_fee decimal(15,2) [null]
+  nominal decimal(15,2) [not null]
+  net_nominal decimal(15,2) [null]
+  promo_code json [null]
+  promo_code_anomaly boolean [not null, default: false]
+  customer_name varchar(255) [null]
+  customer_email varchar(255) [null]
+  customer_phone varchar(50) [null]
+
+  indexes {
+    (platform_id, markaz_transaction_id) [unique, name: 'transactions_platform_id_markaz_transaction_id_unique']
+    (platform_id, markaz_ref_id) [name: 'transactions_platform_id_markaz_ref_id_index']
+    (platform_id, markaz_created_at) [name: 'transactions_platform_id_markaz_created_at_index']
+    (platform_id, paid_date) [name: 'transactions_platform_id_paid_date_index']
+    trx_id [name: 'transactions_trx_id_index']
+  }
+}
+
+Table downloaders {
+  id bigint [pk, increment]
+  platform_id bigint [not null]
+  date date [not null]
+  total bigint [not null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+
+  indexes {
+    (platform_id, date) [unique]
+  }
+}
+
+Table markaz_api_tokens {
+  id bigint [pk, increment]
+  token text [not null]
+  expires_at timestamp [not null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+}
+
+Table sync_logs {
+  id bigint [pk, increment]
+  platform_id bigint [not null]
+  sync_type varchar(30) [not null]
+  trigger_type varchar(30) [not null]
+  date_from date [null]
+  date_to date [null]
+  status varchar(30) [not null]
+  records_fetched integer [null]
+  records_created integer [null]
+  records_updated integer [null]
+  error_message text [null]
+  started_at timestamp [null]
+  finished_at timestamp [null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+}
+
+Table dashboard_snapshots {
+  id bigint [pk, increment]
+  platform_id bigint [not null]
+  dataset varchar(30) [not null]
+  date_from date [not null]
+  date_to date [not null]
+  cutoff_at datetime [not null]
+  is_complete boolean [not null, default: false]
+  payload json [not null]
+  recorded_at datetime [not null]
+
+  indexes {
+    (platform_id, dataset, date_from, date_to, cutoff_at) [unique, name: 'dashboard_snapshots_period_cutoff_unique']
+    (dataset, date_from, date_to, is_complete, cutoff_at) [name: 'dashboard_snapshots_complete_cutoff_index']
+  }
+}
+
+Table funnels {
+  id bigint [pk, increment]
+  name varchar(100) [not null, unique]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+}
+
+Table promo_sources {
+  id bigint [pk, increment]
+  name varchar(100) [not null, unique]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+}
+
+Table promo_codes {
+  id bigint [pk, increment]
+  platform_id bigint [not null]
+  code varchar(255) [not null]
+  funnel_id bigint [null]
+  source_id bigint [null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+
+  indexes {
+    (platform_id, code) [unique]
+  }
+}
+
+Table promo_code_versions {
+  id bigint [pk, increment]
+  promo_code_id bigint [not null]
+  platform_id bigint [not null]
+  code varchar(255) [not null]
+  funnel_id bigint [null]
+  funnel_name_snapshot varchar(100) [null]
+  source_id bigint [null]
+  source_name_snapshot varchar(100) [null]
+  effective_from timestamp [not null]
+  effective_until timestamp [null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+
+  indexes {
+    (promo_code_id, effective_from) [unique]
+    (platform_id, code, effective_from)
+  }
+}
+
+Table transaction_promo_codes {
+  id bigint [pk, increment]
+  transaction_id bigint [not null]
+  promo_code_id bigint [null]
+  raw_code varchar(255) [not null]
+  code_position tinyint [not null]
+  platform_id_snapshot bigint [not null]
+  code_snapshot varchar(255) [not null]
+  funnel_id_snapshot bigint [null]
+  funnel_name_snapshot varchar(100) [null]
+  source_id_snapshot bigint [null]
+  source_name_snapshot varchar(100) [null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+
+  indexes {
+    (transaction_id, code_position) [unique]
+    (platform_id_snapshot, raw_code)
+  }
+}
+
+Table permissions {
+  id bigint [pk, increment]
+  code varchar(80) [not null, unique]
+  description text [null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+}
+
+Table role_permissions {
+  role_id bigint [not null]
+  permission_id bigint [not null]
+
+  indexes {
+    (role_id, permission_id) [pk]
+    permission_id
+  }
+}
+
+Table task_categories {
+  id bigint [pk, increment]
+  name varchar(100) [not null, unique]
+  requires_review boolean [not null, default: false]
+  evidence_required boolean [not null, default: false]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+}
+
+Table tasks {
+  id bigint [pk, increment]
+  title varchar(150) [not null]
+  description text [null]
+  category_id bigint [null]
+  division_id bigint [not null]
+  platform_id bigint [null]
+  creator_id bigint [null]
+  priority varchar(10) [not null, default: 'medium']
+  status varchar(20) [not null, default: 'backlog']
+  start_date date [null]
+  deadline date [null]
+  requires_review boolean [not null, default: false]
+  evidence_required boolean [not null, default: false]
+  completed_at timestamp [null]
+  version int [not null, default: 1]
+  deleted_at timestamp [null]
+  deleted_by bigint [null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+
+  indexes {
+    (division_id, status)
+    (status, deadline)
+    start_date
+    deleted_at
+  }
+}
+
+Table task_divisions {
+  task_id bigint [not null]
+  division_id bigint [not null]
+  added_by bigint [null]
+  created_at timestamp [null]
+
+  indexes {
+    (task_id, division_id) [pk]
+    division_id
+  }
+}
+
+Table task_assignments {
+  id bigint [pk, increment]
+  task_id bigint [not null]
+  account_id bigint [not null]
+  assigned_by bigint [null]
+  assigned_at timestamp [not null]
+  unassigned_by bigint [null]
+  unassigned_at timestamp [null]
+  note text [null]
+  active_flag tinyint [null]
+
+  indexes {
+    (task_id, account_id, active_flag) [unique, name: 'task_assignments_active_pic_unique']
+    (task_id, unassigned_at)
+    (account_id, unassigned_at)
+  }
+}
+
+Table task_evidences {
+  id bigint [pk, increment]
+  task_id bigint [not null]
+  submitter_id bigint [null]
+  type varchar(10) [not null]
+  file_path varchar(255) [null]
+  file_name varchar(255) [null]
+  mime_type varchar(100) [null]
+  file_size bigint [null]
+  url text [null]
+  note text [null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+  deleted_at timestamp [null]
+  deleted_by bigint [null]
+
+  indexes {
+    (task_id, created_at)
+  }
+}
+
+Table task_reviews {
+  id bigint [pk, increment]
+  task_id bigint [not null]
+  reviewer_id bigint [null]
+  decision varchar(30) [not null]
+  note text [null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+
+  indexes {
+    (task_id, created_at)
+  }
+}
+
+Table task_comments {
+  id bigint [pk, increment]
+  task_id bigint [not null]
+  author_id bigint [not null]
+  parent_comment_id bigint [null]
+  content text [not null]
+  client_request_id uuid [null]
+  created_at timestamp [not null]
+  updated_at timestamp [null]
+  deleted_at timestamp [null]
+
+  indexes {
+    (task_id, created_at)
+    parent_comment_id
+    (author_id, client_request_id) [unique]
+  }
+}
+
+Table task_activities {
+  id bigint [pk, increment]
+  task_id bigint [not null]
+  account_id bigint [null]
+  actor_name_snapshot varchar(255) [null]
+  action varchar(50) [not null]
+  changes json [null]
+  created_at timestamp [not null]
+
+  indexes {
+    (task_id, created_at)
+  }
+}
+
+Table calendar_events {
+  id bigint [pk, increment]
+  division_id bigint [null]
+  creator_id bigint [not null]
+  title varchar(255) [not null]
+  description text [null]
+  is_shared boolean [not null, default: false]
+  start_at datetime [not null]
+  end_at datetime [null]
+  created_at timestamp [null]
+  updated_at timestamp [null]
+  deleted_at timestamp [null]
+
+  indexes {
+    start_at
+  }
+}
+
+Table calendar_event_divisions {
+  calendar_event_id bigint [not null]
+  division_id bigint [not null]
+
+  indexes {
+    (calendar_event_id, division_id) [pk]
+    division_id
+  }
+}
+
+Ref: accounts.role_id > roles.id
+Ref: accounts.division_id > divisions.id [delete: set null]
+Ref: sessions.user_id > accounts.id [delete: cascade]
+Ref: account_role_changes.account_id > accounts.id [delete: set null]
+Ref: account_role_changes.old_role_id > roles.id [delete: set null]
+Ref: account_role_changes.new_role_id > roles.id [delete: set null]
+Ref: account_role_changes.changed_by > accounts.id [delete: set null]
+
+Ref: transactions.platform_id > platforms.id
+Ref: downloaders.platform_id > platforms.id
+Ref: sync_logs.platform_id > platforms.id
+Ref: dashboard_snapshots.platform_id > platforms.id
+
+Ref: promo_codes.platform_id > platforms.id
+Ref: promo_codes.funnel_id > funnels.id [delete: restrict]
+Ref: promo_codes.source_id > promo_sources.id [delete: restrict]
+Ref: promo_code_versions.promo_code_id > promo_codes.id [delete: cascade]
+Ref: promo_code_versions.platform_id > platforms.id
+Ref: promo_code_versions.funnel_id > funnels.id [delete: set null]
+Ref: promo_code_versions.source_id > promo_sources.id [delete: set null]
+Ref: transaction_promo_codes.transaction_id > transactions.id [delete: cascade]
+Ref: transaction_promo_codes.promo_code_id > promo_codes.id [delete: restrict]
+Ref: transaction_promo_codes.platform_id_snapshot > platforms.id
+Ref: transaction_promo_codes.funnel_id_snapshot > funnels.id [delete: set null]
+Ref: transaction_promo_codes.source_id_snapshot > promo_sources.id [delete: set null]
+
+Ref: role_permissions.role_id > roles.id [delete: cascade]
+Ref: role_permissions.permission_id > permissions.id [delete: cascade]
+Ref: tasks.category_id > task_categories.id [delete: set null]
+Ref: tasks.division_id > divisions.id
+Ref: tasks.platform_id > platforms.id [delete: set null]
+Ref: tasks.creator_id > accounts.id [delete: set null]
+Ref: tasks.deleted_by > accounts.id [delete: set null]
+Ref: task_divisions.task_id > tasks.id [delete: cascade]
+Ref: task_divisions.division_id > divisions.id [delete: cascade]
+Ref: task_divisions.added_by > accounts.id [delete: set null]
+Ref: task_assignments.task_id > tasks.id [delete: restrict]
+Ref: task_assignments.account_id > accounts.id [delete: restrict]
+Ref: task_assignments.assigned_by > accounts.id [delete: set null]
+Ref: task_assignments.unassigned_by > accounts.id [delete: set null]
+Ref: task_evidences.task_id > tasks.id [delete: restrict]
+Ref: task_evidences.submitter_id > accounts.id [delete: set null]
+Ref: task_evidences.deleted_by > accounts.id [delete: set null]
+Ref: task_reviews.task_id > tasks.id [delete: restrict]
+Ref: task_reviews.reviewer_id > accounts.id [delete: set null]
+Ref: task_comments.task_id > tasks.id [delete: restrict]
+Ref: task_comments.author_id > accounts.id [delete: restrict]
+Ref: task_comments.parent_comment_id > task_comments.id [delete: restrict]
+Ref: task_activities.task_id > tasks.id [delete: restrict]
+Ref: task_activities.account_id > accounts.id [delete: set null]
+Ref: calendar_events.division_id > divisions.id [delete: set null]
+Ref: calendar_events.creator_id > accounts.id
+Ref: calendar_event_divisions.calendar_event_id > calendar_events.id [delete: cascade]
+Ref: calendar_event_divisions.division_id > divisions.id [delete: cascade]

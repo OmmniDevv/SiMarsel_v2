@@ -706,6 +706,7 @@ class TaskService
             // Admin starts on "Semua Divisi" (null); a Manager starts on the division they manage.
             'default_division' => $account->isManager() ? $account->division?->code_division : null,
             'divisions' => $this->divisionOptions($account),
+            'pics' => $this->picFilterOptions($account),
             'statuses' => collect(TaskStatus::cases())
                 ->map(fn (TaskStatus $status) => ['value' => $status->value, 'label' => $status->label()])
                 ->all(),
@@ -713,6 +714,25 @@ class TaskService
                 ->map(fn (TaskPriority $priority) => ['value' => $priority->value, 'label' => $priority->label()])
                 ->all(),
         ];
+    }
+
+    /**
+     * PICs the account may filter the Tasklist by: the active PICs of the tasks it may see. It follows the same
+     * visibility as the list, so it names no account the list would not already show as a PIC.
+     *
+     * @return array<int, array{id: int, fullname: string}>
+     */
+    private function picFilterOptions(Account $account): array
+    {
+        return Account::query()
+            ->whereHas('taskAssignments', fn (Builder $query) => $query
+                ->whereNull('unassigned_at')
+                ->whereHas('task', fn (Builder $query) => $query->visibleTo($account)))
+            ->orderBy('fullname')
+            ->orderBy('id')
+            ->get(['id', 'fullname'])
+            ->map(fn (Account $pic) => $pic->only(['id', 'fullname']))
+            ->all();
     }
 
     /**

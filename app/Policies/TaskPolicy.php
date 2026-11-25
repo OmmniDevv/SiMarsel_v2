@@ -95,6 +95,16 @@ class TaskPolicy
     }
 
     /**
+     * Admin and Managers for every division, the Supervisor of the task's division, and its active PICs may comment;
+     * everyone else reads the discussion through view(). Whether the task is Done is checked by TaskCommentService so
+     * the rejection carries its reason.
+     */
+    public function comment(Account $user, Task $task): bool
+    {
+        return $task->commentableBy($user);
+    }
+
+    /**
      * Only the task's active PICs with task.update may delete evidence, and then only evidence they uploaded
      * themselves; that and the task's status are checked by TaskEvidenceService so the rejection carries its reason.
      * Admin, Managers, and Supervisors who are not its PIC never delete a PIC's evidence.

@@ -35,12 +35,14 @@ KPI pembayaran hanya memakai transaksi dengan status laporan `Success`. Status l
 |---|---|---|---|
 | `total_revenue` | Total Revenue | `transactions` | Jumlah `nominal` |
 | `total_transactions` | Total Transaksi | `transactions` | Jumlah transaksi |
-| `total_downloaders` | Total Downloader | `downloaders` | Jumlah `total` |
+| `total_downloaders` | Total Downloader | `downloaders` | Jumlah `total`. Dengan `preset`, dibaca dari agregasi Downloader bersama (lihat catatan di bawah) |
 | `unique_users` | Pembeli Unik | `transactions` | Jumlah pasangan `(platform_id, markaz_customer_id)` yang berbeda. Email tidak dipakai sebagai identifier. Transaksi tanpa `markaz_customer_id` tidak dihitung. |
 | `new_users` | User Baru | `transactions` | Jumlah transaksi berhasil dengan `product_type` = `Perdana` |
 | `repeat_orders` | Repeat Order | `transactions` | Jumlah transaksi berhasil dengan `product_type` = `Perpanjangan` |
 | `average_order_value` | AOV | `transactions` | `total_revenue ÷ total_transactions`, dibulatkan 2 desimal. `null` jika tidak ada transaksi. |
 | `conversion_rate` | Konversi (%) | keduanya | `total_transactions ÷ total_downloaders × 100`, dibulatkan 2 desimal. `null` jika downloader = 0. |
+
+Dengan `preset`, `total_downloaders` (`value`, `previous_value`, `change_percentage`, `trend`) sama persis dengan `totals` [`/trend/downloaders`](#get-apiperformancetrenddownloaders). Periodenya di-resolve dengan metadata `dataset = downloaders`, apa pun nilai `dataset` di request. Total yang belum tersedia bernilai `null`, bukan `0`, dan `conversion_rate` ikut `null`. Pembanding jam setara Downloader dibaca dari catatan `dashboard_snapshots`, jadi tetap ditampilkan walaupun KPI transaksi menyembunyikan pembandingnya. Tanpa `preset`, `total_downloaders` tetap jumlah `downloaders.total` pada rentang filter.
 
 `new_users` dan `repeat_orders` menghitung **transaksi**, bukan orang. Satu email yang melakukan dua kali `Perpanjangan` dihitung 2.
 
@@ -436,3 +438,115 @@ Bucket `snapshot` dihitung dari catatan `dashboard_snapshots` satu hari (`date_f
 
 - Baris `transactions` tanpa `markaz_transaction_id` atau `markaz_created_at` (impor lama sebelum FIX-15) tidak dapat dibaca kontrak tanggal dan tidak dihitung.
 - Batas `hourly` 31 hari dipilih agar satu grafik tidak lebih dari 744 titik. Implementasi lama mendukung `daily`/`weekly` sampai 366 hari dan `monthly` tanpa batas; batas itu dipertahankan.
+
+## `GET /api/performance/trend/downloaders`
+
+Dataset Downloader (FIX-08-BE-01) untuk grafik, tabel Lihat Rincian, total periode Ringkasan, rasio per platform, dan sheet **Downloader** di Ekspor. Satu titik berisi sisi aktif dan sisi pembanding yang sudah dipasangkan, masing-masing dengan waktu asli, nilai, dan status ketersediaan. Pemakai membaca angka ini apa adanya dan tidak menjumlahkan ulang snapshot. Wajib login, semua role boleh mengakses.
+
+### Query parameter
+
+Sama dengan [`/trend/sales`](#get-apiperformancetrendsales): `preset` wajib, `platforms[]`, dan `granularity` opsional dengan default dan batas yang sama. Periode selalu di-resolve dengan metadata kelengkapan `dataset = downloaders`; parameter `dataset` di request diabaikan.
+
+Contoh: `GET /api/performance/trend/downloaders?preset=today&platforms[]=app-a`
+
+### Sumber nilai
+
+| Bagian periode | Sumber |
+|---|---|
+| Satu hari penuh | `downloaders.total` terbaru per `(platform_id, date)`. Total yang turun karena akun dihapus (100 → 99) langsung mengganti nilai lama |
+| Sebagian hari sampai batas data aktif (`state_basis = latest`) | `downloaders.total` terbaru hari itu |
+| Sebagian hari pada jam lain, termasuk pembanding jam setara (`state_basis = at_cutoff`) | `dashboard_snapshots.payload` dengan `dataset = downloaders` dan `cutoff_at` tepat di jam itu, lengkap di semua platform terpilih. Dibaca dari `payload.daily[tanggal]` catatan satu hari, atau catatan seluruh periode |
+
+- Nilai intrahari adalah total kumulatif sampai jam itu. Snapshot 210 pada 13.00 dan 240 pada 14.00 menghasilkan 240 untuk 14.00, bukan 450.
+- Rentang beberapa hari menjumlahkan total hariannya. Total harian 300 dan 350 menghasilkan 650.
+- Catatan yang sudah tersimpan tidak berubah saat `downloaders.total` diperbarui: pembanding 14.00 tetap memakai nilai saat dicatat.
+- Jam tanpa catatan tidak diestimasi dari total harian.
+- Tanggal tanpa baris `downloaders` untuk salah satu platform terpilih dianggap **belum tersedia**, bukan `0`. Bucket dan total yang mencakup tanggal itu bernilai `null`. Baris dengan `total = 0` tetap `0`.
+
+### Titik per `granularity`
+
+| `granularity` | Nilai satu titik |
+|---|---|
+| `hourly` | Total kumulatif hari itu pada `as_of` (akhir jam). Contoh: titik berlabel `11 Nov 2026 13.00` berisi total sampai 14.00. Titik terakhir hari penuh (`as_of` 00.00 hari berikutnya) memakai total harian |
+| `daily`, `weekly`, `monthly` | Jumlah nilai setiap hari di bucket |
+
+Pemasangan titik aktif dan pembanding sama dengan `/trend/sales`.
+
+### Ketersediaan dan perubahan
+
+| Keadaan | `availability` | `value` | `change` |
+|---|---|---|---|
+| Data ada | `complete` atau `partial` (dengan `as_of`) | Angka. `0` dari sumber tetap `0` | Dihitung jika kedua sisi tersedia |
+| Setelah batas data, cakupan belum diketahui, total harian salah satu platform belum ada, atau catatan jam itu tidak ada/belum lengkap di salah satu platform | `unavailable` | `null`, bukan `0` | `null` |
+| Posisi yang tidak terjangkau periode pembanding | `comparison: null` | — | `null` |
+
+`change` berisi `change_percentage`, `trend`, dan `is_comparable`. `is_comparable = true` hanya jika kedua sisi tersedia dengan `availability` yang sama, dan untuk `partial`, `as_of` pada jam yang sama. Pembanding `0` menghasilkan `is_comparable = true`, `change_percentage = null` (tidak bisa dibagi 0), dan `trend = up` atau `same`. Pembanding kosong menghasilkan `is_comparable = false` dan `trend = null`.
+
+### Total dan platform
+
+- `totals.active` dan `totals.comparison` adalah total seluruh periode dengan aturan sumber yang sama. `totals.change` dihitung dari `change_basis` resolver, jadi hari tanpa padanan tidak ikut perubahan.
+- `platforms[]` berisi total aktif setiap platform dan `share_percentage` (1 desimal) terhadap `totals.active.value`. `null` jika total 0 atau belum tersedia.
+- `/summary` dengan `preset` membaca total ini (`totals.active`, `totals.comparison`, `totals.change`) untuk KPI `total_downloaders`, termasuk saat nilainya `null`.
+
+### 200 OK
+
+```json
+{
+    "data": {
+        "filter": { "mode": "today", "period": { "dataset": "downloaders", "active": { "availability": "partial", "cutoff_at": "2026-11-11T14:00:00+07:00" } } },
+        "granularity": "hourly",
+        "default_granularity": "hourly",
+        "granularities": ["hourly", "daily", "weekly", "monthly"],
+        "series": [
+            { "key": "downloaders", "label": "Downloader", "side": "active", "unit": "count" },
+            { "key": "comparison_downloaders", "label": "Downloader Pembanding", "side": "comparison", "unit": "count" }
+        ],
+        "is_empty": false,
+        "message": null,
+        "totals": {
+            "active": { "availability": "partial", "as_of": "2026-11-11T14:00:00+07:00", "source": "latest", "value": 180 },
+            "comparison": { "availability": "partial", "as_of": "2026-11-10T14:00:00+07:00", "source": "snapshot", "value": 240 },
+            "change": { "change_percentage": -25, "trend": "down", "is_comparable": true }
+        },
+        "platforms": [
+            { "slug": "app-a", "name": "App A", "availability": "partial", "as_of": "2026-11-11T14:00:00+07:00", "value": 180, "share_percentage": 100 }
+        ],
+        "buckets": [
+            {
+                "index": 12,
+                "active": {
+                    "start_at": "2026-11-11T12:00:00+07:00", "end_at": "2026-11-11T13:00:00+07:00", "label": "11 Nov 2026 12.00",
+                    "availability": "complete", "as_of": "2026-11-11T13:00:00+07:00", "source": "snapshot", "value": 150
+                },
+                "comparison": {
+                    "start_at": "2026-11-10T12:00:00+07:00", "end_at": "2026-11-10T13:00:00+07:00", "label": "10 Nov 2026 12.00",
+                    "availability": "unavailable", "as_of": null, "source": "snapshot", "value": null
+                },
+                "change": { "change_percentage": null, "trend": null, "is_comparable": false }
+            },
+            {
+                "index": 13,
+                "active": {
+                    "start_at": "2026-11-11T13:00:00+07:00", "end_at": "2026-11-11T14:00:00+07:00", "label": "11 Nov 2026 13.00",
+                    "availability": "complete", "as_of": "2026-11-11T14:00:00+07:00", "source": "latest", "value": 180
+                },
+                "comparison": {
+                    "start_at": "2026-11-10T13:00:00+07:00", "end_at": "2026-11-10T14:00:00+07:00", "label": "10 Nov 2026 13.00",
+                    "availability": "complete", "as_of": "2026-11-10T14:00:00+07:00", "source": "snapshot", "value": 240
+                },
+                "change": { "change_percentage": -25, "trend": "down", "is_comparable": true }
+            }
+        ]
+    }
+}
+```
+
+Kolom Lihat Rincian dibentuk dari setiap bucket: Periode Aktif (`active.label`/`as_of`), Downloader (`active.value`), Periode Pembanding (`comparison.label`), Downloader Pembanding (`comparison.value`), Perubahan (`change.change_percentage`).
+
+### 422 Validasi gagal
+
+Sama dengan [`/trend/sales`](#422-validasi-gagal-2).
+
+### Batasan
+
+- Satu tanggal tanpa total harian membuat total periode `null`. Total tidak dihitung dari tanggal yang tersedia saja, agar angka yang kurang tidak terbaca sebagai total lengkap.

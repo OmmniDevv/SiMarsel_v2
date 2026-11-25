@@ -52,6 +52,17 @@
             </select>
         </label>
 
+        {{-- PIC aktif dari tugas yang boleh dilihat akun ini; berlaku untuk Papan, Tabel, dan KPI. --}}
+        <label x-show="view === 'board' || view === 'table'" class="block min-w-0 basis-full sm:max-w-60 sm:flex-none sm:basis-auto">
+            <span class="sr-only">PIC</span>
+            <select id="task-pic" x-model="filters.pic" class="{{ $selectClass }}" title="PIC">
+                <option value="">Semua PIC</option>
+                <template x-for="pic in picOptions" :key="pic.id">
+                    <option :value="String(pic.id)" x-text="pic.fullname" :selected="filters.pic === String(pic.id)"></option>
+                </template>
+            </select>
+        </label>
+
         <label class="block min-w-36 flex-1 sm:min-w-0 sm:flex-none">
             <span class="sr-only">Prioritas</span>
             <select id="task-priority" x-model="filters.priority" class="{{ $selectClass }}" title="Prioritas">
@@ -76,13 +87,14 @@
     </div>
 </div>
 
-<form x-show="view === 'board' || view === 'table'" x-cloak class="mt-3 border-t border-line pt-3" @submit.prevent="confirmPeriodFilter()" aria-labelledby="task-period-filter-title">
+{{-- Validasi periode ada di confirmPeriodFilter; validasi bawaan browser akan memblokir submit karena input mode lain yang tersembunyi. --}}
+<form x-show="view === 'board' || view === 'table'" x-cloak novalidate class="mt-3 border-t border-line pt-3" @submit.prevent="confirmPeriodFilter()" aria-labelledby="task-period-filter-title">
     <div class="mb-2 flex flex-wrap items-start justify-between gap-2">
         <div>
             <h2 id="task-period-filter-title" class="text-sm font-semibold text-ink">Filter Periode</h2>
-            <p class="mt-0.5 text-xs text-muted">Pilih tanggal mulai atau deadline. Rentang mencakup tanggal awal dan akhir. Filter belum diterapkan ke data karena backend belum tersedia.</p>
+            <p class="mt-0.5 text-xs text-muted">Pilih tanggal mulai atau deadline. Rentang mencakup tanggal awal dan akhir. Tugas tanpa tanggal tersebut tidak ditampilkan.</p>
         </div>
-        <span class="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">Tampilan UI saja</span>
+        <span x-show="appliedPeriod" x-cloak class="rounded-md bg-primary-soft px-2 py-1 text-[11px] font-semibold text-primary" data-applied-period x-text="appliedPeriodLabel"></span>
     </div>
 
     <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -112,7 +124,9 @@
 
         <label x-show="periodFilter.mode === 'month'" x-cloak class="block min-w-0">
             <span class="mb-1 block text-xs font-medium text-label">Bulan dan Tahun</span>
-            <input id="task-period-month" type="month" max="9999-12" x-model="periodFilter.month" class="{{ $periodControlClass }}">
+            <input id="task-period-month" type="month" min="1000-01" max="9999-12" x-model="periodFilter.month"
+                :aria-invalid="Boolean(periodYearError)" aria-describedby="task-period-month-error" class="{{ $periodControlClass }}">
+            <p id="task-period-month-error" x-show="periodYearError" x-cloak class="mt-1 text-xs text-red-600" role="alert" x-text="periodYearError"></p>
         </label>
 
         <label x-show="periodFilter.mode === 'year'" x-cloak class="block min-w-0">
@@ -137,7 +151,7 @@
 
         <div class="flex flex-col justify-end gap-1">
             <button type="submit" class="{{ $button }} w-full" :disabled="!canConfirmPeriodFilter">Terapkan Periode</button>
-            <p x-show="periodRangeError" x-cloak class="text-xs text-red-600" role="alert" x-text="periodRangeError"></p>
+            <p x-show="periodRangeError || periodError" x-cloak class="text-xs text-red-600" role="alert" x-text="periodRangeError || periodError"></p>
         </div>
     </div>
 </form>
