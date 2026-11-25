@@ -14,7 +14,7 @@ class AccountRepository
      * @var array<string, array<int, string>>
      */
     private const TASK_HISTORY_REFERENCES = [
-        'tasks' => ['creator_id', 'deleted_by', 'pic_id'],
+        'tasks' => ['creator_id', 'deleted_by'],
         'task_assignments' => ['account_id', 'assigned_by', 'unassigned_by'],
         'task_activities' => ['account_id'],
         'task_evidences' => ['submitter_id', 'deleted_by'],

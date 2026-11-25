@@ -14,10 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * PICs live in task_assignments. The legacy pic_id column is kept only as migrated data and is not fillable, so the
- * application never writes it again.
- */
+/** PIC assignments live exclusively in task_assignments. */
 #[Fillable([
     'title', 'description', 'category_id', 'division_id', 'platform_id', 'creator_id', 'priority', 'status',
     'start_date', 'deadline', 'requires_review', 'evidence_required', 'completed_at', 'deleted_by',
@@ -283,6 +280,23 @@ class Task extends Model
     public function reviewableBy(Account $account): bool
     {
         return $this->requires_review && $this->managedBy($account, Permission::TASK_REVIEW);
+    }
+
+    /**
+     * Who takes part in the task's discussion: Admin and Managers for every division, the Supervisor of its division,
+     * and its active PICs. A PIC who was released, and anyone else, only reads it.
+     */
+    public function commentableBy(Account $account): bool
+    {
+        return $this->managedBy($account) || $this->assignedTo($account);
+    }
+
+    /**
+     * Whether the account may add a comment right now: a Done task keeps its discussion read-only.
+     */
+    public function acceptsCommentFrom(Account $account): bool
+    {
+        return $this->status !== TaskStatus::Done && $this->commentableBy($account);
     }
 
     /**

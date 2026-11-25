@@ -6,6 +6,7 @@ use App\Enums\TaskPriority;
 use App\Enums\TaskStatus;
 use App\Models\Account;
 use App\Models\Division;
+use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Task;
 use Database\Seeders\DatabaseSeeder;
@@ -205,6 +206,8 @@ class TaskListingTest extends TestCase
                 'evidence_count' => 0,
                 'can_view_detail' => true,
                 'can_edit' => true,
+                'can_change_status' => true,
+                'can_review' => false,
                 'can_assign' => false,
                 'can_delete' => false,
                 'version' => 1,
@@ -222,11 +225,11 @@ class TaskListingTest extends TestCase
             ->assertJsonPath('data.completed_at', null);
     }
 
-    public function test_task_without_pic_returns_null_pic(): void
+    public function test_task_without_pic_returns_an_empty_pics_list(): void
     {
         $this->actingAs($this->admin)
             ->getJson('/api/tasks?division=FIN')
-            ->assertJsonPath('data.0.pic', null);
+            ->assertJsonPath('data.0.pics', []);
     }
 
     // Filter & pencarian
@@ -422,6 +425,48 @@ class TaskListingTest extends TestCase
             ]);
     }
 
+    public function test_meta_lists_each_active_pic_of_the_visible_tasks_once(): void
+    {
+        // Multi-PIC: both PICs are listed, each once. A released PIC and accounts without a task are not listed.
+        $this->task('Campaign recap', $this->marketing, $this->staff)->pics()->attach($this->otherStaff->id, [
+            'assigned_by' => $this->manager->id,
+            'assigned_at' => now(),
+        ]);
+        $this->task('Old brief', $this->marketing, $this->manager)->pics()->updateExistingPivot($this->manager->id, ['unassigned_at' => now()]);
+
+        $this->actingAs($this->staff)
+            ->getJson('/api/tasks/meta')
+            ->assertOk()
+            ->assertJsonPath('data.pics', [
+                ['id' => $this->otherStaff->id, 'fullname' => 'Mkt Other'],
+                ['id' => $this->staff->id, 'fullname' => 'Mkt Staff'],
+            ]);
+    }
+
+    public function test_meta_pics_follow_the_accounts_task_visibility(): void
+    {
+        // Without task.view_all the account sees only its own tasks, so only their PICs are offered.
+        Role::where('code_role', Role::EMPLOYEE)->first()->permissions()->detach(Permission::where('code', Permission::TASK_VIEW_ALL)->value('id'));
+        $finance = $this->account(Role::EMPLOYEE, 'fin.staff', $this->finance);
+        $this->task('Shared audit', $this->finance, $finance)->pics()->attach($this->staff->id, [
+            'assigned_by' => $this->manager->id,
+            'assigned_at' => now(),
+        ]);
+
+        $this->actingAs($this->staff->fresh())
+            ->getJson('/api/tasks/meta')
+            ->assertOk()
+            ->assertJsonPath('data.pics', [
+                ['id' => $finance->id, 'fullname' => 'Fin Staff'],
+                ['id' => $this->staff->id, 'fullname' => 'Mkt Staff'],
+            ]);
+
+        $this->actingAs($this->otherStaff->fresh())
+            ->getJson('/api/tasks/meta')
+            ->assertOk()
+            ->assertJsonPath('data.pics', [['id' => $this->otherStaff->id, 'fullname' => 'Mkt Other']]);
+    }
+
     private function account(string $role, string $username, ?Division $division): Account
     {
         return Account::create([
@@ -438,11 +483,10 @@ class TaskListingTest extends TestCase
      */
     private function task(string $title, Division $division, ?Account $pic, array $attributes = []): Task
     {
-        return Task::factory()->create([
+        return Task::factory()->withPics(...($pic ? [$pic] : []))->create([
             'title' => $title,
             'description' => 'Task description',
             'division_id' => $division->id,
-            'pic_id' => $pic?->id,
             'creator_id' => $this->manager->id,
             'start_date' => null,
             'requires_review' => true,

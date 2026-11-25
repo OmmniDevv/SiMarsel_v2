@@ -19,6 +19,20 @@
         </template>
     </div>
 
+    {{-- Cakupan Papan dan Tabel: seluruh tugas lintas divisi, atau tugas dengan akun ini sebagai PIC aktif. --}}
+    <div x-show="view === 'board' || view === 'table'" class="inline-flex shrink-0 self-start rounded-lg border border-line bg-soft p-1" role="group" aria-label="Cakupan tugas" data-task-scope>
+        <template x-for="item in scopes" :key="item.key">
+            <button
+                type="button"
+                class="rounded-md px-3.5 py-1 text-sm font-semibold whitespace-nowrap focus-visible:outline-2 focus-visible:outline-primary"
+                :class="taskScope === item.key ? 'bg-white text-ink shadow-sm' : 'text-muted hover:text-ink'"
+                :aria-pressed="taskScope === item.key"
+                @click="taskScope = item.key"
+                x-text="item.label"
+            ></button>
+        </template>
+    </div>
+
     {{-- Lebar tiap filter mengikuti isinya agar teks tidak terpotong; baris membungkus bila tidak muat. --}}
     <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
         <label class="relative block min-w-0 basis-full sm:min-w-48 sm:flex-1 sm:basis-auto">
@@ -28,18 +42,28 @@
                 class="h-9 w-full rounded-lg border border-line bg-white pr-3 pl-9 text-sm text-ink placeholder:text-label focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none">
         </label>
 
-        <label x-show="user.role !== 'staff' && view !== 'timeline'" class="block min-w-0 flex-1 sm:max-w-60 sm:flex-none">
+        <label x-show="view !== 'timeline'" class="block min-w-0 basis-full sm:max-w-60 sm:flex-none sm:basis-auto">
             <span class="sr-only">Divisi</span>
-            <select id="task-division" x-model="filters.division" class="{{ $selectClass }}" :disabled="user.role === 'manager'" title="Divisi">
-                <template x-if="user.role === 'admin'"><option value="">Semua Divisi</option></template>
-                <template x-if="user.role === 'manager' && !divisionOptions.length"><option value="">Divisi belum ditetapkan</option></template>
+            <select id="task-division" x-model="filters.division" class="{{ $selectClass }}" title="Divisi">
+                <option value="">Semua Divisi</option>
                 <template x-for="division in divisionOptions" :key="division.code_division">
                     <option :value="division.code_division" x-text="division.name" :selected="filters.division === division.code_division"></option>
                 </template>
             </select>
         </label>
 
-        <label class="block flex-1 sm:flex-none">
+        {{-- PIC aktif dari tugas yang boleh dilihat akun ini; berlaku untuk Papan, Tabel, dan KPI. --}}
+        <label x-show="view === 'board' || view === 'table'" class="block min-w-0 basis-full sm:max-w-60 sm:flex-none sm:basis-auto">
+            <span class="sr-only">PIC</span>
+            <select id="task-pic" x-model="filters.pic" class="{{ $selectClass }}" title="PIC">
+                <option value="">Semua PIC</option>
+                <template x-for="pic in picOptions" :key="pic.id">
+                    <option :value="String(pic.id)" x-text="pic.fullname" :selected="filters.pic === String(pic.id)"></option>
+                </template>
+            </select>
+        </label>
+
+        <label class="block min-w-36 flex-1 sm:min-w-0 sm:flex-none">
             <span class="sr-only">Prioritas</span>
             <select id="task-priority" x-model="filters.priority" class="{{ $selectClass }}" title="Prioritas">
                 <option value="">Semua Prioritas</option>
@@ -49,7 +73,7 @@
             </select>
         </label>
 
-        <label class="block flex-1 sm:flex-none">
+        <label class="block min-w-36 flex-1 sm:min-w-0 sm:flex-none">
             <span class="sr-only">Status</span>
             <select id="task-status" x-model="filters.status" class="{{ $selectClass }}" title="Status">
                 <option value="">Semua Status</option>
@@ -59,17 +83,18 @@
             </select>
         </label>
 
-        <button type="button" class="{{ $button }} shrink-0" :disabled="!hasActiveFilter && !hasPeriodConfiguration" @click="resetFilters()">Atur Ulang Filter</button>
+        <button type="button" class="{{ $button }} shrink-0 basis-full sm:basis-auto" :disabled="!hasActiveFilter && !hasPeriodConfiguration" @click="resetFilters()">Atur Ulang Filter</button>
     </div>
 </div>
 
-<form x-show="view === 'board' || view === 'table'" x-cloak class="mt-3 border-t border-line pt-3" @submit.prevent="confirmPeriodFilter()" aria-labelledby="task-period-filter-title">
+{{-- Validasi periode ada di confirmPeriodFilter; validasi bawaan browser akan memblokir submit karena input mode lain yang tersembunyi. --}}
+<form x-show="view === 'board' || view === 'table'" x-cloak novalidate class="mt-3 border-t border-line pt-3" @submit.prevent="confirmPeriodFilter()" aria-labelledby="task-period-filter-title">
     <div class="mb-2 flex flex-wrap items-start justify-between gap-2">
         <div>
             <h2 id="task-period-filter-title" class="text-sm font-semibold text-ink">Filter Periode</h2>
-            <p class="mt-0.5 text-xs text-muted">Pilih tanggal mulai atau deadline. Rentang mencakup tanggal awal dan akhir. Filter belum diterapkan ke data karena backend belum tersedia.</p>
+            <p class="mt-0.5 text-xs text-muted">Pilih tanggal mulai atau deadline. Rentang mencakup tanggal awal dan akhir. Tugas tanpa tanggal tersebut tidak ditampilkan.</p>
         </div>
-        <span class="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">Tampilan UI saja</span>
+        <span x-show="appliedPeriod" x-cloak class="rounded-md bg-primary-soft px-2 py-1 text-[11px] font-semibold text-primary" data-applied-period x-text="appliedPeriodLabel"></span>
     </div>
 
     <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -99,7 +124,9 @@
 
         <label x-show="periodFilter.mode === 'month'" x-cloak class="block min-w-0">
             <span class="mb-1 block text-xs font-medium text-label">Bulan dan Tahun</span>
-            <input id="task-period-month" type="month" max="9999-12" x-model="periodFilter.month" class="{{ $periodControlClass }}">
+            <input id="task-period-month" type="month" min="1000-01" max="9999-12" x-model="periodFilter.month"
+                :aria-invalid="Boolean(periodYearError)" aria-describedby="task-period-month-error" class="{{ $periodControlClass }}">
+            <p id="task-period-month-error" x-show="periodYearError" x-cloak class="mt-1 text-xs text-red-600" role="alert" x-text="periodYearError"></p>
         </label>
 
         <label x-show="periodFilter.mode === 'year'" x-cloak class="block min-w-0">
@@ -124,7 +151,7 @@
 
         <div class="flex flex-col justify-end gap-1">
             <button type="submit" class="{{ $button }} w-full" :disabled="!canConfirmPeriodFilter">Terapkan Periode</button>
-            <p x-show="periodRangeError" x-cloak class="text-xs text-red-600" role="alert" x-text="periodRangeError"></p>
+            <p x-show="periodRangeError || periodError" x-cloak class="text-xs text-red-600" role="alert" x-text="periodRangeError || periodError"></p>
         </div>
     </div>
 </form>

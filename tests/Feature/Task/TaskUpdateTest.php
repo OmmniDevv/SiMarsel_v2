@@ -299,7 +299,7 @@ class TaskUpdateTest extends TestCase
         $task = $this->task->fresh();
         $this->assertSame('low', $task->priority->value);
         $this->assertSame('Desain banner promo', $task->title);
-        $this->assertSame($this->staff->id, $task->pic_id);
+        $this->assertSame([$this->staff->id], $task->pics()->pluck('accounts.id')->all());
     }
 
     public function test_updated_task_appears_in_the_task_list(): void
@@ -362,17 +362,17 @@ class TaskUpdateTest extends TestCase
 
     // PIC & divisi
 
-    public function test_the_edit_form_ignores_pic_fields(): void
+    public function test_the_edit_form_ignores_assignment_fields(): void
     {
         $this->actingAs($this->admin)
-            ->patchJson($this->url(), $this->payload(['pic_id' => $this->otherStaff->id, 'pic_ids' => [], 'title' => 'Baru']))
+            ->patchJson($this->url(), $this->payload(['pic_ids' => [], 'title' => 'Baru']))
             ->assertOk()
             ->assertJsonPath('data.pics', [['id' => $this->staff->id, 'fullname' => 'mkt.staff']]);
     }
 
     public function test_a_back_log_task_without_a_pic_cannot_leave_back_log_through_the_edit_form(): void
     {
-        $backlog = $this->task(['status' => TaskStatus::Backlog, 'pic_id' => null]);
+        $backlog = $this->task(['status' => TaskStatus::Backlog], []);
 
         $this->actingAs($this->admin)
             ->patchJson("/api/tasks/{$backlog->id}", $this->payload(['status' => 'todo']))
@@ -615,13 +615,12 @@ class TaskUpdateTest extends TestCase
     /**
      * @param  array<string, mixed>  $attributes
      */
-    private function task(array $attributes = []): Task
+    private function task(array $attributes = [], ?array $pics = null): Task
     {
-        return Task::factory()->create([
+        return Task::factory()->withPics(...($pics ?? [$this->staff]))->create([
             'title' => 'Desain banner promo',
             'category_id' => $this->reviewed->id,
             'division_id' => $this->marketing->id,
-            'pic_id' => $this->staff->id,
             'creator_id' => $this->manager->id,
             'status' => TaskStatus::Todo,
             'start_date' => '2026-10-24',

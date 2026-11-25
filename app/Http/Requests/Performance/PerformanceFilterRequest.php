@@ -201,7 +201,21 @@ class PerformanceFilterRequest extends FormRequest
         ];
     }
 
-    private function periodSelection(): PeriodSelection
+    /**
+     * The same preset resolved on the completeness metadata of another dataset; null without a preset.
+     */
+    public function filterForDataset(string $dataset): ?PerformanceFilter
+    {
+        if (! $this->filled('preset')) {
+            return null;
+        }
+
+        return PerformanceFilter::fromResolvedPeriod(
+            app(PeriodResolverService::class)->resolve($this->periodSelection($dataset)),
+        );
+    }
+
+    private function periodSelection(?string $dataset = null): PeriodSelection
     {
         $date = fn (string $field) => $this->filled($field)
             ? CarbonImmutable::createFromFormat('!Y-m-d', $this->input($field))
@@ -211,7 +225,7 @@ class PerformanceFilterRequest extends FormRequest
             PeriodPreset::from($this->input('preset')),
             PeriodComparison::tryFrom((string) $this->input('comparison')) ?? PeriodComparison::Auto,
             $this->selectedPlatforms(),
-            $this->input('dataset') ?? PeriodSelection::DATASET_TRANSACTIONS,
+            $dataset ?? $this->input('dataset') ?? PeriodSelection::DATASET_TRANSACTIONS,
             $date('date_from'),
             $date('date_to'),
             $date('comparison_from'),

@@ -8,8 +8,8 @@ return [
     |--------------------------------------------------------------------------
     |
     | migrate:rollback of the TASK-19 migrations is refused once the application has written data the old schema
-    | cannot hold (multi-PIC, comments, new agendas, ...). Use `php artisan tasks:recovery` instead. Set this to
-    | true only to throw that data away on purpose, for example on a disposable test database.
+    | cannot hold (PIC assignments, comments, new agendas, ...). Use `php artisan tasks:recovery` to inspect the
+    | risk. Set this to true only to throw that data away on purpose, for example on a disposable test database.
     |
     */
 

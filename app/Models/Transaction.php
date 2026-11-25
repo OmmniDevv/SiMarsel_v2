@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Observers\TransactionObserver;
 use Carbon\CarbonImmutable;
 use Database\Factories\TransactionFactory;
@@ -16,7 +17,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable([
     'platform_id',
     'markaz_transaction_id',
-    'markaz_user_id',
     'markaz_customer_id',
     'trx_id',
     'markaz_ref_id',
@@ -39,7 +39,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'customer_name',
     'customer_email',
     'customer_phone',
-    'status_message',
     'synced_at',
 ])]
 #[ObservedBy(TransactionObserver::class)]
@@ -48,7 +47,7 @@ class Transaction extends Model
     /** @use HasFactory<TransactionFactory> */
     use HasFactory;
 
-    public const STATUS_SUCCESS = 'Success';
+    public const REPORT_STATUS_EXPRESSION = 'COALESCE(transactions.effective_status, transactions.source_status)';
 
     public const TYPE_FIRST = 'Perdana';
 
@@ -63,7 +62,6 @@ class Transaction extends Model
     {
         return [
             'markaz_transaction_id' => 'integer',
-            'markaz_user_id' => 'integer',
             'markaz_customer_id' => 'integer',
             'markaz_ref_id' => 'integer',
             'markaz_created_at' => 'datetime',
@@ -116,7 +114,27 @@ class Transaction extends Model
      */
     public function scopeSuccessful(Builder $query): void
     {
-        $query->where('status_message', self::STATUS_SUCCESS);
+        $query->whereReportStatus(MarkazTransactionStatus::Success);
+    }
+
+    /**
+     * Filter by the status used for reports and business rules.
+     *
+     * @param  Builder<Transaction>  $query
+     */
+    public function scopeWhereReportStatus(Builder $query, MarkazTransactionStatus $status): void
+    {
+        $query->whereRaw(self::REPORT_STATUS_EXPRESSION.' = ?', [$status->value]);
+    }
+
+    public function reportStatus(): ?MarkazTransactionStatus
+    {
+        return MarkazTransactionStatus::forReport($this->effective_status, $this->source_status);
+    }
+
+    public function isSuccessful(): bool
+    {
+        return $this->reportStatus() === MarkazTransactionStatus::Success;
     }
 
     /** Successful transactions eligible for promo attribution, including genuine no-code transactions. */
@@ -145,11 +163,7 @@ class Transaction extends Model
         $query->where('product_type', self::TYPE_RENEWAL);
     }
 
-    /**
-     * Only transactions that carry a customer email can identify a user.
-     *
-     * @param  Builder<Transaction>  $query
-     */
+    /** @param Builder<Transaction> $query */
     public function scopeWithCustomerEmail(Builder $query): void
     {
         $query->whereNotNull('customer_email')->where('customer_email', '!=', '');

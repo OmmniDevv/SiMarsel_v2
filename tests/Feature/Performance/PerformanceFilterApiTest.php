@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Performance;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Account;
 use App\Models\Downloader;
 use App\Models\Platform;
@@ -38,7 +39,7 @@ class PerformanceFilterApiTest extends TestCase
         $this->seedFilterData();
     }
 
-    private function transaction(Platform $platform, string $date, float $nominal, string $status = Transaction::STATUS_SUCCESS): void
+    private function transaction(Platform $platform, string $date, float $nominal, MarkazTransactionStatus $status = MarkazTransactionStatus::Success): void
     {
         Transaction::factory()->for($platform)->create([
             'paid_date' => $date,
@@ -46,7 +47,7 @@ class PerformanceFilterApiTest extends TestCase
             'payment_method' => 'BNI',
             'nominal' => $nominal,
             'product_type' => Transaction::TYPE_FIRST,
-            'status_message' => $status,
+            'source_status' => $status->value,
         ]);
     }
 
@@ -62,7 +63,7 @@ class PerformanceFilterApiTest extends TestCase
         $this->transaction($this->platformB, '2026-03-20', 100000);
         $this->transaction($this->platformA, '2026-09-05', 400000);
         $this->transaction($this->platformC, '2026-09-10', 70000);
-        $this->transaction($this->platformA, '2026-09-12', 999999, 'failed');
+        $this->transaction($this->platformA, '2026-09-12', 999999, MarkazTransactionStatus::Failed);
         $this->transaction($this->platformA, '2026-10-02', 10000);
         $this->transaction($this->platformB, '2026-10-15', 20000);
 

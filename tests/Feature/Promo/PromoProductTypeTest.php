@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Promo;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Account;
 use App\Models\Platform;
 use App\Models\Transaction;
@@ -134,7 +135,9 @@ class PromoProductTypeTest extends TestCase
         $this->seedProductTypeData();
         $anomaly = $this->transaction(['APP26'], 70000, Transaction::TYPE_FIRST);
         $anomaly->update(['promo_code' => ['APP26', 'RESELLER01', 'EXTRA']]);
-        $this->transaction(['APP26'], 80000, Transaction::TYPE_FIRST)->update(['status_message' => 'failed']);
+        $this->transaction(['APP26'], 80000, Transaction::TYPE_FIRST)->update([
+            'source_status' => MarkazTransactionStatus::Failed->value,
+        ]);
 
         $this->assertSame([2, 300000], array_slice($this->rows($this->breakdown())['Perdana'], 1, 2));
     }

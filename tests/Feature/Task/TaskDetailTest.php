@@ -49,13 +49,12 @@ class TaskDetailTest extends TestCase
         $this->staff = $this->account(Role::EMPLOYEE, 'mkt.staff', $this->marketing);
         $this->otherStaff = $this->account(Role::EMPLOYEE, 'mkt.other', $this->marketing);
 
-        $this->task = Task::factory()->create([
+        $this->task = Task::factory()->withPics($this->staff)->create([
             'title' => 'Desain banner promo',
             'description' => 'Banner untuk promo November.',
             'category_id' => TaskCategory::where('name', 'Konten')->value('id'),
             'division_id' => $this->marketing->id,
             'platform_id' => Platform::factory()->create(['slug' => 'jadiasn', 'name' => 'JADIASN'])->id,
-            'pic_id' => $this->staff->id,
             'creator_id' => $this->manager->id,
             'priority' => 'high',
             'status' => TaskStatus::Todo,
@@ -288,7 +287,7 @@ class TaskDetailTest extends TestCase
 
     public function test_detail_of_a_task_without_evidence_has_an_empty_list(): void
     {
-        $other = Task::factory()->create(['division_id' => $this->marketing->id, 'pic_id' => $this->staff->id]);
+        $other = Task::factory()->withPics($this->staff)->create(['division_id' => $this->marketing->id]);
         $other->evidences()->create(['type' => TaskEvidence::LINK, 'url' => 'https://example.com/bukti']);
 
         $this->actingAs($this->staff)
@@ -318,7 +317,7 @@ class TaskDetailTest extends TestCase
 
     public function test_evidence_of_another_task_or_a_link_is_not_downloadable(): void
     {
-        $other = Task::factory()->create(['division_id' => $this->marketing->id, 'pic_id' => $this->otherStaff->id]);
+        $other = Task::factory()->withPics($this->otherStaff)->create(['division_id' => $this->marketing->id]);
         $foreign = $other->evidences()->create(['type' => TaskEvidence::FILE, 'file_path' => 'x.png', 'file_name' => 'x.png']);
         $link = $this->task->evidences()->create(['type' => TaskEvidence::LINK, 'url' => 'https://example.com']);
 

@@ -9,6 +9,7 @@ use App\Support\TransactionAggregation\AggregationFilter;
 use App\Support\TransactionAggregation\Ratio;
 use App\Support\TransactionAggregation\TransactionRecord;
 use Carbon\CarbonPeriodImmutable;
+use InvalidArgumentException;
 
 /**
  * Shared transaction aggregations for Analisis Performa, on the transaction dates contract.
@@ -77,6 +78,37 @@ class TransactionAggregationService
             'as_of' => $filter->cutoff()?->toIso8601String(),
             'metrics' => $metrics,
         ];
+    }
+
+    /**
+     * The metrics of several non-overlapping windows on the same date basis, counted as one scope, so a
+     * buyer paying in two windows stays one Pembeli Unik. Null when any window is unavailable.
+     *
+     * @param  iterable<TransactionRecord|array<string, mixed>>  $rows
+     * @param  non-empty-list<AggregationFilter>  $filters
+     * @return array<string, mixed>|null
+     */
+    public function aggregateWindows(iterable $rows, array $filters): ?array
+    {
+        $buyers = $this->buyerRows($rows);
+        $records = [];
+
+        foreach ($filters as $filter) {
+            if ($filter->basis !== $filters[0]->basis) {
+                throw new InvalidArgumentException('Every window of one aggregation needs the same date basis.');
+            }
+
+            if ($filter->availability() === DataAvailability::Unavailable) {
+                return null;
+            }
+
+            array_push($records, ...$this->inScope($buyers, $filter));
+        }
+
+        return match ($filters[0]->basis) {
+            TransactionDateBasis::Created => $this->createdMetrics($records),
+            TransactionDateBasis::Paid => $this->paidMetrics($records),
+        };
     }
 
     /**
@@ -183,7 +215,7 @@ class TransactionAggregationService
         $revenue = (float) array_sum(array_map(fn (TransactionRecord $record) => $record->netNominal, $payments));
         $buyers = array_unique(array_map(
             fn (TransactionRecord $record) => $record->platformId.':'.$record->markazCustomerId,
-            $payments,
+            array_filter($payments, fn (TransactionRecord $record) => $record->markazCustomerId !== null),
         ));
 
         return [

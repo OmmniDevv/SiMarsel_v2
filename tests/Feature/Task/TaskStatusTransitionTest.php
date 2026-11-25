@@ -5,6 +5,7 @@ namespace Tests\Feature\Task;
 use App\Enums\TaskStatus;
 use App\Models\Account;
 use App\Models\Division;
+use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Task;
 use App\Models\TaskActivity;
@@ -133,7 +134,7 @@ class TaskStatusTransitionTest extends TestCase
     public function test_freelance_pic_moves_their_task_up_to_ready_review(): void
     {
         $freelance = $this->account(Role::FREELANCE, 'freelance', null);
-        $task = $this->task(TaskStatus::Backlog, ['pic_id' => $freelance->id]);
+        $task = $this->task(TaskStatus::Backlog, pics: [$freelance]);
 
         foreach (['todo' => 1, 'in_progress' => 2, 'ready_review' => 3] as $status => $version) {
             $this->actingAs($freelance)
@@ -149,7 +150,7 @@ class TaskStatusTransitionTest extends TestCase
 
     public function test_backlog_task_without_pic_cannot_leave_backlog(): void
     {
-        $task = $this->task(TaskStatus::Backlog, ['pic_id' => null]);
+        $task = $this->task(TaskStatus::Backlog, [], []);
 
         $this->actingAs($this->manager)
             ->patchJson($this->url($task), $this->payload('todo'))
@@ -165,6 +166,45 @@ class TaskStatusTransitionTest extends TestCase
             ->patchJson($this->url($task), $this->payload('in_progress'))
             ->assertOk()
             ->assertJsonPath('data.status', 'in_progress');
+    }
+
+    public function test_active_pic_without_the_change_status_permission_cannot_move_the_card(): void
+    {
+        $task = $this->task(TaskStatus::Todo);
+        Role::where('code_role', Role::EMPLOYEE)->first()->permissions()
+            ->detach(Permission::where('code', Permission::TASK_CHANGE_STATUS)->value('id'));
+        $staff = $this->staff->fresh();
+
+        $this->actingAs($staff)
+            ->getJson('/api/tasks?scope=my_tasks')
+            ->assertJsonPath('data.0.id', $task->id)
+            ->assertJsonPath('data.0.can_change_status', false);
+
+        $this->actingAs($staff)
+            ->getJson("/api/tasks/{$task->id}")
+            ->assertJsonPath('data.can_change_status', false)
+            ->assertJsonPath('data.next_statuses', []);
+
+        $this->actingAs($staff)
+            ->patchJson($this->url($task), $this->payload('in_progress'))
+            ->assertForbidden();
+
+        $this->assertSame(TaskStatus::Todo, $task->fresh()->status);
+    }
+
+    public function test_list_tells_the_board_who_may_change_the_status(): void
+    {
+        $task = $this->task(TaskStatus::Todo);
+
+        $this->actingAs($this->staff)
+            ->getJson('/api/tasks?scope=my_tasks')
+            ->assertJsonPath('data.0.id', $task->id)
+            ->assertJsonPath('data.0.can_change_status', true);
+
+        $this->actingAs($this->otherStaff)
+            ->getJson('/api/tasks')
+            ->assertJsonPath('data.0.id', $task->id)
+            ->assertJsonPath('data.0.can_change_status', false);
     }
 
     public function test_admin_managers_and_the_division_supervisor_may_make_the_pic_steps(): void
@@ -235,7 +275,7 @@ class TaskStatusTransitionTest extends TestCase
 
     public function test_a_manager_who_is_the_pic_may_also_finish_their_own_task_without_review(): void
     {
-        $task = $this->task(TaskStatus::InProgress, ['requires_review' => false, 'pic_id' => $this->manager->id]);
+        $task = $this->task(TaskStatus::InProgress, ['requires_review' => false], [$this->manager]);
 
         $this->actingAs($this->manager)
             ->patchJson($this->url($task), $this->payload('done'))
@@ -461,11 +501,10 @@ class TaskStatusTransitionTest extends TestCase
     /**
      * @param  array<string, mixed>  $attributes
      */
-    private function task(TaskStatus $status, array $attributes = []): Task
+    private function task(TaskStatus $status, array $attributes = [], ?array $pics = null): Task
     {
-        return Task::factory()->create([
+        return Task::factory()->withPics(...($pics ?? [$this->staff]))->create([
             'division_id' => $this->marketing->id,
-            'pic_id' => $this->staff->id,
             'creator_id' => $this->manager->id,
             'status' => $status,
             'requires_review' => true,

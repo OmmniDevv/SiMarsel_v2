@@ -57,7 +57,7 @@ class TaskActivityTest extends TestCase
 
     public function test_admin_reads_the_history_of_any_task(): void
     {
-        $task = $this->task(['division_id' => $this->finance->id, 'pic_id' => null]);
+        $task = $this->task(['division_id' => $this->finance->id], []);
 
         $this->actingAs($this->admin)->getJson($this->url($task))->assertOk();
     }
@@ -129,7 +129,7 @@ class TaskActivityTest extends TestCase
 
     public function test_an_account_with_task_history_cannot_be_deleted_and_its_history_stays(): void
     {
-        $task = $this->task(['pic_id' => $this->otherStaff->id]);
+        $task = $this->task([], [$this->otherStaff]);
         $this->send('patchJson', "/api/tasks/{$task->id}/assignment", $this->manager, $task, ['pic_ids' => [$this->staff->id]]);
 
         foreach ([$this->manager, $this->staff, $this->otherStaff] as $account) {
@@ -343,11 +343,10 @@ class TaskActivityTest extends TestCase
     /**
      * @param  array<string, mixed>  $attributes
      */
-    private function task(array $attributes = []): Task
+    private function task(array $attributes = [], ?array $pics = null): Task
     {
-        return Task::factory()->create([
+        return Task::factory()->withPics(...($pics ?? [$this->staff]))->create([
             'division_id' => $this->marketing->id,
-            'pic_id' => $this->staff->id,
             'creator_id' => $this->manager->id,
             'status' => TaskStatus::Todo,
             'requires_review' => false,

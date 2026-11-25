@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Seeders;
 
+use App\Enums\MarkazTransactionStatus;
 use App\Models\Account;
 use App\Models\Downloader;
 use App\Models\Platform;
@@ -41,7 +42,7 @@ class PerformanceSeederTest extends TestCase
         $this->assertSame($days * count(PlatformSeeder::PLATFORMS), Downloader::count());
         $this->assertSame(0, Downloader::where('total', '<', 40)->count());
 
-        $this->assertGreaterThan(0, Transaction::where('status_message', '!=', Transaction::STATUS_SUCCESS)->count());
+        $this->assertGreaterThan(0, Transaction::query()->whereReportStatus(MarkazTransactionStatus::Failed)->count());
         $this->assertGreaterThan(0, Transaction::whereNull('payment_method')->count());
         $this->assertSame(Transaction::count(), Transaction::distinct()->count('trx_id'));
 
