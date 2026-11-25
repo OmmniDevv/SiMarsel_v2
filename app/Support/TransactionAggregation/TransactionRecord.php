@@ -26,6 +26,7 @@ final class TransactionRecord
         public readonly bool $isClaimCoupon,
         public readonly float $nominal,
         public readonly float $netNominal,
+        public readonly ?string $productType = null,
     ) {}
 
     /**
@@ -49,6 +50,7 @@ final class TransactionRecord
             isClaimCoupon: (bool) ($row['is_claim_coupon'] ?? false),
             nominal: (float) $row['nominal'],
             netNominal: (float) $row['net_nominal'],
+            productType: self::blankToNull($row['product_type'] ?? null),
         );
     }
 
