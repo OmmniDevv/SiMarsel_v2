@@ -153,6 +153,93 @@ class PlatformTransactionMetricsTest extends TestCase
         $this->assertSame(200000.0, $row['revenue_comparison']);
     }
 
+    public function test_equivalent_hour_comparison_keeps_the_value_recorded_at_its_cutoff_after_a_status_change(): void
+    {
+        $this->transaction($this->platformA, '2026-11-09 09:00:00', '2026-11-09 10:00:00', 300000);
+        $this->recordEquivalentHour(revenueOfPlatformA: 300000.0);
+
+        // The status changes after the 14.00 snapshot was recorded; the comparison must not follow it.
+        Transaction::query()->where('is_claim_coupon', false)->update(['source_status' => MarkazTransactionStatus::Failed->value]);
+
+        $metrics = $this->equivalentHourMetrics();
+        $this->assertSame('at_cutoff', $metrics['period']['comparison']['state_basis']);
+
+        $this->assertSame(300000.0, $metrics['platforms'][0]['revenue_comparison']);
+    }
+
+    public function test_equivalent_hour_comparison_is_unavailable_without_a_snapshot_at_its_cutoff(): void
+    {
+        $this->transaction($this->platformA, '2026-11-09 09:00:00', '2026-11-09 10:00:00', 300000);
+        $this->recordEquivalentHour(revenueOfPlatformA: 300000.0, withComparisonSnapshot: false);
+
+        $metrics = $this->equivalentHourMetrics();
+
+        // The latest state still has 300.000 on 9 November, but a missing snapshot must not be rebuilt from it.
+        $this->assertSame('unavailable', $metrics['period']['comparison']['availability']);
+        $this->assertNull($metrics['platforms'][0]['revenue_comparison']);
+        $this->assertNull($metrics['totals']['revenue_comparison']);
+    }
+
+    public function test_equivalent_hour_comparison_is_unavailable_when_the_snapshot_is_incomplete(): void
+    {
+        $this->transaction($this->platformA, '2026-11-09 09:00:00', '2026-11-09 10:00:00', 300000);
+        $this->recordEquivalentHour(revenueOfPlatformA: 300000.0, comparisonIsComplete: false);
+
+        $metrics = $this->equivalentHourMetrics();
+
+        $this->assertSame('unavailable', $metrics['period']['comparison']['availability']);
+        $this->assertNull($metrics['platforms'][0]['revenue_comparison']);
+    }
+
+    /**
+     * Complete snapshots of both platforms at 10 November 14.00 (active side) and at 9 November 14.00 (comparison side).
+     * The comparison snapshots carry the revenue recorded at that hour; platform B records 0.
+     */
+    private function recordEquivalentHour(float $revenueOfPlatformA, bool $withComparisonSnapshot = true, bool $comparisonIsComplete = true): void
+    {
+        foreach ([$this->platformA, $this->platformB] as $platform) {
+            DashboardSnapshot::factory()->for($platform)->create([
+                'date_from' => '2026-11-10',
+                'date_to' => '2026-11-10',
+                'cutoff_at' => '2026-11-10 14:00:00',
+                'is_complete' => true,
+                'payload' => [],
+                'recorded_at' => '2026-11-10 14:00:00',
+            ]);
+
+            if (! $withComparisonSnapshot) {
+                continue;
+            }
+
+            DashboardSnapshot::factory()->for($platform)->create([
+                'date_from' => '2026-11-09',
+                'date_to' => '2026-11-09',
+                'cutoff_at' => '2026-11-09 14:00:00',
+                'is_complete' => $comparisonIsComplete,
+                'payload' => ['revenue' => $platform->is($this->platformA) ? $revenueOfPlatformA : 0.0],
+                'recorded_at' => '2026-11-09 14:00:00',
+            ]);
+        }
+    }
+
+    /**
+     * Active side: 10 November up to 14.00 (partial). Comparison: the equivalent hour of 9 November.
+     *
+     * @return array<string, mixed>
+     */
+    private function equivalentHourMetrics(): array
+    {
+        $period = app(PeriodResolverService::class)->resolve(new PeriodSelection(
+            preset: PeriodPreset::DateRange,
+            comparison: PeriodComparison::Auto,
+            platforms: ['app-a', 'app-b'],
+            dateFrom: CarbonImmutable::parse('2026-11-10', 'Asia/Jakarta'),
+            dateTo: CarbonImmutable::parse('2026-11-10', 'Asia/Jakarta'),
+        ));
+
+        return app(PlatformContributionService::class)->transactionMetrics(PerformanceFilter::fromResolvedPeriod($period));
+    }
+
     private function metrics(array $slugs, string $from, string $to, PeriodComparison $comparison = PeriodComparison::Auto): array
     {
         $this->coverage($from, $to);

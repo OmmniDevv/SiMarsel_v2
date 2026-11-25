@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Enums\DataAvailability;
 use App\Enums\MarkazTransactionStatus;
+use App\Enums\PeriodStateBasis;
 use App\Enums\TransactionDateBasis;
 use App\Repositories\DashboardTransactionRepository;
 use App\Repositories\PlatformContributionRepository;
@@ -10,6 +12,7 @@ use App\Support\PerformanceFilter;
 use App\Support\Period\PeriodWindow;
 use App\Support\TransactionAggregation\AggregationFilter;
 use App\Support\TransactionAggregation\Ratio;
+use Carbon\CarbonImmutable;
 use InvalidArgumentException;
 
 class PlatformContributionService
@@ -18,6 +21,7 @@ class PlatformContributionService
         private PlatformContributionRepository $platformContributionRepository,
         private DashboardTransactionRepository $dashboardTransactions,
         private TransactionAggregationService $aggregations,
+        private ComparisonSnapshotService $comparisonSnapshots,
     ) {}
 
     /**
@@ -99,10 +103,16 @@ class PlatformContributionService
             ? []
             : $this->dashboardTransactions->contractRows($platformIds, $comparison->dateFrom, $comparison->dateTo->addDay());
 
+        // An equivalent-hour comparison reads the cutoff day's recorded snapshot, never the latest state (STEAM-299 revision).
+        $cutoffDaySnapshots = $comparison?->stateBasis === PeriodStateBasis::AtCutoff && $comparison->cutoffAt !== null && $platformIds !== []
+            ? $this->dashboardTransactions->daySnapshots($platformIds, $comparison->cutoffAt->startOfDay())
+            : [];
+
         $rows = $platforms->map(fn (object $platform) => $this->platformRow(
             $platform,
             $activeRows,
             $comparisonRows,
+            $cutoffDaySnapshots,
             $active,
             $comparison,
         ))->all();
@@ -141,21 +151,23 @@ class PlatformContributionService
     /**
      * @param  list<array<string, mixed>>  $activeRows
      * @param  list<array<string, mixed>>  $comparisonRows
+     * @param  list<array<string, mixed>>  $cutoffDaySnapshots
      * @return array<string, mixed>
      */
     private function platformRow(
         object $platform,
         array $activeRows,
         array $comparisonRows,
+        array $cutoffDaySnapshots,
         PeriodWindow $active,
         ?PeriodWindow $comparison,
     ): array {
         $platformId = (int) $platform->id;
         $created = $this->metrics($activeRows, $platformId, $active, TransactionDateBasis::Created);
         $paid = $this->metrics($activeRows, $platformId, $active, TransactionDateBasis::Paid);
-        $comparisonPaid = $comparison === null
+        $comparisonRevenue = $comparison === null
             ? null
-            : $this->metrics($comparisonRows, $platformId, $comparison, TransactionDateBasis::Paid);
+            : $this->comparisonRevenue($platformId, $comparison, $comparisonRows, $cutoffDaySnapshots);
 
         return [
             'slug' => $platform->slug,
@@ -174,11 +186,61 @@ class PlatformContributionService
             'unknown_status_count' => $created['unknown_status_count'],
             'success_payments' => $paid['success_payments'],
             'revenue' => $paid['revenue'] === null ? null : round($paid['revenue'], 2),
-            'revenue_comparison' => $comparisonPaid === null || $comparisonPaid['revenue'] === null
-                ? null
-                : round($comparisonPaid['revenue'], 2),
+            'revenue_comparison' => $comparisonRevenue,
             'contribution_percentage' => null,
         ];
+    }
+
+    /**
+     * The comparison revenue of one platform. A full-period comparison reads the latest state. An equivalent-hour
+     * comparison adds the whole days before the cutoff day from the latest state and the cutoff day from the snapshot
+     * recorded at exactly that cutoff. A missing, incomplete, or unavailable snapshot gives null, never a value rebuilt
+     * from the latest state.
+     *
+     * @param  list<array<string, mixed>>  $comparisonRows
+     * @param  list<array<string, mixed>>  $cutoffDaySnapshots
+     */
+    private function comparisonRevenue(int $platformId, PeriodWindow $comparison, array $comparisonRows, array $cutoffDaySnapshots): ?float
+    {
+        if ($comparison->stateBasis !== PeriodStateBasis::AtCutoff) {
+            $revenue = $this->metrics($comparisonRows, $platformId, $comparison, TransactionDateBasis::Paid)['revenue'];
+
+            return $revenue === null ? null : round($revenue, 2);
+        }
+
+        $cutoff = $comparison->cutoffAt;
+
+        if ($comparison->availability === DataAvailability::Unavailable || $cutoff === null) {
+            return null;
+        }
+
+        $cutoffDay = $cutoff->startOfDay();
+        $total = 0.0;
+
+        if ($comparison->dateFrom->lt($cutoffDay)) {
+            $wholeDays = $this->aggregate($comparisonRows, $platformId, $comparison->dateFrom, $cutoffDay->subDay(), TransactionDateBasis::Paid, $cutoff)['revenue'];
+
+            if ($wholeDays === null) {
+                return null;
+            }
+
+            $total += $wholeDays;
+        }
+
+        $recorded = $this->comparisonSnapshots->read(
+            $cutoffDaySnapshots,
+            [$platformId],
+            ComparisonSnapshotService::DATASET_TRANSACTIONS,
+            $cutoffDay,
+            $cutoffDay,
+            $cutoff,
+        )['values']['revenue'] ?? null;
+
+        if (! is_int($recorded) && ! is_float($recorded)) {
+            return null;
+        }
+
+        return round($total + (float) $recorded, 2);
     }
 
     /**
@@ -189,15 +251,18 @@ class PlatformContributionService
      */
     private function metrics(array $rows, int $platformId, PeriodWindow $window, TransactionDateBasis $basis): array
     {
+        return $this->aggregate($rows, $platformId, $window->dateFrom, $window->dateTo, $basis, $window->cutoffAt);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return array<string, mixed>
+     */
+    private function aggregate(array $rows, int $platformId, CarbonImmutable $from, CarbonImmutable $to, TransactionDateBasis $basis, ?CarbonImmutable $cutoff): array
+    {
         return $this->aggregations->aggregate(
             $rows,
-            new AggregationFilter(
-                [$platformId],
-                $window->dateFrom,
-                $window->dateTo,
-                $basis,
-                $window->cutoffAt,
-            ),
+            new AggregationFilter([$platformId], $from, $to, $basis, $cutoff),
         )['metrics'];
     }
 
