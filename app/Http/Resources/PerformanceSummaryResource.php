@@ -20,6 +20,7 @@ class PerformanceSummaryResource extends JsonResource
             'is_empty' => $this->resource['is_empty'],
             'message' => $this->resource['message'],
             'kpis' => $this->resource['kpis'],
+            'sales_summary' => $this->resource['sales_summary'],
         ];
     }
 }

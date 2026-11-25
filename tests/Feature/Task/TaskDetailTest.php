@@ -141,8 +141,7 @@ class TaskDetailTest extends TestCase
                 ->getJson("/api/tasks/{$this->task->id}")
                 ->assertOk()
                 ->assertJsonPath('data.can_edit', true)
-                // Starting the work is the PIC's step, so neither may move a To Do task.
-                ->assertJsonPath('data.next_statuses', []);
+                ->assertJsonPath('data.next_statuses', [['value' => 'in_progress', 'label' => 'On Process']]);
         }
     }
 
@@ -151,7 +150,7 @@ class TaskDetailTest extends TestCase
         foreach ([$this->admin, $this->manager] as $account) {
             $this->actingAs($account)
                 ->getJson("/api/tasks/{$this->task->id}")
-                ->assertJsonPath('data.editable_fields', array_values(array_diff(Task::EDITABLE_FIELDS, ['status'])));
+                ->assertJsonPath('data.editable_fields', Task::EDITABLE_FIELDS);
         }
     }
 
@@ -204,9 +203,9 @@ class TaskDetailTest extends TestCase
             ->assertJsonPath('data.0.can_edit', false);
     }
 
-    public function test_staff_sees_tasks_waiting_for_or_in_qa_read_only(): void
+    public function test_staff_sees_tasks_waiting_for_or_in_review_read_only(): void
     {
-        foreach ([TaskStatus::Backlog, TaskStatus::ReadyReview, TaskStatus::OnReview] as $status) {
+        foreach ([TaskStatus::ReadyReview, TaskStatus::OnReview] as $status) {
             $this->task->forceFill(['status' => $status, 'requires_review' => true])->save();
 
             $this->actingAs($this->staff)

@@ -41,7 +41,7 @@ class TaskEvidenceService
     /**
      * Store a file or link as evidence of the task, sent by its PIC, and record it in the task's history.
      * The PIC and status are checked again on the locked row, so evidence cannot slip in while the task is being
-     * reassigned or handed to QA. A stored file is removed again when saving the record fails, so no orphan file
+     * reassigned or handed to review. A stored file is removed again when saving the record fails, so no orphan file
      * is left behind.
      *
      * @param  array{file?: UploadedFile, url?: ?string, note?: ?string}  $data
@@ -93,7 +93,7 @@ class TaskEvidenceService
      * Delete evidence the PIC uploaded (soft delete) and record it in the task's history. The stored file is kept so
      * the deletion can be traced; the evidence leaves every list and can no longer be downloaded. The task itself, its
      * status, and other evidence are not touched. The task and the evidence are read again under lock, so evidence
-     * cannot be deleted while the task is being reassigned or handed to QA, and a request that lost the race to delete
+     * cannot be deleted while the task is being reassigned or handed to review, and a request that lost the race to delete
      * the same evidence stops without adding to the history.
      *
      * @throws ModelNotFoundException When the evidence has already been deleted.

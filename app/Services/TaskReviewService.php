@@ -27,14 +27,15 @@ class TaskReviewService
     }
 
     /**
-     * Record the QA decision of an Admin or the division's Manager on a task in On Review: Approve moves it to Done
-     * and stores when it was completed, Request Revision sends it back to On Process with the reason for its PIC.
+     * Record the review decision of Admin, a Manager, or the division's Supervisor on a task in On Review: Approve
+     * moves it to Done and stores when it was completed, Request Revision sends it back to Back Log with the reason
+     * for its PICs.
      * The decision is kept as a review and in the history, so earlier review cycles stay on record.
      *
      * @param  array{version: int|string, decision: string, note?: ?string}  $data
      *
      * @throws TaskVersionConflictException When the task was saved by someone else after the reviewer loaded it.
-     * @throws ValidationException When the task does not require QA or is not in On Review.
+     * @throws ValidationException When the task does not require review or is not in On Review.
      */
     public function decide(Account $reviewer, Task $task, array $data): Task
     {
@@ -49,7 +50,7 @@ class TaskReviewService
             }
 
             if (! $locked->requires_review) {
-                throw ValidationException::withMessages(['decision' => 'Tugas ini tidak memerlukan QA.']);
+                throw ValidationException::withMessages(['decision' => 'Tugas ini tidak memerlukan review.']);
             }
 
             if ($locked->status !== TaskStatus::OnReview) {
