@@ -101,7 +101,7 @@ class StoreTaskRequest extends FormRequest
             'status' => 'Status awal',
             'start_date' => 'Tanggal mulai',
             'deadline' => 'Deadline',
-            'requires_review' => 'Kewajiban QA',
+            'requires_review' => 'Kewajiban review',
             'evidence_required' => 'Kewajiban evidence',
         ];
     }

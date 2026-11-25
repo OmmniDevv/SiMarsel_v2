@@ -432,7 +432,7 @@ class TaskCommentTest extends TestCase
             ->assertOk();
         $this->release($task, 'freelance');
 
-        $this->assertSame(TaskStatus::InProgress, $task->fresh()->status);
+        $this->assertSame(TaskStatus::Backlog, $task->fresh()->status);
         $this->actingAs($this->accounts['staff'])
             ->getJson("/api/tasks/{$task->id}/comments")
             ->assertOk()

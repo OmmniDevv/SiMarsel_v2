@@ -192,7 +192,7 @@ class TaskReviewTest extends TestCase
             ->postJson($this->url($task), $this->revision())
             ->assertOk()
             ->assertJsonPath('message', 'Permintaan revisi berhasil dikirim.')
-            ->assertJsonPath('data.status', 'in_progress')
+            ->assertJsonPath('data.status', 'backlog')
             ->assertJsonPath('data.completed_at', null)
             ->assertJsonPath('data.last_review.decision', 'revision')
             ->assertJsonPath('data.last_review.note', 'Lengkapi data bulan Oktober.');
@@ -200,7 +200,7 @@ class TaskReviewTest extends TestCase
         $this->actingAs($this->staff)
             ->getJson("/api/tasks/{$task->id}")
             ->assertOk()
-            ->assertJsonPath('data.next_statuses', [['value' => 'ready_review', 'label' => 'Ready Review']])
+            ->assertJsonPath('data.next_statuses', [['value' => 'todo', 'label' => 'To Do']])
             ->assertJsonPath('data.last_review.note', 'Lengkapi data bulan Oktober.')
             ->assertJsonPath('data.can_review', false);
     }
@@ -213,10 +213,10 @@ class TaskReviewTest extends TestCase
 
         $this->moveTo($task, $this->manager, 'on_review');
         $this->decide($task, $this->manager, $this->revision(['note' => 'Revisi pertama.']));
-        $this->moveTo($task, $this->staff, 'ready_review');
+        $this->rework($task);
         $this->moveTo($task, $this->manager, 'on_review');
         $this->decide($task, $this->admin, $this->revision(['note' => 'Revisi kedua.']));
-        $this->moveTo($task, $this->staff, 'ready_review');
+        $this->rework($task);
         $this->moveTo($task, $this->manager, 'on_review');
         $this->decide($task, $this->manager, $this->approve());
 
@@ -240,17 +240,18 @@ class TaskReviewTest extends TestCase
         $task = $this->task(TaskStatus::OnReview);
 
         $this->decide($task, $this->manager, $this->revision());
-        $this->moveTo($task, $this->staff, 'ready_review');
+        $this->rework($task);
 
         $activities = $task->activities()->get();
 
         $this->assertSame(
-            [TaskActivity::RESUBMITTED, TaskActivity::REVISION_REQUESTED],
+            [TaskActivity::RESUBMITTED, TaskActivity::STATUS_CHANGED, TaskActivity::STATUS_CHANGED, TaskActivity::REVISION_REQUESTED],
             $activities->pluck('action')->all(),
         );
-        $this->assertSame(['old' => 'on_review', 'new' => 'in_progress'], $activities[1]->orderedChanges()['status']);
-        $this->assertSame('Lengkapi data bulan Oktober.', $activities[1]->changes['review']['new']['note']);
-        $this->assertSame($this->manager->id, $activities[1]->account_id);
+        $this->assertSame(['old' => 'on_review', 'new' => 'backlog'], $activities[3]->orderedChanges()['status']);
+        $this->assertSame('Lengkapi data bulan Oktober.', $activities[3]->changes['review']['new']['note']);
+        $this->assertSame($this->manager->id, $activities[3]->account_id);
+        $this->assertSame($this->staff->id, $activities[0]->account_id);
     }
 
     public function test_first_submission_to_qa_is_a_plain_status_change(): void
@@ -324,6 +325,16 @@ class TaskReviewTest extends TestCase
         $this->actingAs($reviewer)
             ->postJson($this->url($task), ['version' => $task->fresh()->version, ...array_diff_key($data, ['version' => 0])])
             ->assertOk();
+    }
+
+    /**
+     * After a revision the PIC works through the workflow again: Back Log → To Do → On Process → Ready Review.
+     */
+    private function rework(Task $task): void
+    {
+        foreach (['todo', 'in_progress', 'ready_review'] as $status) {
+            $this->moveTo($task, $this->staff, $status);
+        }
     }
 
     private function moveTo(Task $task, Account $actor, string $status): void
