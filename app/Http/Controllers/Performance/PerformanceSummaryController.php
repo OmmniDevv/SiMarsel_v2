@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Performance\PerformanceFilterRequest;
 use App\Http\Resources\PerformanceSummaryResource;
 use App\Services\PerformanceSummaryService;
+use App\Support\Period\PeriodSelection;
 
 class PerformanceSummaryController extends Controller
 {
@@ -13,7 +14,10 @@ class PerformanceSummaryController extends Controller
 
     public function __invoke(PerformanceFilterRequest $request): PerformanceSummaryResource
     {
-        $summary = $this->performanceSummaryService->summarize($request->filter());
+        $summary = $this->performanceSummaryService->summarize(
+            $request->filter(),
+            $request->filterForDataset(PeriodSelection::DATASET_DOWNLOADERS),
+        );
 
         return PerformanceSummaryResource::make($summary);
     }

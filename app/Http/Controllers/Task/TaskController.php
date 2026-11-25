@@ -8,6 +8,7 @@ use App\Http\Requests\Task\AssignTaskRequest;
 use App\Http\Requests\Task\ChangeTaskStatusRequest;
 use App\Http\Requests\Task\DeleteTaskRequest;
 use App\Http\Requests\Task\ReviewTaskRequest;
+use App\Http\Requests\Task\StoreTaskCommentRequest;
 use App\Http\Requests\Task\StoreTaskEvidenceRequest;
 use App\Http\Requests\Task\StoreTaskRequest;
 use App\Http\Requests\Task\TaskCalendarRequest;
@@ -18,6 +19,7 @@ use App\Http\Resources\CalendarDeadlineResource;
 use App\Http\Resources\CalendarEventResource;
 use App\Http\Resources\ScheduleItemResource;
 use App\Http\Resources\TaskActivityResource;
+use App\Http\Resources\TaskCommentResource;
 use App\Http\Resources\TaskDetailResource;
 use App\Http\Resources\TaskEvidenceResource;
 use App\Http\Resources\TaskPreviewResource;
@@ -27,6 +29,7 @@ use App\Models\Task;
 use App\Models\TaskEvidence;
 use App\Services\TaskActivityService;
 use App\Services\TaskCalendarService;
+use App\Services\TaskCommentService;
 use App\Services\TaskEvidenceService;
 use App\Services\TaskReviewService;
 use App\Services\TaskScheduleService;
@@ -156,6 +159,24 @@ class TaskController extends Controller
         $task = $this->taskService->changeStatus($request->user(), $task, $request->validated());
 
         return TaskDetailResource::make($task)->additional(['message' => 'Status tugas berhasil diperbarui.']);
+    }
+
+    public function comments(Task $task, TaskCommentService $service): AnonymousResourceCollection
+    {
+        return TaskCommentResource::collection($service->list($task));
+    }
+
+    /**
+     * 201 for a new comment; 200 with the stored comment when the same comment was just sent again.
+     */
+    public function storeComment(StoreTaskCommentRequest $request, Task $task, TaskCommentService $service): JsonResponse
+    {
+        $comment = $service->store($task, $request->user(), $request->validated());
+
+        return TaskCommentResource::make($comment)
+            ->additional(['message' => 'Komentar berhasil dikirim.'])
+            ->response()
+            ->setStatusCode($comment->wasRecentlyCreated ? 201 : 200);
     }
 
     public function reviews(Task $task, TaskReviewService $service): AnonymousResourceCollection

@@ -171,7 +171,7 @@ class TaskActivity extends Model
         $parts = [];
 
         foreach ($changes as $field => $change) {
-            if ($field === 'evidence' || $field === 'review') {
+            if (in_array($field, ['evidence', 'review', 'comment'], true)) {
                 continue;
             }
 
@@ -184,6 +184,10 @@ class TaskActivity extends Model
 
         if ($evidence = $changes['evidence']['new'] ?? $changes['evidence']['old'] ?? null) {
             $parts[] = 'Evidence: '.($evidence['name'] ?? '-');
+        }
+
+        if ($changes['comment']['new']['parent_comment_id'] ?? null) {
+            $parts[] = 'Membalas komentar';
         }
 
         if ($note = $changes['review']['new']['note'] ?? null) {
