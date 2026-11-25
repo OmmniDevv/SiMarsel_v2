@@ -6,6 +6,7 @@ use App\Enums\MarkazTransactionStatus;
 use App\Enums\PeriodComparison;
 use App\Enums\PeriodPreset;
 use App\Models\DashboardSnapshot;
+use App\Models\Downloader;
 use App\Models\Platform;
 use App\Models\Transaction;
 use App\Services\PeriodResolverService;
@@ -28,6 +29,9 @@ class PlatformTransactionMetricsTest extends TestCase
 
     private Platform $platformB;
 
+    /** @var array<string, true> platform, from, and to of every coverage snapshot already created in this test */
+    private array $coveredRanges = [];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -44,6 +48,15 @@ class PlatformTransactionMetricsTest extends TestCase
     private function coverage(string $from, string $to): void
     {
         foreach ([$this->platformA, $this->platformB] as $platform) {
+            // Several metrics() calls in one test may ask for the same range; insert each range once.
+            $key = $platform->id.'|'.$from.'|'.$to;
+
+            if (isset($this->coveredRanges[$key])) {
+                continue;
+            }
+
+            $this->coveredRanges[$key] = true;
+
             DashboardSnapshot::factory()->for($platform)->create([
                 'date_from' => $from,
                 'date_to' => $to,
@@ -151,6 +164,74 @@ class PlatformTransactionMetricsTest extends TestCase
 
         $this->assertSame(500000.0, $row['revenue']);
         $this->assertSame(200000.0, $row['revenue_comparison']);
+    }
+
+    public function test_ac01_65_payments_and_200_downloaders_give_32_5_percent(): void
+    {
+        for ($i = 0; $i < 65; $i++) {
+            $this->transaction($this->platformA, '2026-11-08 09:00:00', '2026-11-08 09:10:00', 1000);
+        }
+
+        $this->downloaders($this->platformA, '2026-11-08', 200);
+
+        $row = $this->metrics(['app-a'], '2026-11-08', '2026-11-08')['platforms'][0];
+
+        $this->assertSame(200, $row['downloaders']);
+        $this->assertSame(32.5, $row['success_per_downloader_percentage']);
+        $this->assertSame(65.0, $row['revenue'] / 1000);
+        $this->assertSame(100.0, $row['contribution_percentage']);
+    }
+
+    public function test_ac02_zero_or_missing_downloaders_give_an_empty_ratio_and_keep_revenue(): void
+    {
+        $this->transaction($this->platformA, '2026-11-08 09:00:00', '2026-11-08 09:10:00', 300000);
+        $this->transaction($this->platformB, '2026-11-08 09:00:00', '2026-11-08 09:10:00', 100000);
+        $this->downloaders($this->platformA, '2026-11-08', 0);
+
+        $metrics = $this->metrics(['app-a', 'app-b'], '2026-11-08', '2026-11-08');
+        $a = $metrics['platforms'][0];
+        $b = $metrics['platforms'][1];
+
+        $this->assertSame(0, $a['downloaders']);
+        $this->assertNull($a['success_per_downloader_percentage']);
+        $this->assertSame(300000.0, $a['revenue']);
+        // One Success payment each: the share is by payment count, not revenue.
+        $this->assertSame(50.0, $a['contribution_percentage']);
+
+        // Platform B has no Downloader row for the period: unknown, never 0 and never another platform's value.
+        $this->assertNull($b['downloaders']);
+        $this->assertSame('unavailable', $b['downloaders_availability']);
+        $this->assertNull($b['success_per_downloader_percentage']);
+        $this->assertSame(100000.0, $b['revenue']);
+    }
+
+    public function test_ac02_downloaders_from_another_range_do_not_fill_the_period(): void
+    {
+        $this->transaction($this->platformA, '2026-11-08 09:00:00', '2026-11-08 09:10:00', 1000);
+        $this->downloaders($this->platformA, '2026-11-07', 200);
+
+        $row = $this->metrics(['app-a'], '2026-11-08', '2026-11-08')['platforms'][0];
+
+        $this->assertNull($row['downloaders']);
+        $this->assertNull($row['success_per_downloader_percentage']);
+    }
+
+    public function test_ac03_claim_stays_out_of_the_ratio_and_a_failed_payment_drops_it_to_0(): void
+    {
+        $this->transaction($this->platformA, '2026-11-08 09:00:00', '2026-11-08 09:10:00', 1000);
+        $this->transaction($this->platformA, '2026-11-08 09:20:00', '2026-11-08 09:20:00', 0, MarkazTransactionStatus::Success, claim: true);
+        $this->downloaders($this->platformA, '2026-11-08', 10);
+
+        $this->assertSame(10.0, $this->metrics(['app-a'], '2026-11-08', '2026-11-08')['platforms'][0]['success_per_downloader_percentage']);
+
+        Transaction::query()->where('is_claim_coupon', false)->update(['source_status' => MarkazTransactionStatus::Failed->value]);
+
+        $this->assertSame(0.0, $this->metrics(['app-a'], '2026-11-08', '2026-11-08')['platforms'][0]['success_per_downloader_percentage']);
+    }
+
+    private function downloaders(Platform $platform, string $date, int $total): void
+    {
+        Downloader::factory()->for($platform)->create(['date' => $date, 'total' => $total]);
     }
 
     private function metrics(array $slugs, string $from, string $to, PeriodComparison $comparison = PeriodComparison::Auto): array

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\DataAvailability;
 use App\Enums\MarkazTransactionStatus;
 use App\Enums\TransactionDateBasis;
 use App\Repositories\DashboardTransactionRepository;
@@ -18,6 +19,7 @@ class PlatformContributionService
         private PlatformContributionRepository $platformContributionRepository,
         private DashboardTransactionRepository $dashboardTransactions,
         private TransactionAggregationService $aggregations,
+        private DownloaderAggregationService $downloaders,
     ) {}
 
     /**
@@ -109,10 +111,22 @@ class PlatformContributionService
 
         $totalSuccessPayments = $this->sumOrNull(array_column($rows, 'success_payments'));
 
-        $rows = array_map(fn (array $row) => [
-            ...$row,
-            'contribution_percentage' => Ratio::percentage($row['success_payments'], $totalSuccessPayments),
-        ], $rows);
+        // Downloader totals read the same active period and cutoff, so the ratio never mixes ranges (STEAM-300).
+        $downloaderTotals = $this->downloaders->platformPeriodTotals($filter);
+
+        $rows = array_map(function (array $row) use ($totalSuccessPayments, $downloaderTotals) {
+            $downloader = $downloaderTotals[$row['slug']]
+                ?? ['value' => null, 'availability' => DataAvailability::Unavailable->value];
+
+            return [
+                ...$row,
+                'contribution_percentage' => Ratio::percentage($row['success_payments'], $totalSuccessPayments),
+                'downloaders' => $downloader['value'],
+                'downloaders_availability' => $downloader['availability'],
+                // Success nonclaim payments ÷ Downloader; null when the Downloader total is missing, 0, or unknown.
+                'success_per_downloader_percentage' => Ratio::percentage($row['success_payments'], $downloader['value']),
+            ];
+        }, $rows);
 
         usort($rows, fn (array $a, array $b) => [$b['contribution_percentage'] ?? -1, $a['name']] <=> [$a['contribution_percentage'] ?? -1, $b['name']]);
 
@@ -132,6 +146,7 @@ class PlatformContributionService
                 'success_payments' => $totalSuccessPayments,
                 'revenue' => $this->sumOrNull(array_column($rows, 'revenue')),
                 'revenue_comparison' => $this->sumOrNull(array_column($rows, 'revenue_comparison')),
+                'downloaders' => $this->sumOrNull(array_column($rows, 'downloaders')),
                 'platforms' => count($rows),
             ],
             'platforms' => $rows,
