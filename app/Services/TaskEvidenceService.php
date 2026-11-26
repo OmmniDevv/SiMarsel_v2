@@ -21,10 +21,16 @@ use Throwable;
 class TaskEvidenceService
 {
     /**
-     * Statuses in which the PIC is still working on the task and may add evidence. After a revision the task
-     * is back in On Process, so evidence can be sent again; earlier evidence is never replaced.
+     * Statuses in which the PIC is still working on the task and may add or delete their evidence without moving it.
+     * A revision sends the task back to Back Log, so new evidence can be sent right away; earlier evidence is never
+     * replaced.
      */
-    public const SUBMITTABLE_STATUSES = [TaskStatus::Todo, TaskStatus::InProgress];
+    public const SUBMITTABLE_STATUSES = [TaskStatus::Backlog, TaskStatus::Todo, TaskStatus::InProgress];
+
+    /**
+     * Stops the browser from guessing another type than the one served, so a file cannot be run as a script.
+     */
+    private const SAFE_HEADERS = ['X-Content-Type-Options' => 'nosniff'];
 
     private const DISK = 'local';
 
@@ -41,7 +47,7 @@ class TaskEvidenceService
     /**
      * Store a file or link as evidence of the task, sent by its PIC, and record it in the task's history.
      * The PIC and status are checked again on the locked row, so evidence cannot slip in while the task is being
-     * reassigned or handed to QA. A stored file is removed again when saving the record fails, so no orphan file
+     * reassigned or handed to review. A stored file is removed again when saving the record fails, so no orphan file
      * is left behind.
      *
      * @param  array{file?: UploadedFile, url?: ?string, note?: ?string}  $data
@@ -65,6 +71,9 @@ class TaskEvidenceService
                     'type' => $path ? TaskEvidence::FILE : TaskEvidence::LINK,
                     'file_path' => $path,
                     'file_name' => $path ? $file->getClientOriginalName() : null,
+                    // The type detected from the content, never the one the browser claimed.
+                    'mime_type' => $path ? $file->getMimeType() : null,
+                    'file_size' => $path ? $file->getSize() : null,
                     'url' => $path ? null : $data['url'],
                     'note' => $data['note'] ?? null,
                 ]);
@@ -93,7 +102,7 @@ class TaskEvidenceService
      * Delete evidence the PIC uploaded (soft delete) and record it in the task's history. The stored file is kept so
      * the deletion can be traced; the evidence leaves every list and can no longer be downloaded. The task itself, its
      * status, and other evidence are not touched. The task and the evidence are read again under lock, so evidence
-     * cannot be deleted while the task is being reassigned or handed to QA, and a request that lost the race to delete
+     * cannot be deleted while the task is being reassigned or handed to review, and a request that lost the race to delete
      * the same evidence stops without adding to the history.
      *
      * @throws ModelNotFoundException When the evidence has already been deleted.
@@ -114,7 +123,7 @@ class TaskEvidenceService
 
             if (! in_array($locked->status, self::SUBMITTABLE_STATUSES, true)) {
                 throw ValidationException::withMessages([
-                    'evidence' => "Evidence hanya dapat dihapus saat tugas berstatus To Do atau On Process, bukan {$locked->status->label()}.",
+                    'evidence' => "Evidence hanya dapat dihapus saat tugas berstatus Back Log, To Do, atau On Process, bukan {$locked->status->label()}.",
                 ]);
             }
 
@@ -139,11 +148,33 @@ class TaskEvidenceService
      */
     public function download(Task $task, TaskEvidence $evidence): StreamedResponse
     {
+        $this->ensureStoredFile($task, $evidence);
+
+        return Storage::disk(self::DISK)->download($evidence->file_path, $evidence->file_name, self::SAFE_HEADERS);
+    }
+
+    /**
+     * Show a JPG, PNG, or WEBP image inline so it can be previewed. Every other evidence is treated as not found;
+     * documents are opened through download().
+     */
+    public function preview(Task $task, TaskEvidence $evidence): StreamedResponse
+    {
+        $this->ensureStoredFile($task, $evidence);
+        abort_unless($evidence->previewable(), 404);
+
+        return Storage::disk(self::DISK)->response(
+            $evidence->file_path,
+            $evidence->file_name,
+            ['Content-Type' => $evidence->effectiveMimeType(), ...self::SAFE_HEADERS],
+            'inline',
+        );
+    }
+
+    private function ensureStoredFile(Task $task, TaskEvidence $evidence): void
+    {
         abort_unless($evidence->task_id === $task->id, 404);
         abort_unless($evidence->type === TaskEvidence::FILE && $evidence->file_path, 404);
         abort_unless(Storage::disk(self::DISK)->exists($evidence->file_path), 404);
-
-        return Storage::disk(self::DISK)->download($evidence->file_path, $evidence->file_name);
     }
 
     /**
@@ -158,7 +189,7 @@ class TaskEvidenceService
 
         if (! in_array($task->status, self::SUBMITTABLE_STATUSES, true)) {
             throw ValidationException::withMessages([
-                'evidence' => "Evidence hanya dapat dikirim saat tugas berstatus To Do atau On Process, bukan {$task->status->label()}.",
+                'evidence' => "Evidence hanya dapat dikirim saat tugas berstatus Back Log, To Do, atau On Process, bukan {$task->status->label()}.",
             ]);
         }
     }

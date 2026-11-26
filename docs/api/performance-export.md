@@ -23,19 +23,21 @@ File langsung diunduh dengan nama `performa_{date_from}_{date_to}.xlsx` atau `.c
 
 | Format | Isi |
 |---|---|
-| `xlsx` | Satu file, 5 sheet (lihat tabel di bawah) |
+| `xlsx` | Satu file, 5 sheet, atau 6 sheet dengan `preset` (lihat tabel di bawah) |
 | `csv` | Satu file berisi kelima bagian secara berurutan. Setiap bagian diawali judulnya dan dipisah satu baris kosong. Memakai UTF-8 dengan BOM, supaya langsung terbaca benar di Excel. |
 
 | Sheet / bagian | Kolom | Sumber |
 |---|---|---|
 | Ringkasan KPI | Periode, Periode Sebelumnya, dan Platform; lalu tabel KPI, Nilai, Nilai Periode Sebelumnya, Perubahan (%), Tren | `/summary` |
 | Tren | Periode, Tanggal Mulai, Tanggal Akhir, Revenue, Transactions, Downloader, Conversion (%), User Baru, Repeat Order | `/trend` untuk semua metric |
+| Downloader | Periode Aktif, Downloader, Periode Pembanding, Downloader Pembanding, Perubahan (%); lalu Total dan tabel Platform, Downloader, Persentase (%). Hanya untuk request dengan `preset` | `/trend/downloaders` dengan `granularity` default |
 | Metode Pembayaran | Metode Pembayaran, Jumlah Transaksi, Revenue, Persentase Transaksi (%), Persentase Kontribusi (%) | `/payment-methods` |
 | Kontribusi Platform | Peringkat, Platform, Revenue, Transaksi, Pembeli Unik, Persentase Kontribusi (%) | `/platform-contribution` |
 | Waktu Pembelian | Rentang Waktu, Jam Mulai, Jam Akhir, Jumlah Transaksi, Persentase (%) | `/purchase-times` |
 
 - Rincian sheet **Tren** mengikuti rincian default filter: harian untuk default, rentang tanggal, dan bulan; bulanan untuk tahun dan rentang tahun. Rentang tanggal yang lebih dari 366 hari diekspor per bulan.
 - Angka disimpan sebagai angka (bukan teks), jadi bisa langsung dijumlahkan di Excel. Nilai kosong (misalnya konversi tanpa downloader, atau periode setelah hari ini) dibiarkan kosong.
+- Pada sheet **Downloader**, nilai yang belum tersedia ditulis `Belum tersedia`, sedangkan `0` dari sumber tetap `0`.
 - Persentase kontribusi platform yang tidak bisa dihitung (total revenue 0) ditulis `N/A`.
 - Jika filter tidak punya data, file tetap diunduh dengan semua sheet dan nilai `0`.
 

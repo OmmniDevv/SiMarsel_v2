@@ -3,6 +3,7 @@
 use App\Http\Controllers\Account\AccountController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Division\DivisionController;
+use App\Http\Controllers\Performance\DownloaderTrendController;
 use App\Http\Controllers\Performance\PaymentMethodDistributionController;
 use App\Http\Controllers\Performance\PerformanceExportController;
 use App\Http\Controllers\Performance\PerformanceSalesTrendController;
@@ -151,6 +152,8 @@ Route::middleware('auth')->group(function () {
         ->name('api.performance.summary');
     Route::get('/performance/trend/sales', PerformanceSalesTrendController::class)
         ->name('api.performance.trend.sales');
+    Route::get('/performance/trend/downloaders', DownloaderTrendController::class)
+        ->name('api.performance.trend.downloaders');
     Route::get('/performance/trend', PerformanceTrendController::class)
         ->name('api.performance.trend');
     Route::get('/performance/payment-methods', PaymentMethodDistributionController::class)
@@ -222,6 +225,18 @@ Route::middleware('auth')->group(function () {
             ->whereNumber(['task', 'evidence'])
             ->can('view', 'task')
             ->name('evidences.download');
+        Route::get('/{task}/evidences/{evidence}/preview', [TaskController::class, 'previewEvidence'])
+            ->whereNumber(['task', 'evidence'])
+            ->can('view', 'task')
+            ->name('evidences.preview');
+        Route::get('/{task}/comments', [TaskController::class, 'comments'])
+            ->whereNumber('task')
+            ->can('view', 'task')
+            ->name('comments.index');
+        Route::post('/{task}/comments', [TaskController::class, 'storeComment'])
+            ->whereNumber('task')
+            ->can('comment', 'task')
+            ->name('comments.store');
         Route::get('/{task}/reviews', [TaskController::class, 'reviews'])
             ->whereNumber('task')
             ->can('view', 'task')

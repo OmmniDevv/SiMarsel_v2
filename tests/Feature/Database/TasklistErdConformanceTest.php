@@ -61,7 +61,8 @@ class TasklistErdConformanceTest extends TestCase
         ],
         'task_comments' => [
             'id' => ['bigint', false], 'task_id' => ['bigint', false], 'author_id' => ['bigint', false], 'parent_comment_id' => ['bigint', true],
-            'content' => ['text', false], 'created_at' => ['timestamp', false], 'updated_at' => ['timestamp', true], 'deleted_at' => ['timestamp', true],
+            'content' => ['text', false], 'client_request_id' => ['char', true], 'created_at' => ['timestamp', false], 'updated_at' => ['timestamp', true],
+            'deleted_at' => ['timestamp', true],
         ],
         'task_activities' => [
             'id' => ['bigint', false], 'task_id' => ['bigint', false], 'account_id' => ['bigint', true], 'action' => ['varchar(50)', false],
@@ -103,7 +104,7 @@ class TasklistErdConformanceTest extends TestCase
         'task_assignments' => [[['task_id', 'account_id', 'active_flag'], true], [['task_id', 'unassigned_at'], false], [['account_id', 'unassigned_at'], false]],
         'task_evidences' => [[['task_id', 'created_at'], false]],
         'task_reviews' => [[['task_id', 'created_at'], false]],
-        'task_comments' => [[['task_id', 'created_at'], false], [['parent_comment_id'], false]],
+        'task_comments' => [[['task_id', 'created_at'], false], [['parent_comment_id'], false], [['author_id', 'client_request_id'], true]],
         'task_activities' => [[['task_id', 'created_at'], false]],
         'calendar_events' => [[['start_at'], false]],
     ];

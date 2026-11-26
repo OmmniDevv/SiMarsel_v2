@@ -73,7 +73,7 @@ class Task extends Model
     }
 
     /**
-     * QA decisions, newest first.
+     * review decisions, newest first.
      */
     public function reviews(): HasMany
     {
@@ -254,16 +254,22 @@ class Task extends Model
     }
 
     /**
-     * Statuses the account may move the task to from its current one: every active PIC starts the work and hands
-     * it to review or finishes it; Admin, a Manager, or the division's Supervisor makes every other move.
+     * Statuses the account may move the task to from its current one: every active PIC, and Admin, a Manager, or the
+     * division's Supervisor, moves it from Back Log up to Ready Review; only those reviewers start the review or
+     * finish a task. Leaving On Review is a review decision, never a plain move.
      *
      * @return array<int, TaskStatus>
      */
     public function nextStatusesFor(Account $account): array
     {
-        return $this->movesStatusFor($account) && ! $this->status->decidedByReview()
-            ? $this->status->nextStatuses($this->requires_review)
-            : [];
+        if ($this->status->decidedByReview()) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            $this->status->nextStatuses($this->requires_review),
+            fn (TaskStatus $status) => $this->movesStatusFor($account, $status),
+        ));
     }
 
     /**
@@ -274,6 +280,23 @@ class Task extends Model
     public function reviewableBy(Account $account): bool
     {
         return $this->requires_review && $this->managedBy($account, Permission::TASK_REVIEW);
+    }
+
+    /**
+     * Who takes part in the task's discussion: Admin and Managers for every division, the Supervisor of its division,
+     * and its active PICs. A PIC who was released, and anyone else, only reads it.
+     */
+    public function commentableBy(Account $account): bool
+    {
+        return $this->managedBy($account) || $this->assignedTo($account);
+    }
+
+    /**
+     * Whether the account may add a comment right now: a Done task keeps its discussion read-only.
+     */
+    public function acceptsCommentFrom(Account $account): bool
+    {
+        return $this->status !== TaskStatus::Done && $this->commentableBy($account);
     }
 
     /**
@@ -295,18 +318,18 @@ class Task extends Model
             $reason = "Status tidak dapat diubah dari {$from->label()} ke {$status->label()}.";
 
             return $status === TaskStatus::Done && $this->requires_review
-                ? $reason.' Tugas ini wajib melalui QA sebelum Done.'
+                ? $reason.' Tugas ini wajib melalui Ready Review dan On Review sebelum Done.'
                 : $reason;
         }
 
-        if (! $this->movesStatusFor($account)) {
-            return $from->movedByPic()
-                ? "Hanya PIC tugas yang dapat mengubah status dari {$from->label()} ke {$status->label()}."
-                : "Hanya Admin, Manajer, atau Supervisor divisi yang dapat mengubah status dari {$from->label()} ke {$status->label()}.";
+        if (! $this->movesStatusFor($account, $status)) {
+            return $status->reachedByReviewer()
+                ? "Hanya Admin, Manajer, atau Supervisor divisi yang dapat mengubah status dari {$from->label()} ke {$status->label()}."
+                : "Hanya PIC aktif, Admin, Manajer, atau Supervisor divisi yang dapat mengubah status dari {$from->label()} ke {$status->label()}.";
         }
 
         if ($from->decidedByReview()) {
-            return 'Keputusan QA diberikan melalui review tugas (Approve atau Request Revision).';
+            return 'Keputusan review diberikan melalui Approve atau Request Revision.';
         }
 
         if ($from === TaskStatus::InProgress && $this->evidence_required && ! $this->evidences()->exists()) {
@@ -317,20 +340,27 @@ class Task extends Model
     }
 
     /**
-     * A task that already has a review got there through a revision, so handing it to QA again is a resubmission.
+     * A task that already has a review got there through a revision, so handing it to review again is a resubmission.
      */
     public function resubmitsTo(TaskStatus $status): bool
     {
         return $status === TaskStatus::ReadyReview && $this->reviews()->exists();
     }
 
-    private function movesStatusFor(Account $account): bool
+    /**
+     * Whether the account may make a move into the given status: an active PIC or an account that manages the task
+     * up to Ready Review, and only an account that manages it with task.review into On Review or Done. Being a PIC
+     * does not take that away, so a Manager or Supervisor may also move their own task.
+     */
+    private function movesStatusFor(Account $account, TaskStatus $status): bool
     {
         if (! $account->hasPermission(Permission::TASK_CHANGE_STATUS)) {
             return false;
         }
 
-        return $this->status->movedByPic() ? $this->assignedTo($account) : $this->managedBy($account);
+        return $status->reachedByReviewer()
+            ? $this->managedBy($account, Permission::TASK_REVIEW)
+            : $this->assignedTo($account) || $this->managedBy($account);
     }
 
     /**
@@ -359,8 +389,8 @@ class Task extends Model
             $locked['division_id'] = 'Hanya Admin dan Manajer yang dapat memindahkan tugas ke divisi lain.';
         }
 
-        if ($this->status->inQa()) {
-            $locked['requires_review'] = 'Kewajiban QA tidak dapat diubah setelah tugas masuk tahap QA.';
+        if ($this->status->inReview()) {
+            $locked['requires_review'] = 'Kewajiban review tidak dapat diubah setelah tugas masuk tahap review.';
         }
 
         return $locked;
@@ -383,7 +413,7 @@ class Task extends Model
         return match (true) {
             ! $this->assignableBy($account) => 'Anda tidak berwenang mengatur PIC tugas ini.',
             $this->status === TaskStatus::Done => 'Tugas yang sudah selesai tidak dapat diubah.',
-            $this->status->inQa() => 'PIC tidak dapat diganti selama tugas dalam tahap QA.',
+            $this->status->inReview() => 'PIC tidak dapat diganti selama tugas dalam tahap review.',
             default => null,
         };
     }

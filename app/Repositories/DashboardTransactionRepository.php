@@ -90,8 +90,7 @@ class DashboardTransactionRepository
     }
 
     /**
-     * The transactions snapshots recorded for exactly one date range (date_from and date_to), in the row shape
-     * read by ComparisonSnapshotService::read(). Each cutoff of the range is its own recorded snapshot.
+     * The transactions snapshots recorded for exactly the inclusive dates $dateFrom - $dateTo.
      *
      * @param  list<int>  $platformIds
      * @return list<array<string, mixed>>
