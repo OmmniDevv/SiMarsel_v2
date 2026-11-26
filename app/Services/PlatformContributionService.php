@@ -103,16 +103,16 @@ class PlatformContributionService
             ? []
             : $this->dashboardTransactions->contractRows($platformIds, $comparison->dateFrom, $comparison->dateTo->addDay());
 
-        // An equivalent-hour comparison reads the cutoff day's recorded snapshot, never the latest state (STEAM-299 revision).
-        $cutoffDaySnapshots = $comparison?->stateBasis === PeriodStateBasis::AtCutoff && $comparison->cutoffAt !== null && $platformIds !== []
-            ? $this->dashboardTransactions->daySnapshots($platformIds, $comparison->cutoffAt->startOfDay())
+        // An equivalent-hour comparison reads the snapshots recorded for its whole range at its cutoff, never the latest state (STEAM-299 revision).
+        $recordedComparison = $comparison?->stateBasis === PeriodStateBasis::AtCutoff && $comparison->cutoffAt !== null && $platformIds !== []
+            ? $this->dashboardTransactions->periodSnapshots($platformIds, $comparison->dateFrom, $comparison->dateTo)
             : [];
 
         $rows = $platforms->map(fn (object $platform) => $this->platformRow(
             $platform,
             $activeRows,
             $comparisonRows,
-            $cutoffDaySnapshots,
+            $recordedComparison,
             $active,
             $comparison,
         ))->all();
@@ -151,14 +151,14 @@ class PlatformContributionService
     /**
      * @param  list<array<string, mixed>>  $activeRows
      * @param  list<array<string, mixed>>  $comparisonRows
-     * @param  list<array<string, mixed>>  $cutoffDaySnapshots
+     * @param  list<array<string, mixed>>  $recordedComparison
      * @return array<string, mixed>
      */
     private function platformRow(
         object $platform,
         array $activeRows,
         array $comparisonRows,
-        array $cutoffDaySnapshots,
+        array $recordedComparison,
         PeriodWindow $active,
         ?PeriodWindow $comparison,
     ): array {
@@ -167,7 +167,7 @@ class PlatformContributionService
         $paid = $this->metrics($activeRows, $platformId, $active, TransactionDateBasis::Paid);
         $comparisonRevenue = $comparison === null
             ? null
-            : $this->comparisonRevenue($platformId, $comparison, $comparisonRows, $cutoffDaySnapshots);
+            : $this->comparisonRevenue($platformId, $comparison, $comparisonRows, $recordedComparison);
 
         return [
             'slug' => $platform->slug,
@@ -193,14 +193,14 @@ class PlatformContributionService
 
     /**
      * The comparison revenue of one platform. A full-period comparison reads the latest state. An equivalent-hour
-     * comparison adds the whole days before the cutoff day from the latest state and the cutoff day from the snapshot
-     * recorded at exactly that cutoff. A missing, incomplete, or unavailable snapshot gives null, never a value rebuilt
-     * from the latest state.
+     * comparison reads the snapshot recorded for its whole date range at its cutoff, so every day of the range shows
+     * the state at that hour, including the days before the last day. A missing, incomplete, or unavailable snapshot
+     * gives null, never a value rebuilt from the latest state.
      *
      * @param  list<array<string, mixed>>  $comparisonRows
-     * @param  list<array<string, mixed>>  $cutoffDaySnapshots
+     * @param  list<array<string, mixed>>  $recordedComparison  The recorded snapshots of the comparison range.
      */
-    private function comparisonRevenue(int $platformId, PeriodWindow $comparison, array $comparisonRows, array $cutoffDaySnapshots): ?float
+    private function comparisonRevenue(int $platformId, PeriodWindow $comparison, array $comparisonRows, array $recordedComparison): ?float
     {
         if ($comparison->stateBasis !== PeriodStateBasis::AtCutoff) {
             $revenue = $this->metrics($comparisonRows, $platformId, $comparison, TransactionDateBasis::Paid)['revenue'];
@@ -214,25 +214,12 @@ class PlatformContributionService
             return null;
         }
 
-        $cutoffDay = $cutoff->startOfDay();
-        $total = 0.0;
-
-        if ($comparison->dateFrom->lt($cutoffDay)) {
-            $wholeDays = $this->aggregate($comparisonRows, $platformId, $comparison->dateFrom, $cutoffDay->subDay(), TransactionDateBasis::Paid, $cutoff)['revenue'];
-
-            if ($wholeDays === null) {
-                return null;
-            }
-
-            $total += $wholeDays;
-        }
-
         $recorded = $this->comparisonSnapshots->read(
-            $cutoffDaySnapshots,
+            $recordedComparison,
             [$platformId],
             ComparisonSnapshotService::DATASET_TRANSACTIONS,
-            $cutoffDay,
-            $cutoffDay,
+            $comparison->dateFrom,
+            $comparison->dateTo,
             $cutoff,
         )['values']['revenue'] ?? null;
 
@@ -240,7 +227,7 @@ class PlatformContributionService
             return null;
         }
 
-        return round($total + (float) $recorded, 2);
+        return round((float) $recorded, 2);
     }
 
     /**

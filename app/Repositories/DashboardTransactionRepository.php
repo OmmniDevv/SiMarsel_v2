@@ -86,8 +86,20 @@ class DashboardTransactionRepository
      */
     public function daySnapshots(array $platformIds, CarbonImmutable $day): array
     {
+        return $this->periodSnapshots($platformIds, $day, $day);
+    }
+
+    /**
+     * The transactions snapshots recorded for exactly one date range (date_from and date_to), in the row shape
+     * read by ComparisonSnapshotService::read(). Each cutoff of the range is its own recorded snapshot.
+     *
+     * @param  list<int>  $platformIds
+     * @return list<array<string, mixed>>
+     */
+    public function periodSnapshots(array $platformIds, CarbonImmutable $dateFrom, CarbonImmutable $dateTo): array
+    {
         return DashboardSnapshot::query()
-            ->forPeriod(DashboardDataset::Transactions, $day, $day)
+            ->forPeriod(DashboardDataset::Transactions, $dateFrom, $dateTo)
             ->whereIn('platform_id', $platformIds)
             ->get()
             ->map(fn (DashboardSnapshot $snapshot) => $snapshot->toComparisonRow())
