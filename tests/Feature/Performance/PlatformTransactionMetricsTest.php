@@ -253,6 +253,99 @@ class PlatformTransactionMetricsTest extends TestCase
         return app(PlatformContributionService::class)->transactionMetrics(PerformanceFilter::fromResolvedPeriod($period));
     }
 
+    public function test_multi_day_equivalent_hour_comparison_keeps_every_day_at_the_recorded_cutoff(): void
+    {
+        $this->transaction($this->platformA, '2026-11-07 09:00:00', '2026-11-07 10:00:00', 300000);
+        $this->transaction($this->platformA, '2026-11-08 09:00:00', '2026-11-08 10:00:00', 200000);
+        $this->recordMultiDayEquivalentHour(revenueOfPlatformA: 500000.0);
+
+        // 7 November is the day before the last comparison day: its status changes after the snapshot was recorded.
+        Transaction::query()->whereDate('paid_date', '2026-11-07')->update(['source_status' => MarkazTransactionStatus::Failed->value]);
+
+        $metrics = $this->multiDayEquivalentHourMetrics();
+
+        $this->assertSame('at_cutoff', $metrics['period']['comparison']['state_basis']);
+        $this->assertSame('2026-11-07', $metrics['period']['comparison']['date_from']);
+        $this->assertSame('2026-11-08', $metrics['period']['comparison']['date_to']);
+
+        // The recorded range value, not the latest 200.000 (8 November only) nor the changed 7 November.
+        $this->assertSame(500000.0, $metrics['platforms'][0]['revenue_comparison']);
+    }
+
+    public function test_multi_day_equivalent_hour_comparison_is_unavailable_without_its_range_snapshot(): void
+    {
+        $this->transaction($this->platformA, '2026-11-07 09:00:00', '2026-11-07 10:00:00', 300000);
+        $this->transaction($this->platformA, '2026-11-08 09:00:00', '2026-11-08 10:00:00', 200000);
+        $this->recordMultiDayEquivalentHour(revenueOfPlatformA: 500000.0, withComparisonSnapshot: false);
+
+        $metrics = $this->multiDayEquivalentHourMetrics();
+
+        $this->assertSame('unavailable', $metrics['period']['comparison']['availability']);
+        $this->assertNull($metrics['platforms'][0]['revenue_comparison']);
+        $this->assertNull($metrics['totals']['revenue_comparison']);
+    }
+
+    public function test_multi_day_equivalent_hour_comparison_is_unavailable_when_the_range_snapshot_is_incomplete(): void
+    {
+        $this->transaction($this->platformA, '2026-11-07 09:00:00', '2026-11-07 10:00:00', 300000);
+        $this->transaction($this->platformA, '2026-11-08 09:00:00', '2026-11-08 10:00:00', 200000);
+        $this->recordMultiDayEquivalentHour(revenueOfPlatformA: 500000.0, comparisonIsComplete: false);
+
+        $metrics = $this->multiDayEquivalentHourMetrics();
+
+        $this->assertSame('unavailable', $metrics['period']['comparison']['availability']);
+        $this->assertNull($metrics['platforms'][0]['revenue_comparison']);
+    }
+
+    /**
+     * Active side: 9-10 November up to 10 November 14.00 (partial). Comparison: 7-8 November up to 8 November 14.00,
+     * recorded as one snapshot for the whole range. Platform A records $revenueOfPlatformA; platform B records 0.
+     */
+    private function recordMultiDayEquivalentHour(float $revenueOfPlatformA, bool $withComparisonSnapshot = true, bool $comparisonIsComplete = true): void
+    {
+        foreach ([$this->platformA, $this->platformB] as $platform) {
+            DashboardSnapshot::factory()->for($platform)->create([
+                'date_from' => '2026-11-09',
+                'date_to' => '2026-11-10',
+                'cutoff_at' => '2026-11-10 14:00:00',
+                'is_complete' => true,
+                'payload' => [],
+                'recorded_at' => '2026-11-10 14:00:00',
+            ]);
+
+            if (! $withComparisonSnapshot) {
+                continue;
+            }
+
+            DashboardSnapshot::factory()->for($platform)->create([
+                'date_from' => '2026-11-07',
+                'date_to' => '2026-11-08',
+                'cutoff_at' => '2026-11-08 14:00:00',
+                'is_complete' => $comparisonIsComplete,
+                'payload' => ['revenue' => $platform->is($this->platformA) ? $revenueOfPlatformA : 0.0],
+                'recorded_at' => '2026-11-08 14:00:00',
+            ]);
+        }
+    }
+
+    /**
+     * Two-day active period 9-10 November, cutoff at 10 November 14.00.
+     *
+     * @return array<string, mixed>
+     */
+    private function multiDayEquivalentHourMetrics(): array
+    {
+        $period = app(PeriodResolverService::class)->resolve(new PeriodSelection(
+            preset: PeriodPreset::DateRange,
+            comparison: PeriodComparison::Auto,
+            platforms: ['app-a', 'app-b'],
+            dateFrom: CarbonImmutable::parse('2026-11-09', 'Asia/Jakarta'),
+            dateTo: CarbonImmutable::parse('2026-11-10', 'Asia/Jakarta'),
+        ));
+
+        return app(PlatformContributionService::class)->transactionMetrics(PerformanceFilter::fromResolvedPeriod($period));
+    }
+
     public function test_ba01_65_payments_and_200_downloaders_give_32_5_percent(): void
     {
         for ($i = 0; $i < 65; $i++) {
