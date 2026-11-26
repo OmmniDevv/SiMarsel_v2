@@ -6,6 +6,7 @@ use App\Enums\MarkazTransactionStatus;
 use App\Enums\PeriodComparison;
 use App\Enums\PeriodPreset;
 use App\Models\DashboardSnapshot;
+use App\Models\Downloader;
 use App\Models\Platform;
 use App\Models\Transaction;
 use App\Services\PeriodResolverService;
@@ -28,6 +29,9 @@ class PlatformTransactionMetricsTest extends TestCase
 
     private Platform $platformB;
 
+    /** @var array<string, true> platform, from, and to of every coverage snapshot already created in this test */
+    private array $coveredRanges = [];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -44,6 +48,15 @@ class PlatformTransactionMetricsTest extends TestCase
     private function coverage(string $from, string $to): void
     {
         foreach ([$this->platformA, $this->platformB] as $platform) {
+            // Several metrics() calls in one test may ask for the same range; insert each range once.
+            $key = $platform->id.'|'.$from.'|'.$to;
+
+            if (isset($this->coveredRanges[$key])) {
+                continue;
+            }
+
+            $this->coveredRanges[$key] = true;
+
             DashboardSnapshot::factory()->for($platform)->create([
                 'date_from' => $from,
                 'date_to' => $to,
@@ -331,6 +344,159 @@ class PlatformTransactionMetricsTest extends TestCase
         ));
 
         return app(PlatformContributionService::class)->transactionMetrics(PerformanceFilter::fromResolvedPeriod($period));
+    }
+
+    public function test_ba01_65_payments_and_200_downloaders_give_32_5_percent(): void
+    {
+        for ($i = 0; $i < 65; $i++) {
+            $this->transaction($this->platformA, '2026-11-08 09:00:00', '2026-11-08 09:10:00', 1000);
+        }
+
+        $this->downloaders($this->platformA, '2026-11-08', 200);
+
+        $row = $this->metrics(['app-a'], '2026-11-08', '2026-11-08')['platforms'][0];
+
+        $this->assertSame(200, $row['downloaders']);
+        $this->assertSame(32.5, $row['success_per_downloader_percentage']);
+        $this->assertSame(65000.0, $row['revenue']);
+        $this->assertSame(100.0, $row['contribution_percentage']);
+    }
+
+    public function test_ba02_zero_or_missing_downloaders_give_an_empty_ratio_and_keep_revenue(): void
+    {
+        $this->transaction($this->platformA, '2026-11-08 09:00:00', '2026-11-08 09:10:00', 300000);
+        $this->transaction($this->platformB, '2026-11-08 09:00:00', '2026-11-08 09:10:00', 100000);
+        $this->downloaders($this->platformA, '2026-11-08', 0);
+
+        $metrics = $this->metrics(['app-a', 'app-b'], '2026-11-08', '2026-11-08');
+        $a = $metrics['platforms'][0];
+        $b = $metrics['platforms'][1];
+
+        $this->assertSame(0, $a['downloaders']);
+        $this->assertNull($a['success_per_downloader_percentage']);
+        $this->assertSame(300000.0, $a['revenue']);
+        $this->assertSame(50.0, $a['contribution_percentage']);
+
+        // Platform B has no Downloader row for the period: unknown, never 0 and never another platform's value.
+        $this->assertNull($b['downloaders']);
+        $this->assertSame('unavailable', $b['downloaders_availability']);
+        $this->assertNull($b['success_per_downloader_percentage']);
+        $this->assertSame(100000.0, $b['revenue']);
+    }
+
+    public function test_ba02_downloaders_from_another_range_do_not_fill_the_period(): void
+    {
+        $this->transaction($this->platformA, '2026-11-08 09:00:00', '2026-11-08 09:10:00', 1000);
+        $this->downloaders($this->platformA, '2026-11-07', 200);
+
+        $row = $this->metrics(['app-a'], '2026-11-08', '2026-11-08')['platforms'][0];
+
+        $this->assertNull($row['downloaders']);
+        $this->assertNull($row['success_per_downloader_percentage']);
+    }
+
+    public function test_ba03_claim_stays_out_of_the_ratio_and_a_failed_payment_drops_it_to_0(): void
+    {
+        $this->transaction($this->platformA, '2026-11-08 09:00:00', '2026-11-08 09:10:00', 1000);
+        $this->transaction($this->platformA, '2026-11-08 09:20:00', '2026-11-08 09:20:00', 0, MarkazTransactionStatus::Success, claim: true);
+        $this->downloaders($this->platformA, '2026-11-08', 10);
+
+        $this->assertSame(10.0, $this->metrics(['app-a'], '2026-11-08', '2026-11-08')['platforms'][0]['success_per_downloader_percentage']);
+
+        Transaction::query()->where('is_claim_coupon', false)->update(['source_status' => MarkazTransactionStatus::Failed->value]);
+
+        $this->assertSame(0.0, $this->metrics(['app-a'], '2026-11-08', '2026-11-08')['platforms'][0]['success_per_downloader_percentage']);
+    }
+
+    /**
+     * A partial day: the transactions and the Downloader totals stop at the same cutoff, 8 November 14.00.
+     * Payments after the cutoff must not reach either the ratio or the revenue.
+     */
+    public function test_partial_day_cutoff_ratio_uses_only_payments_and_downloaders_up_to_the_same_cutoff(): void
+    {
+        for ($i = 0; $i < 65; $i++) {
+            $this->transaction($this->platformA, '2026-11-08 09:00:00', '2026-11-08 09:10:00', 1000);
+        }
+
+        // After the cutoff: must not count in the ratio, the revenue, or the contribution.
+        for ($i = 0; $i < 10; $i++) {
+            $this->transaction($this->platformA, '2026-11-08 15:00:00', '2026-11-08 15:10:00', 1000);
+        }
+
+        for ($i = 0; $i < 35; $i++) {
+            $this->transaction($this->platformB, '2026-11-08 10:00:00', '2026-11-08 10:10:00', 1000);
+        }
+
+        $this->downloaders($this->platformA, '2026-11-08', 200);
+
+        $metrics = $this->partialDayMetrics(['app-a', 'app-b']);
+        $this->assertSame('partial', $metrics['period']['active']['availability']);
+        $this->assertSame('2026-11-08T14:00:00+07:00', $metrics['period']['active']['end_at']);
+
+        $a = $metrics['platforms'][0];
+        $b = $metrics['platforms'][1];
+
+        $this->assertSame(65, $a['success_payments']);
+        $this->assertSame(65000.0, $a['revenue']);
+        $this->assertSame(65.0, $a['contribution_percentage']);
+        $this->assertSame(200, $a['downloaders']);
+        $this->assertSame(32.5, $a['success_per_downloader_percentage']);
+
+        // Platform B has transactions before the cutoff but no Downloader row: the ratio stays empty.
+        $this->assertSame(35000.0, $b['revenue']);
+        $this->assertSame(35.0, $b['contribution_percentage']);
+        $this->assertNull($b['downloaders']);
+        $this->assertNull($b['success_per_downloader_percentage']);
+    }
+
+    /**
+     * The Downloader total exists only for a different day than the partial cutoff day: no ratio, transactions unchanged.
+     */
+    public function test_partial_day_cutoff_does_not_borrow_downloaders_from_another_day(): void
+    {
+        $this->transaction($this->platformA, '2026-11-08 09:00:00', '2026-11-08 09:10:00', 1000);
+        $this->downloaders($this->platformA, '2026-11-07', 200);
+
+        $a = $this->partialDayMetrics(['app-a'])['platforms'][0];
+
+        $this->assertSame(1000.0, $a['revenue']);
+        $this->assertNull($a['downloaders']);
+        $this->assertNull($a['success_per_downloader_percentage']);
+    }
+
+    /**
+     * Complete coverage of the active period, with the cutoff in the middle of the day (8 November 14.00 WIB).
+     *
+     * @param  list<string>  $slugs
+     * @return array<string, mixed>
+     */
+    private function partialDayMetrics(array $slugs): array
+    {
+        foreach ([$this->platformA, $this->platformB] as $platform) {
+            DashboardSnapshot::factory()->for($platform)->create([
+                'date_from' => '2026-11-08',
+                'date_to' => '2026-11-08',
+                'cutoff_at' => '2026-11-08 14:00:00',
+                'is_complete' => true,
+                'payload' => [],
+                'recorded_at' => '2026-11-08 14:00:00',
+            ]);
+        }
+
+        $period = app(PeriodResolverService::class)->resolve(new PeriodSelection(
+            preset: PeriodPreset::DateRange,
+            comparison: PeriodComparison::Auto,
+            platforms: $slugs,
+            dateFrom: CarbonImmutable::parse('2026-11-08', 'Asia/Jakarta'),
+            dateTo: CarbonImmutable::parse('2026-11-08', 'Asia/Jakarta'),
+        ));
+
+        return app(PlatformContributionService::class)->transactionMetrics(PerformanceFilter::fromResolvedPeriod($period));
+    }
+
+    private function downloaders(Platform $platform, string $date, int $total): void
+    {
+        Downloader::factory()->for($platform)->create(['date' => $date, 'total' => $total]);
     }
 
     private function metrics(array $slugs, string $from, string $to, PeriodComparison $comparison = PeriodComparison::Auto): array
